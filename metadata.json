@@ -1,0 +1,7 @@
+{
+  "name": "SheetOn",
+  "description": "سامانه هوشمند مدیریت فاکتورها، حسابداری کارکرد و دریافتی‌ها",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
