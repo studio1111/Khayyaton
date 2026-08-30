@@ -3,7 +3,7 @@
     <item
         android:width="72dp"
         android:height="72dp"
-        android:drawable="@drawable/sheeton_user_custom_icon_1787658291388"
+        android:drawable="@drawable/sheeton_logo_icon"
         android:gravity="center" />
 </layer-list>
 
