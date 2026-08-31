@@ -17,6 +17,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        com.example.data.firebase.FirebaseService.initialize(applicationContext)
+
         val database = AppDatabase.getDatabase(applicationContext)
         val repository = WorkshopRepository(
             orderDao = database.orderDao(),

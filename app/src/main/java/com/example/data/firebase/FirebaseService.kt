@@ -1,5 +1,6 @@
 package com.example.data.firebase
 
+import android.content.Context
 import android.util.Log
 import com.example.data.WorkshopRepository
 import com.example.model.FurnitureOrder
@@ -7,6 +8,7 @@ import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
 import com.example.model.UnitConversionRule
 import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
@@ -16,12 +18,45 @@ import kotlinx.coroutines.tasks.await
 object FirebaseService {
     private const val TAG = "FirebaseService"
 
-    private val isFirebaseInitialized: Boolean
-        get() = try {
-            FirebaseApp.getApps(FirebaseApp.getInstance().applicationContext).isNotEmpty()
+    fun initialize(context: Context) {
+        try {
+            val apps = FirebaseApp.getApps(context)
+            if (apps.isEmpty()) {
+                val initialized = FirebaseApp.initializeApp(context)
+                if (initialized == null) {
+                    // Fallback to explicit options from google-services.json
+                    val options = FirebaseOptions.Builder()
+                        .setApplicationId("1:144639141025:android:3316d8a7e58c1736d63ce0")
+                        .setApiKey("AIzaSyBnIb8j3W8NThD89aHuw2qv45rXnBdbKCc")
+                        .setProjectId("sheeton-bb54b")
+                        .setStorageBucket("sheeton-bb54b.firebasestorage.app")
+                        .setGcmSenderId("144639141025")
+                        .build()
+                    FirebaseApp.initializeApp(context, options)
+                    Log.d(TAG, "Firebase initialized with explicit options")
+                } else {
+                    Log.d(TAG, "Firebase initialized with default app")
+                }
+            } else {
+                Log.d(TAG, "Firebase already initialized with ${apps.size} apps")
+            }
         } catch (e: Exception) {
-            false
+            Log.e(TAG, "Error initializing Firebase: ${e.message}", e)
+            try {
+                val options = FirebaseOptions.Builder()
+                    .setApplicationId("1:144639141025:android:3316d8a7e58c1736d63ce0")
+                    .setApiKey("AIzaSyBnIb8j3W8NThD89aHuw2qv45rXnBdbKCc")
+                    .setProjectId("sheeton-bb54b")
+                    .setStorageBucket("sheeton-bb54b.firebasestorage.app")
+                    .setGcmSenderId("144639141025")
+                    .build()
+                FirebaseApp.initializeApp(context, options)
+                Log.d(TAG, "Firebase recovered with explicit options")
+            } catch (ex: Exception) {
+                Log.e(TAG, "Firebase fallback initialization failed: ${ex.message}", ex)
+            }
         }
+    }
 
     private val auth: FirebaseAuth?
         get() = try {

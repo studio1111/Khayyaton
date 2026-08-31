@@ -69,6 +69,10 @@ fun AuthAndCloudSyncDialog(
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
+    LaunchedEffect(Unit) {
+        FirebaseService.initialize(context)
+    }
+
     var mode by remember { mutableStateOf(AuthScreenMode.SIGN_IN) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
