@@ -11,7 +11,7 @@ data class FurnitureOrder(
     val invoiceNumber: String,
     val modelName: String,
     val pricePerSet: Long,
-    val unitsPerSet: Double = 8.0,
+    val unitsPerSet: Double = 6.0,
     val countFormula: String,
     val calculatedUnits: Double,
     val calculatedTotal: Long,
@@ -49,8 +49,8 @@ data class ModelPreset(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
-    val defaultPricePerSet: Long,
-    val defaultUnitsPerSet: Double = 8.0,
+    val defaultPricePerSet: Long = 2000000L,
+    val defaultUnitsPerSet: Double = 6.0,
     val colorCode: String = "#2563EB",
     val description: String = ""
 )

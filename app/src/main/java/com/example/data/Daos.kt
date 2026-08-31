@@ -86,6 +86,9 @@ interface UnitRuleDao {
     @Query("SELECT * FROM unit_conversion_rules ORDER BY pieceCount DESC")
     fun getAllRules(): Flow<List<com.example.model.UnitConversionRule>>
 
+    @Query("SELECT * FROM unit_conversion_rules ORDER BY pieceCount DESC")
+    suspend fun getAllRulesSync(): List<com.example.model.UnitConversionRule>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRule(rule: com.example.model.UnitConversionRule): Long
 

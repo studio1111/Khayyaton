@@ -8,6 +8,7 @@ import com.example.model.FurnitureOrder
 import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
 import com.example.model.UnitConversionRule
+import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
 
 @Database(
@@ -105,10 +106,30 @@ class WorkshopRepository(
     }
 
     suspend fun saveUnitRule(rule: UnitConversionRule) {
-        if (rule.id == 0L) {
-            unitRuleDao.insertRule(rule)
+        val rawKey = rule.pieceKey.ifBlank {
+            if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
+        }
+        val norm = normalizeUnitKey(rawKey)
+        val existing = unitRuleDao.getAllRulesSync()
+        val duplicate = existing.find {
+            it.id != rule.id && normalizeUnitKey(it.pieceKey.ifBlank { if (it.pieceCount % 1.0 == 0.0) it.pieceCount.toInt().toString() else it.pieceCount.toString() }) == norm
+        }
+        if (duplicate != null) {
+            // Update the existing rule to maintain single rule per piece count/title
+            unitRuleDao.updateRule(
+                duplicate.copy(
+                    pieceKey = rule.pieceKey,
+                    pieceCount = rule.pieceCount,
+                    calculatedUnits = rule.calculatedUnits,
+                    isEnabled = rule.isEnabled
+                )
+            )
         } else {
-            unitRuleDao.updateRule(rule)
+            if (rule.id == 0L) {
+                unitRuleDao.insertRule(rule)
+            } else {
+                unitRuleDao.updateRule(rule)
+            }
         }
     }
 
@@ -121,6 +142,34 @@ class WorkshopRepository(
     }
 
     suspend fun insertDefaultUnitRulesIfEmpty() {
+        val existing = unitRuleDao.getAllRulesSync()
+        if (existing.isEmpty()) {
+            val defaultRules = listOf(
+                UnitConversionRule(pieceKey = "3", pieceCount = 3.0, calculatedUnits = 2.0, isEnabled = true),
+                UnitConversionRule(pieceKey = "2", pieceCount = 2.0, calculatedUnits = 1.5, isEnabled = true),
+                UnitConversionRule(pieceKey = "1", pieceCount = 1.0, calculatedUnits = 1.0, isEnabled = true),
+                UnitConversionRule(pieceKey = "0.5", pieceCount = 0.5, calculatedUnits = 0.5, isEnabled = true)
+            )
+            unitRuleDao.insertAll(defaultRules)
+        } else {
+            // Clean up any duplicates in the database to guarantee uniqueness
+            val seen = mutableSetOf<String>()
+            for (r in existing) {
+                val rawKey = r.pieceKey.ifBlank {
+                    if (r.pieceCount % 1.0 == 0.0) r.pieceCount.toInt().toString() else r.pieceCount.toString()
+                }
+                val norm = normalizeUnitKey(rawKey)
+                if (norm in seen) {
+                    unitRuleDao.deleteRuleById(r.id)
+                } else {
+                    seen.add(norm)
+                }
+            }
+        }
+    }
+
+    suspend fun restoreDefaultUnitRules() {
+        unitRuleDao.clearAll()
         val defaultRules = listOf(
             UnitConversionRule(pieceKey = "3", pieceCount = 3.0, calculatedUnits = 2.0, isEnabled = true),
             UnitConversionRule(pieceKey = "2", pieceCount = 2.0, calculatedUnits = 1.5, isEnabled = true),
@@ -128,6 +177,20 @@ class WorkshopRepository(
             UnitConversionRule(pieceKey = "0.5", pieceCount = 0.5, calculatedUnits = 0.5, isEnabled = true)
         )
         unitRuleDao.insertAll(defaultRules)
+    }
+
+    companion object {
+        fun normalizeUnitKey(raw: String): String {
+            val eng = PersianUtils.toEnglishDigits(raw.trim().lowercase(java.util.Locale.ROOT))
+                .replace("/", ".")
+                .replace(",", "")
+            val num = eng.toDoubleOrNull()
+            return if (num != null && num > 0.0) {
+                if (num % 1.0 == 0.0) num.toLong().toString() else num.toString()
+            } else {
+                eng
+            }
+        }
     }
 
     suspend fun seedInitialDataIfEmpty() {

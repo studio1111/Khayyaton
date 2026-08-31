@@ -44,19 +44,17 @@ fun ModelPresetsDialog(
     var isAddingNew by remember { mutableStateOf(false) }
 
     var name by remember { mutableStateOf("") }
-    var priceStr by remember { mutableStateOf("24000000") }
-    var unitsStr by remember { mutableStateOf("8.0") }
+    var priceStr by remember { mutableStateOf("2000000") }
+    var unitsStr by remember { mutableStateOf("6") }
     var colorCode by remember { mutableStateOf("#2563EB") }
-    var desc by remember { mutableStateOf("") }
 
     fun startAdd() {
         editingPreset = null
         isAddingNew = true
         name = ""
-        priceStr = "24000000"
-        unitsStr = "8.0"
+        priceStr = "2000000"
+        unitsStr = "6"
         colorCode = "#2563EB"
-        desc = ""
     }
 
     fun startEdit(preset: ModelPreset) {
@@ -64,9 +62,8 @@ fun ModelPresetsDialog(
         isAddingNew = true
         name = preset.name
         priceStr = preset.defaultPricePerSet.toString()
-        unitsStr = preset.defaultUnitsPerSet.toString()
+        unitsStr = if (preset.defaultUnitsPerSet % 1.0 == 0.0) preset.defaultUnitsPerSet.toInt().toString() else preset.defaultUnitsPerSet.toString()
         colorCode = preset.colorCode
-        desc = preset.description
     }
 
     Dialog(
@@ -187,43 +184,42 @@ fun ModelPresetsDialog(
                                     )
                                 }
 
-                                // 24 color palette
-                                Text(text = "رنگ مدل:", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    COLOR_PALETTE.take(12).forEach { c ->
-                                        val isSelected = colorCode.equals(c.hex, ignoreCase = true)
-                                        Box(
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .clip(CircleShape)
-                                                .background(c.color)
-                                                .border(if (isSelected) 2.dp else 0.dp, Color.White, CircleShape)
-                                                .clickable { colorCode = c.hex },
-                                            contentAlignment = Alignment.Center
+                                 // 36 Curated Colors in 3 responsive rows (matching order dialog)
+                                Text(text = "رنگ مدل:", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    COLOR_PALETTE.chunked(12).forEach { rowColors ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            if (isSelected) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(12.dp)
-                                                )
+                                            rowColors.forEach { c ->
+                                                val isSelected = colorCode.equals(c.hex, ignoreCase = true)
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(24.dp)
+                                                        .clip(CircleShape)
+                                                        .background(c.color)
+                                                        .border(
+                                                            if (isSelected) 2.dp else 0.5.dp,
+                                                            if (isSelected) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.2f),
+                                                            CircleShape
+                                                        )
+                                                        .clickable { colorCode = c.hex },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (isSelected) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Check,
+                                                            contentDescription = null,
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
-
-                                OutlinedTextField(
-                                    value = desc,
-                                    onValueChange = { desc = it },
-                                    label = { Text("توضیحات پیش‌فرض (کلاف، فوم، دوخت)", fontSize = 11.sp) },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -237,15 +233,15 @@ fun ModelPresetsDialog(
                                     Button(
                                         onClick = {
                                             if (name.isBlank()) return@Button
-                                            val price = PersianUtils.toEnglishDigits(priceStr).toLongOrNull() ?: 24000000L
-                                            val units = PersianUtils.toEnglishDigits(unitsStr).toDoubleOrNull() ?: 8.0
+                                            val price = PersianUtils.toEnglishDigits(priceStr).toLongOrNull() ?: 2000000L
+                                            val units = PersianUtils.toEnglishDigits(unitsStr).toDoubleOrNull() ?: 6.0
                                             val preset = ModelPreset(
                                                 id = editingPreset?.id ?: 0L,
                                                 name = name.trim(),
                                                 defaultPricePerSet = price,
                                                 defaultUnitsPerSet = units,
                                                 colorCode = colorCode,
-                                                description = desc.trim()
+                                                description = ""
                                             )
                                             onSavePreset(preset)
                                             isAddingNew = false
@@ -330,13 +326,6 @@ fun ModelPresetsDialog(
                                                 fontWeight = FontWeight.Bold,
                                                 color = Emerald600
                                             )
-                                            if (preset.description.isNotBlank()) {
-                                                Text(
-                                                    text = preset.description,
-                                                    fontSize = 9.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
                                         }
                                     }
 

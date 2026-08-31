@@ -400,7 +400,7 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun restoreDefaultUnitRules() {
         viewModelScope.launch {
-            repository.insertDefaultUnitRulesIfEmpty()
+            repository.restoreDefaultUnitRules()
         }
     }
 

@@ -30,6 +30,18 @@ import com.example.ui.theme.Emerald500
 import com.example.ui.theme.Emerald600
 import com.example.util.PersianUtils
 
+fun normalizeRuleKey(raw: String): String {
+    val eng = PersianUtils.toEnglishDigits(raw.trim().lowercase(java.util.Locale.ROOT))
+        .replace("/", ".")
+        .replace(",", "")
+    val num = eng.toDoubleOrNull()
+    return if (num != null && num > 0.0) {
+        if (num % 1.0 == 0.0) num.toLong().toString() else num.toString()
+    } else {
+        eng
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UnitRulesDialog(
@@ -43,6 +55,20 @@ fun UnitRulesDialog(
     var calculatedUnitsInput by remember { mutableStateOf("") }
     var editingRuleId by remember { mutableStateOf<Long?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val currentNormKey = remember(pieceCountInput) {
+        if (pieceCountInput.isBlank()) "" else normalizeRuleKey(pieceCountInput)
+    }
+
+    val duplicateExistingRule = remember(currentNormKey, editingRuleId, rules) {
+        if (currentNormKey.isBlank()) null
+        else rules.find { r ->
+            val raw = r.pieceKey.ifBlank {
+                if (r.pieceCount % 1.0 == 0.0) r.pieceCount.toInt().toString() else r.pieceCount.toString()
+            }
+            r.id != editingRuleId && normalizeRuleKey(raw) == currentNormKey
+        }
+    }
 
     // Test preview calculation
     var testFormula by remember { mutableStateOf("3+3+2+1+1") }
@@ -231,7 +257,17 @@ fun UnitRulesDialog(
                             )
                         }
 
-                        if (errorMessage != null) {
+                        if (duplicateExistingRule != null) {
+                            val dupLabel = duplicateExistingRule.pieceKey.ifBlank {
+                                if (duplicateExistingRule.pieceCount % 1.0 == 0.0) duplicateExistingRule.pieceCount.toInt().toString() else duplicateExistingRule.pieceCount.toString()
+                            }
+                            Text(
+                                text = "⚠️ قانون برای «$dupLabel» قبلاً ثبت شده است (${PersianUtils.formatNumberWithCommas(duplicateExistingRule.calculatedUnits)} واحد). برای هر عدد یا عنوان فقط ۱ قانون مجاز است.",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else if (errorMessage != null) {
                             Text(
                                 text = errorMessage ?: "",
                                 color = MaterialTheme.colorScheme.error,
@@ -263,6 +299,13 @@ fun UnitRulesDialog(
                                     val keyTrimmed = pieceCountInput.trim()
                                     if (keyTrimmed.isBlank()) {
                                         errorMessage = "لطفاً تعداد قطعه یا عنوان (مثلاً کنج یا ۳) را وارد کنید"
+                                        return@Button
+                                    }
+                                    if (duplicateExistingRule != null) {
+                                        val dupLabel = duplicateExistingRule.pieceKey.ifBlank {
+                                            if (duplicateExistingRule.pieceCount % 1.0 == 0.0) duplicateExistingRule.pieceCount.toInt().toString() else duplicateExistingRule.pieceCount.toString()
+                                        }
+                                        errorMessage = "قانون برای «$dupLabel» قبلاً تعریف شده است! برای هر عدد یا عنوان فقط امکان ایجاد یک قانون وجود دارد."
                                         return@Button
                                     }
                                     val unitVal = PersianUtils.toEnglishDigits(calculatedUnitsInput).replace("/", ".").toDoubleOrNull()
