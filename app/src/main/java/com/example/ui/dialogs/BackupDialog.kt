@@ -43,6 +43,7 @@ fun BackupDialog(
     presets: List<ModelPreset>,
     currencyUnit: String,
     repository: WorkshopRepository,
+    onOpenFirebaseAuth: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     if (!isOpen) return
@@ -219,6 +220,44 @@ fun BackupDialog(
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+
+                    // 0. Firebase Cloud Sync
+                    OutlinedCard(
+                        onClick = {
+                            onDismiss()
+                            onOpenFirebaseAuth()
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFEA580C).copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.CloudSync,
+                                    contentDescription = null,
+                                    tint = Color(0xFFEA580C),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("پایگاه داده ابری و احراز هویت فایربیس (Firebase)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text("ورود با ایمیل، آپلود خودکار و همگام‌سازی آنلاین دیتابیس با Firestore", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
 
                     // 1. Google Drive Backup
                     OutlinedCard(

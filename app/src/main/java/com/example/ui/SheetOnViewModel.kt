@@ -66,12 +66,15 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isUnitRulesDialogOpen = MutableStateFlow(false)
     val isBackupDialogOpen = MutableStateFlow(false)
     val isSearchDialogOpen = MutableStateFlow(false)
+    val isAuthDialogOpen = MutableStateFlow(false)
+    val currentUser = MutableStateFlow<com.example.data.firebase.FirebaseUserDto?>(null)
     val isDrawerOpen = MutableStateFlow(false)
 
     init {
         // App initialized clean without sample data; insert default unit rules if empty
         viewModelScope.launch {
             repository.insertDefaultUnitRulesIfEmpty()
+            currentUser.value = com.example.data.firebase.FirebaseService.getCurrentUser()
         }
     }
 

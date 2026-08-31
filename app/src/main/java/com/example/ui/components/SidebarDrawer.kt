@@ -42,6 +42,8 @@ fun SidebarDrawer(
     onSelectCardDisplayMode: (CardDisplayMode) -> Unit,
     cardSortOrder: CardSortOrder,
     onSelectCardSortOrder: (CardSortOrder) -> Unit,
+    currentUser: com.example.data.firebase.FirebaseUserDto? = null,
+    onOpenAuth: () -> Unit = {},
     onOpenSearch: () -> Unit,
     onOpenAnalysis: () -> Unit,
     onOpenModels: () -> Unit,
@@ -116,7 +118,12 @@ fun SidebarDrawer(
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Section 1: Five Primary Action Items (5 آیتم اول)
+                // Section 1: Primary Action Items
+                DrawerItem(
+                    icon = if (currentUser != null) Icons.Outlined.CloudDone else Icons.Outlined.AccountCircle,
+                    title = if (currentUser != null) "حساب ابری (${currentUser.email.substringBefore("@")})" else "ورود و ثبت‌نام با ایمیل (Firebase)",
+                    onClick = { onOpenAuth(); onClose() }
+                )
                 DrawerItem(
                     icon = Icons.Outlined.Analytics,
                     title = "اطلاعات و آنالیز",

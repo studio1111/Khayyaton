@@ -65,6 +65,8 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
     val isUnitRulesDialogOpen by viewModel.isUnitRulesDialogOpen.collectAsStateWithLifecycle()
     val isBackupDialogOpen by viewModel.isBackupDialogOpen.collectAsStateWithLifecycle()
     val isSearchDialogOpen by viewModel.isSearchDialogOpen.collectAsStateWithLifecycle()
+    val isAuthDialogOpen by viewModel.isAuthDialogOpen.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val deleteTarget by viewModel.deleteTarget.collectAsStateWithLifecycle()
 
     val unitRules by viewModel.unitRules.collectAsStateWithLifecycle()
@@ -92,6 +94,8 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                         onSelectCardDisplayMode = { viewModel.cardDisplayMode.value = it },
                         cardSortOrder = cardSortOrder,
                         onSelectCardSortOrder = { viewModel.cardSortOrder.value = it },
+                        currentUser = currentUser,
+                        onOpenAuth = { viewModel.isAuthDialogOpen.value = true },
                         onOpenSearch = { viewModel.isSearchDialogOpen.value = true },
                         onOpenAnalysis = { viewModel.isAnalysisDialogOpen.value = true },
                         onOpenModels = { viewModel.isModelPresetsDialogOpen.value = true },
@@ -330,7 +334,20 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                 presets = modelPresets,
                 currencyUnit = currencyUnit,
                 repository = viewModel.repository,
+                onOpenFirebaseAuth = { viewModel.isAuthDialogOpen.value = true },
                 onDismiss = { viewModel.isBackupDialogOpen.value = false }
+            )
+
+            AuthAndCloudSyncDialog(
+                isOpen = isAuthDialogOpen,
+                currentUser = currentUser,
+                orders = orders,
+                payments = payments,
+                presets = modelPresets,
+                unitRules = unitRules,
+                repository = viewModel.repository,
+                onUserChanged = { viewModel.currentUser.value = it },
+                onDismiss = { viewModel.isAuthDialogOpen.value = false }
             )
 
             SearchFilterDialog(
