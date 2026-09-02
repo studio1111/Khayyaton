@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "144639141025",
+    "project_id": "sheeton-bb54b",
+    "storage_bucket": "sheeton-bb54b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:144639141025:android:3316d8a7e58c1736d63ce0",
+        "android_client_info": {
+          "package_name": "com.aistudio.sheeton.workshop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBnIb8j3W8NThD89aHuw2qv45rXnBdbKCc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
