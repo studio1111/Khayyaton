@@ -61,7 +61,12 @@ fun TopNavBar(
                     )
                 }
 
-                SheetOnLogo(fontSize = 21.sp)
+                Text(
+                    text = "فاکتورها",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
                 IconButton(
                     onClick = onOpenSearch,

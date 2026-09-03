@@ -84,8 +84,6 @@ fun AuthAndCloudSyncDialog(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
 
-    var showCloudRestoreConfirm by remember { mutableStateOf(false) }
-
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -267,38 +265,15 @@ fun AuthAndCloudSyncDialog(
                             }
                         }
 
-                        Text(
-                            text = "عملیات همگام‌سازی ابری (Firebase Firestore):",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        // 1. Upload to Cloud
-                        OutlinedCard(
-                            onClick = {
-                                if (isSyncing) return@OutlinedCard
-                                errorMessage = null
-                                successMessage = null
-                                isSyncing = true
-                                coroutineScope.launch {
-                                    val result = FirebaseService.uploadAllToCloud(orders, payments, presets, unitRules)
-                                    isSyncing = false
-                                    if (result.isSuccess) {
-                                        val data = result.getOrNull()!!
-                                        successMessage = "همگام‌سازی با موفقیت انجام شد: ${PersianUtils.toPersianDigits(data.ordersCount)} فاکتور و ${PersianUtils.toPersianDigits(data.paymentsCount)} دریافتی در فایربیس ذخیره شدند."
-                                    } else {
-                                        errorMessage = result.exceptionOrNull()?.message ?: "خطا در آپلود ابری"
-                                    }
-                                }
-                            },
-                            shape = RoundedCornerShape(14.dp),
+                        // Automatic Sync Status Card (manual save/restore buttons removed as requested)
+                        Surface(
+                            color = Emerald600.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Emerald600.copy(alpha = 0.35f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
+                                modifier = Modifier.padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -306,63 +281,30 @@ fun AuthAndCloudSyncDialog(
                                     modifier = Modifier
                                         .size(42.dp)
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(Emerald600.copy(alpha = 0.15f)),
+                                        .background(Emerald600.copy(alpha = 0.2f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Outlined.CloudUpload,
+                                        imageVector = Icons.Outlined.CloudDone,
                                         contentDescription = null,
                                         tint = Emerald600,
                                         modifier = Modifier.size(24.dp)
                                     )
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("پشتیبان‌گیری در فضای ابری (Upload to Cloud)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    Text("ذخیره امن تمامی فاکتورها، دریافتی‌ها و مدل‌ها در دیتابیس ابری فایربیس", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                if (isSyncing) {
-                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-
-                        // 2. Download / Restore from Cloud
-                        OutlinedCard(
-                            onClick = {
-                                if (isSyncing) return@OutlinedCard
-                                showCloudRestoreConfirm = true
-                            },
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0xFF2563EB).copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.CloudDownload,
-                                        contentDescription = null,
-                                        tint = Color(0xFF2563EB),
-                                        modifier = Modifier.size(24.dp)
+                                    Text(
+                                        text = "همگام‌سازی و بازیابی خودکار فعال است",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "فاکتورها و دریافتی‌های شما به محض تغییر یا ورود به برنامه به طور خودکار با فضای ابری فایربیس ذخیره و بازیابی می‌شوند.",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        lineHeight = 16.sp
                                     )
                                 }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("بازیابی از فضای ابری (Restore from Cloud)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    Text("دریافت اطلاعات ثبت‌شده قبلی از حساب ابری فایربیس و ذخیره در برنامه", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
 
@@ -631,57 +573,6 @@ fun AuthAndCloudSyncDialog(
                 }
             }
         }
-    }
-
-    // Cloud Restore Confirmation Dialog
-    if (showCloudRestoreConfirm) {
-        AlertDialog(
-            onDismissRequest = { showCloudRestoreConfirm = false },
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.CloudDownload, contentDescription = null, tint = Color(0xFF2563EB))
-                    Text("بازیابی اطلاعات از فایربیس", fontWeight = FontWeight.Black, fontSize = 15.sp)
-                }
-            },
-            text = {
-                Text(
-                    text = "آیا مایلید تمام فاکتورها، دریافتی‌ها و مدل‌های ثبت‌شده در فضای ابری حساب کاربری شما دانلود و به برنامه اضافه شوند؟",
-                    fontSize = 13.sp,
-                    lineHeight = 22.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showCloudRestoreConfirm = false
-                        isSyncing = true
-                        errorMessage = null
-                        successMessage = null
-                        coroutineScope.launch {
-                            val result = FirebaseService.downloadFromCloud(repository)
-                            isSyncing = false
-                            if (result.isSuccess) {
-                                val data = result.getOrNull()!!
-                                successMessage = "بازیابی ابری با موفقیت انجام شد: ${PersianUtils.toPersianDigits(data.ordersCount)} فاکتور و ${PersianUtils.toPersianDigits(data.paymentsCount)} دریافتی دریافت شدند."
-                            } else {
-                                errorMessage = result.exceptionOrNull()?.message ?: "خطا در بازیابی ابری"
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Emerald600)
-                ) {
-                    Text("تأیید و بازیابی ابری", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCloudRestoreConfirm = false }) {
-                    Text("انصراف")
-                }
-            }
-        )
     }
 }
 

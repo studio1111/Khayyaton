@@ -81,7 +81,7 @@ fun SidebarDrawer(
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.navigationBars)
         ) {
-            // Header with Large Distinctive App Name & Close Button
+            // Header with App Title & Close Button (Logo removed as requested)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -90,7 +90,22 @@ fun SidebarDrawer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                SheetOnLogo(fontSize = 24.sp)
+                Column {
+                    Text(
+                        text = "منوی برنامه",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (currentUser != null) {
+                        Text(
+                            text = currentUser.email,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
                 IconButton(
                     onClick = onClose,
                     modifier = Modifier

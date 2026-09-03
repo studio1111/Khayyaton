@@ -13,6 +13,8 @@ import com.example.model.FeedItem
 import com.example.model.FurnitureOrder
 import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
+import com.example.data.firebase.FirebaseService
+import com.example.data.firebase.FirebaseUserDto
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -67,14 +69,21 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isBackupDialogOpen = MutableStateFlow(false)
     val isSearchDialogOpen = MutableStateFlow(false)
     val isAuthDialogOpen = MutableStateFlow(false)
-    val currentUser = MutableStateFlow<com.example.data.firebase.FirebaseUserDto?>(null)
+    val currentUser = MutableStateFlow<FirebaseUserDto?>(null)
     val isDrawerOpen = MutableStateFlow(false)
+    val isAutoSyncing = MutableStateFlow(false)
+    val autoSyncStatusMessage = MutableStateFlow<String?>(null)
 
     init {
         // App initialized clean without sample data; insert default unit rules if empty
         viewModelScope.launch {
             repository.insertDefaultUnitRulesIfEmpty()
-            currentUser.value = com.example.data.firebase.FirebaseService.getCurrentUser()
+            val user = FirebaseService.getCurrentUser()
+            currentUser.value = user
+            if (user != null) {
+                // Automatically restore/sync user data on startup if logged in
+                performAutoSync(user)
+            }
         }
     }
 
@@ -355,6 +364,7 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
             }
             isOrderDialogOpen.value = false
             editingOrder.value = null
+            triggerAutoUpload()
         }
     }
 
@@ -363,6 +373,7 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
             repository.savePayment(payment)
             isPaymentDialogOpen.value = false
             editingPayment.value = null
+            triggerAutoUpload()
         }
     }
 
@@ -418,6 +429,68 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
         selectedModelFilter.value = null
         selectedDateFilter.value = null
         selectedInvoiceFilter.value = null
+    }
+
+    /**
+     * Automatic sync and restore when a user enters email/signs in or registers.
+     * Restores existing cloud data if available, then syncs local state to Firebase.
+     */
+    fun onUserLoggedIn(user: FirebaseUserDto) {
+        currentUser.value = user
+        viewModelScope.launch {
+            performAutoSync(user)
+        }
+    }
+
+    fun onUserLoggedOut() {
+        FirebaseService.signOut()
+        currentUser.value = null
+        autoSyncStatusMessage.value = null
+    }
+
+    private suspend fun performAutoSync(user: FirebaseUserDto) {
+        isAutoSyncing.value = true
+        try {
+            // Step 1: Download existing data from cloud and restore into local repository
+            val downloadRes = FirebaseService.downloadFromCloud(repository)
+            if (downloadRes.isSuccess) {
+                autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
+            }
+
+            // Step 2: Now upload latest combined data to Firebase Firestore
+            val currentOrders = orders.value
+            val currentPayments = payments.value
+            val currentPresets = modelPresets.value
+            val currentUnitRules = unitRules.value
+
+            if (currentOrders.isNotEmpty() || currentPayments.isNotEmpty() || currentPresets.isNotEmpty()) {
+                FirebaseService.uploadAllToCloud(
+                    orders = currentOrders,
+                    payments = currentPayments,
+                    presets = currentPresets,
+                    unitRules = currentUnitRules
+                )
+            }
+            autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
+        } catch (e: Exception) {
+            autoSyncStatusMessage.value = "همگام‌سازی ابری در دسترس نیست."
+        } finally {
+            isAutoSyncing.value = false
+        }
+    }
+
+    fun triggerAutoUpload() {
+        val user = currentUser.value ?: return
+        viewModelScope.launch {
+            try {
+                FirebaseService.uploadAllToCloud(
+                    orders = orders.value,
+                    payments = payments.value,
+                    presets = modelPresets.value,
+                    unitRules = unitRules.value
+                )
+            } catch (_: Exception) {}
+        }
     }
 }
 

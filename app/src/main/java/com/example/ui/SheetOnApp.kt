@@ -24,6 +24,8 @@ import com.example.model.CardDisplayMode
 import com.example.model.FeedItem
 import com.example.ui.components.*
 import com.example.ui.dialogs.*
+import com.example.ui.screens.GlassyAuthScreen
+import com.example.ui.screens.SplashScreen
 import com.example.ui.theme.SheetOnTheme
 import kotlinx.coroutines.launch
 
@@ -79,6 +81,47 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val sharedPrefs = remember {
+        context.getSharedPreferences("sheeton_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
+    var showSplash by remember { mutableStateOf(true) }
+    var hasCompletedFirstLaunchAuth by remember {
+        mutableStateOf(sharedPrefs.getBoolean("has_completed_first_auth", false))
+    }
+
+    // If splash is showing, render the elegant SplashScreen
+    if (showSplash) {
+        SplashScreen(
+            onSplashFinished = {
+                showSplash = false
+            }
+        )
+        return
+    }
+
+    // If first-time user hasn't authenticated or skipped, show GlassyAuthScreen
+    if (!hasCompletedFirstLaunchAuth && currentUser == null) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            SheetOnTheme(themeMode = themeMode) {
+                GlassyAuthScreen(
+                    isFirstLaunch = true,
+                    onAuthSuccess = { user ->
+                        viewModel.onUserLoggedIn(user)
+                        sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
+                        hasCompletedFirstLaunchAuth = true
+                    },
+                    onSkip = {
+                        sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
+                        hasCompletedFirstLaunchAuth = true
+                    }
+                )
+            }
+        }
+        return
+    }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         SheetOnTheme(themeMode = themeMode) {
@@ -346,7 +389,13 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                 presets = modelPresets,
                 unitRules = unitRules,
                 repository = viewModel.repository,
-                onUserChanged = { viewModel.currentUser.value = it },
+                onUserChanged = { user ->
+                    if (user != null) {
+                        viewModel.onUserLoggedIn(user)
+                    } else {
+                        viewModel.onUserLoggedOut()
+                    }
+                },
                 onDismiss = { viewModel.isAuthDialogOpen.value = false }
             )
 
