@@ -30,7 +30,7 @@ private val LightColorScheme = lightColorScheme(
     primary = Color(0xFF1D4ED8), // Rich high-contrast royal blue
     onPrimary = Color.White,
     primaryContainer = Color(0xFFDBEAFE),
-    onPrimaryContainer = Color(0xFF1E3A8A), // Deep navy on blue container
+    onPrimaryContainer = Color(0xFF0F172A), // Deep navy on blue container
     secondary = Color(0xFF047857), // High-contrast Emerald
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFD1FAE5),
@@ -42,11 +42,11 @@ private val LightColorScheme = lightColorScheme(
     background = Color(0xFFF8FAFC), // Pure clean light slate
     surface = Color.White,
     surfaceVariant = Color(0xFFE2E8F0), // Crisp light surface
-    onBackground = Color(0xFF020617), // Extreme high contrast text (Slate 950)
-    onSurface = Color(0xFF020617), // Extreme high contrast text (Slate 950)
-    onSurfaceVariant = Color(0xFF1E293B), // Deep slate (Slate 800) for crystal clear readable secondary text
-    outline = Color(0xFF64748B), // Clear dark outline
-    outlineVariant = Color(0xFFCBD5E1)
+    onBackground = Color(0xFF000000), // Solid black for guaranteed readability
+    onSurface = Color(0xFF000000), // Solid black for guaranteed readability
+    onSurfaceVariant = Color(0xFF0F172A), // Deepest dark slate (nearly black) - never semi-transparent or light
+    outline = Color(0xFF475569), // Clear dark outline
+    outlineVariant = Color(0xFF94A3B8)
 )
 
 private val PurpleGlassColorScheme = darkColorScheme(

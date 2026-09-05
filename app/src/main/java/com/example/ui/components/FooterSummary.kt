@@ -94,7 +94,7 @@ fun FooterSummary(
                     .background(Slate800)
             )
 
-            // 3. Remaining Balance ("باقی‌مانده" - بدون کلمه بدهکار)
+            // 3. Remaining Balance (باقی‌مانده با قانون بدهکاری منفی)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)
@@ -102,18 +102,18 @@ fun FooterSummary(
                 val balanceColor = when {
                     remainingBalance > 0 -> Rose400
                     remainingBalance == 0L -> Emerald400
-                    else -> Amber500
+                    else -> Rose400
                 }
 
                 Text(
-                    text = if (remainingBalance == 0L) "تسویه کامل" else "باقی‌مانده",
+                    text = if (remainingBalance < 0) "باقی‌مانده (بدهکاری)" else if (remainingBalance == 0L) "تسویه کامل" else "باقی‌مانده",
                     fontSize = 10.sp,
                     color = Slate400,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = PersianUtils.formatCurrency(Math.abs(remainingBalance), currencyUnit),
-                    fontSize = 12.sp,
+                    text = PersianUtils.formatRemainingBalanceText(remainingBalance, currencyUnit),
+                    fontSize = 11.5.sp,
                     fontWeight = FontWeight.Black,
                     color = balanceColor
                 )

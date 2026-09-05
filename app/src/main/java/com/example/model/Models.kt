@@ -3,10 +3,19 @@ package com.example.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+@Entity(tableName = "workshops")
+data class Workshop(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val name: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "furniture_orders")
 data class FurnitureOrder(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val workshopId: Long = 1L,
     val orderNumber: Long,
     val invoiceNumber: String,
     val modelName: String,
@@ -30,6 +39,7 @@ data class FurnitureOrder(
 data class PaymentRecord(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val workshopId: Long = 1L,
     val paymentNumber: Long,
     val amount: Long,
     val dateJalali: String,
@@ -48,6 +58,7 @@ data class PaymentRecord(
 data class ModelPreset(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val workshopId: Long = 1L,
     val name: String,
     val defaultPricePerSet: Long = 2000000L,
     val defaultUnitsPerSet: Double = 6.0,

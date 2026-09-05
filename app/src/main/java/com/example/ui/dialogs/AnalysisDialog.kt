@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,8 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,18 +39,20 @@ import com.example.ui.theme.*
 import com.example.util.JALALI_MONTH_NAMES
 import com.example.util.PersianUtils
 
-enum class AnalysisPeriod(val title: String) {
-    ALL_TIME("همه زمان‌ها"),
-    YEARLY("سالانه"),
-    MONTHLY("ماهیانه"),
-    WEEKLY("هفتگی")
+enum class AnalysisTab(val title: String, val subtitle: String) {
+    TOTAL("آمار کل", "تمامی سوابق کارکرد و دریافتی‌ها"),
+    YEARLY("آمار سالیانه", "تفکیک بر اساس ماه‌های سال"),
+    MONTHLY("آمار ماهیانه", "تفکیک بر اساس هفته‌های ماه"),
+    WEEKLY("آمار هفتگی", "تفکیک بر اساس روزهای هفته")
 }
 
 data class ModelStat(
     val name: String,
     val colorCode: String,
     val orderCount: Int,
+    val avgUnitsPerSet: Double,
     val totalUnits: Double,
+    val avgPricePerUnit: Long,
     val totalAmount: Long,
     val percentOfTotal: Double
 )
@@ -63,20 +65,15 @@ data class PayerStat(
     val percentOfTotalPaid: Double
 )
 
-data class MonthTrend(
-    val monthIdx: Int,
-    val monthName: String,
+data class PeriodBreakdownItem(
+    val label: String,
+    val orderCount: Int,
     val workAmount: Long,
+    val paymentCount: Int,
     val paidAmount: Long
-)
-
-data class MethodStat(
-    val typeKey: String,
-    val titleFa: String,
-    val count: Int,
-    val amount: Long,
-    val color: Color
-)
+) {
+    val balance: Long get() = workAmount - paidAmount
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,8 +87,18 @@ fun AnalysisDialog(
     if (!isOpen) return
 
     val context = LocalContext.current
-    var selectedPeriod by remember { mutableStateOf(AnalysisPeriod.ALL_TIME) }
-    
+    var selectedTab by remember { mutableStateOf(AnalysisTab.TOTAL) }
+
+    // Contrast text colors for light vs dark theme
+    val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val primaryTextColor = if (isLight) Color(0xFF000000) else Color.White
+    val secondaryTextColor = if (isLight) Color(0xFF0F172A) else Color(0xFFCBD5E1)
+    val captionTextColor = if (isLight) Color(0xFF334155) else Color(0xFF94A3B8)
+    val tableHeaderBg = if (isLight) Color(0xFFE2E8F0) else MaterialTheme.colorScheme.surfaceVariant
+    val tableAltRowBg = if (isLight) Color(0xFFF8FAFC) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val cardBg = if (isLight) Color(0xFFFFFFFF) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+    val borderColor = if (isLight) Color(0xFFCBD5E1) else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+
     // Extract available years from orders and payments
     val availableYears = remember(orders, payments) {
         val years = mutableSetOf<Int>()
@@ -109,71 +116,62 @@ fun AnalysisDialog(
     }
 
     var selectedYear by remember(availableYears) { mutableStateOf(availableYears.firstOrNull() ?: 1403) }
-    var selectedMonth by remember { 
+    var selectedMonth by remember {
         val currentJMonth = PersianUtils.parseJalaliParts(PersianUtils.getTodayJalaliString())?.month ?: 1
-        mutableStateOf(currentJMonth) 
+        mutableStateOf(currentJMonth)
     }
-    var selectedWeek by remember { mutableStateOf(1) } // 1..4
+    var selectedWeek by remember { mutableStateOf(1) } // 1..5
 
-    // Filter orders and payments by selected period
-    val periodOrders = remember(orders, selectedPeriod, selectedYear, selectedMonth, selectedWeek) {
-        when (selectedPeriod) {
-            AnalysisPeriod.ALL_TIME -> orders
-            AnalysisPeriod.YEARLY -> orders.filter { ord ->
+    // Filter orders and payments by selected tab and period
+    val periodOrders = remember(orders, selectedTab, selectedYear, selectedMonth, selectedWeek) {
+        when (selectedTab) {
+            AnalysisTab.TOTAL -> orders
+            AnalysisTab.YEARLY -> orders.filter { ord ->
                 val p = PersianUtils.parseJalaliParts(ord.dateJalali)
                 p != null && p.year == selectedYear
             }
-            AnalysisPeriod.MONTHLY -> orders.filter { ord ->
+            AnalysisTab.MONTHLY -> orders.filter { ord ->
                 val p = PersianUtils.parseJalaliParts(ord.dateJalali)
                 p != null && p.year == selectedYear && p.month == selectedMonth
             }
-            AnalysisPeriod.WEEKLY -> orders.filter { ord ->
+            AnalysisTab.WEEKLY -> orders.filter { ord ->
                 val p = PersianUtils.parseJalaliParts(ord.dateJalali)
                 if (p != null && p.year == selectedYear && p.month == selectedMonth) {
                     val weekIdx = ((p.day - 1) / 7) + 1
-                    weekIdx == selectedWeek || (selectedWeek == 4 && weekIdx >= 4)
+                    weekIdx == selectedWeek || (selectedWeek == 5 && weekIdx >= 5)
                 } else false
             }
         }
     }
 
-    val periodPayments = remember(payments, selectedPeriod, selectedYear, selectedMonth, selectedWeek) {
-        when (selectedPeriod) {
-            AnalysisPeriod.ALL_TIME -> payments
-            AnalysisPeriod.YEARLY -> payments.filter { pay ->
+    val periodPayments = remember(payments, selectedTab, selectedYear, selectedMonth, selectedWeek) {
+        when (selectedTab) {
+            AnalysisTab.TOTAL -> payments
+            AnalysisTab.YEARLY -> payments.filter { pay ->
                 val p = PersianUtils.parseJalaliParts(pay.dateJalali)
                 p != null && p.year == selectedYear
             }
-            AnalysisPeriod.MONTHLY -> payments.filter { pay ->
+            AnalysisTab.MONTHLY -> payments.filter { pay ->
                 val p = PersianUtils.parseJalaliParts(pay.dateJalali)
                 p != null && p.year == selectedYear && p.month == selectedMonth
             }
-            AnalysisPeriod.WEEKLY -> payments.filter { pay ->
+            AnalysisTab.WEEKLY -> payments.filter { pay ->
                 val p = PersianUtils.parseJalaliParts(pay.dateJalali)
                 if (p != null && p.year == selectedYear && p.month == selectedMonth) {
                     val weekIdx = ((p.day - 1) / 7) + 1
-                    weekIdx == selectedWeek || (selectedWeek == 4 && weekIdx >= 4)
+                    weekIdx == selectedWeek || (selectedWeek == 5 && weekIdx >= 5)
                 } else false
             }
         }
     }
 
-    // Calculations
+    // High-level financial totals for active tab
     val totalWork = remember(periodOrders) { periodOrders.sumOf { it.calculatedTotal } }
     val totalUnits = remember(periodOrders) { periodOrders.sumOf { it.calculatedUnits } }
     val totalPaid = remember(periodPayments) { periodPayments.sumOf { it.amount } }
     val remainingBalance = totalWork - totalPaid
 
-    val avgWorkPerOrder = if (periodOrders.isNotEmpty()) totalWork / periodOrders.size else 0L
-    val avgWorkPerUnit = if (totalUnits > 0) (totalWork / totalUnits).toLong() else 0L
-
-    // Min & Max Highlights
-    val maxWorkOrder = remember(periodOrders) { periodOrders.maxByOrNull { it.calculatedTotal } }
-    val minWorkOrder = remember(periodOrders) { periodOrders.minByOrNull { it.calculatedTotal } }
-    val maxPayment = remember(periodPayments) { periodPayments.maxByOrNull { it.amount } }
-    val minPayment = remember(periodPayments) { periodPayments.minByOrNull { it.amount } }
-
-    // Top Models Aggregation
+    // Model aggregation for active tab
     val modelStats = remember(periodOrders, totalWork) {
         periodOrders.groupBy { it.modelName }
             .map { (modelName, list) ->
@@ -181,54 +179,130 @@ fun AnalysisDialog(
                 val mAmount = list.sumOf { it.calculatedTotal }
                 val mColor = list.firstOrNull()?.colorCode?.takeIf { it.isNotBlank() } ?: PersianUtils.getModelColor(modelName)
                 val pct = if (totalWork > 0) (mAmount.toDouble() / totalWork) * 100.0 else 0.0
-                ModelStat(modelName, mColor, list.size, mUnits, mAmount, pct)
+
+                // Average units per set and average wage per unit
+                val avgUnits = if (list.isNotEmpty()) {
+                    list.map { it.unitsPerSet }.average().takeIf { !it.isNaN() } ?: 1.0
+                } else 1.0
+                val avgWagePerUnit = if (mUnits > 0) (mAmount / mUnits).toLong() else 0L
+
+                ModelStat(
+                    name = modelName,
+                    colorCode = mColor,
+                    orderCount = list.size,
+                    avgUnitsPerSet = avgUnits,
+                    totalUnits = mUnits,
+                    avgPricePerUnit = avgWagePerUnit,
+                    totalAmount = mAmount,
+                    percentOfTotal = pct
+                )
             }
             .sortedByDescending { it.totalAmount }
     }
-    val topModel = modelStats.firstOrNull()
 
-    // Top Payers Aggregation (From Payment Records)
+    // Payer aggregation for active tab
     val payerStats = remember(periodPayments, totalPaid) {
         periodPayments.groupBy { it.customerName.trim().ifBlank { "واریزکننده عمومی" } }
             .map { (payer, list) ->
                 val pPaid = list.sumOf { it.amount }
                 val banks = list.mapNotNull { it.bankName.takeIf { b -> b.isNotBlank() } }.distinct().joinToString("، ")
                 val pct = if (totalPaid > 0) (pPaid.toDouble() / totalPaid) * 100.0 else 0.0
-                PayerStat(payer, list.size, pPaid, banks.ifBlank { "عمومی" }, pct)
+                PayerStat(payer, list.size, pPaid, banks.ifBlank { "واریزی کارگاه" }, pct)
             }
             .sortedByDescending { it.totalPaid }
     }
-    val topPayer = payerStats.firstOrNull()
 
-    // Monthly Trend Data for Chart (12 Months of selected Year)
-    val monthlyTrends = remember(orders, payments, selectedYear) {
-        (1..12).map { m ->
-            val mOrders = orders.filter {
-                val p = PersianUtils.parseJalaliParts(it.dateJalali)
-                p != null && p.year == selectedYear && p.month == m
+    // Period-specific breakdown items (for Chart 1 and Table 1)
+    val breakdownItems: List<PeriodBreakdownItem> = remember(
+        selectedTab, selectedYear, selectedMonth, selectedWeek, orders, payments
+    ) {
+        when (selectedTab) {
+            AnalysisTab.TOTAL -> {
+                // Breakdown by all available years
+                availableYears.sorted().map { yr ->
+                    val yOrders = orders.filter { PersianUtils.parseJalaliParts(it.dateJalali)?.year == yr }
+                    val yPayments = payments.filter { PersianUtils.parseJalaliParts(it.dateJalali)?.year == yr }
+                    PeriodBreakdownItem(
+                        label = "سال ${PersianUtils.toPersianDigits(yr)}",
+                        orderCount = yOrders.size,
+                        workAmount = yOrders.sumOf { it.calculatedTotal },
+                        paymentCount = yPayments.size,
+                        paidAmount = yPayments.sumOf { it.amount }
+                    )
+                }
             }
-            val mPayments = payments.filter {
-                val p = PersianUtils.parseJalaliParts(it.dateJalali)
-                p != null && p.year == selectedYear && p.month == m
+            AnalysisTab.YEARLY -> {
+                // 12 months of selected year
+                (1..12).map { m ->
+                    val mOrders = orders.filter {
+                        val p = PersianUtils.parseJalaliParts(it.dateJalali)
+                        p != null && p.year == selectedYear && p.month == m
+                    }
+                    val mPayments = payments.filter {
+                        val p = PersianUtils.parseJalaliParts(it.dateJalali)
+                        p != null && p.year == selectedYear && p.month == m
+                    }
+                    PeriodBreakdownItem(
+                        label = JALALI_MONTH_NAMES.getOrElse(m - 1) { "$m" },
+                        orderCount = mOrders.size,
+                        workAmount = mOrders.sumOf { it.calculatedTotal },
+                        paymentCount = mPayments.size,
+                        paidAmount = mPayments.sumOf { it.amount }
+                    )
+                }
             }
-            MonthTrend(
-                monthIdx = m,
-                monthName = JALALI_MONTH_NAMES.getOrElse(m - 1) { "$m" },
-                workAmount = mOrders.sumOf { it.calculatedTotal },
-                paidAmount = mPayments.sumOf { it.amount }
-            )
+            AnalysisTab.MONTHLY -> {
+                // 5 weeks of selected month
+                (1..5).map { w ->
+                    val wOrders = orders.filter {
+                        val p = PersianUtils.parseJalaliParts(it.dateJalali)
+                        if (p != null && p.year == selectedYear && p.month == selectedMonth) {
+                            val weekIdx = ((p.day - 1) / 7) + 1
+                            weekIdx == w || (w == 5 && weekIdx >= 5)
+                        } else false
+                    }
+                    val wPayments = payments.filter {
+                        val p = PersianUtils.parseJalaliParts(it.dateJalali)
+                        if (p != null && p.year == selectedYear && p.month == selectedMonth) {
+                            val weekIdx = ((p.day - 1) / 7) + 1
+                            weekIdx == w || (w == 5 && weekIdx >= 5)
+                        } else false
+                    }
+                    val weekLabel = when (w) {
+                        1 -> "هفته اول (۱-۷)"
+                        2 -> "هفته دوم (۸-۱۴)"
+                        3 -> "هفته سوم (۱۵-۲۱)"
+                        4 -> "هفته چهارم (۲۲-۲۸)"
+                        else -> "هفته پنجم (۲۹-۳۱)"
+                    }
+                    PeriodBreakdownItem(
+                        label = weekLabel,
+                        orderCount = wOrders.size,
+                        workAmount = wOrders.sumOf { it.calculatedTotal },
+                        paymentCount = wPayments.size,
+                        paidAmount = wPayments.sumOf { it.amount }
+                    )
+                }
+            }
+            AnalysisTab.WEEKLY -> {
+                // 7 days of the week (شنبه تا جمعه)
+                (0..6).map { dayIdx ->
+                    val dOrders = periodOrders.filter { ord ->
+                        PersianUtils.getJalaliDayOfWeek(ord.dateJalali) == dayIdx
+                    }
+                    val dPayments = periodPayments.filter { pay ->
+                        PersianUtils.getJalaliDayOfWeek(pay.dateJalali) == dayIdx
+                    }
+                    PeriodBreakdownItem(
+                        label = PersianUtils.PERSIAN_WEEKDAY_NAMES.getOrElse(dayIdx) { "$dayIdx" },
+                        orderCount = dOrders.size,
+                        workAmount = dOrders.sumOf { it.calculatedTotal },
+                        paymentCount = dPayments.size,
+                        paidAmount = dPayments.sumOf { it.amount }
+                    )
+                }
+            }
         }
-    }
-
-    // Payment Methods Breakdown
-    val methodStats = remember(periodPayments) {
-        val groups = periodPayments.groupBy { it.paymentType }
-        listOf(
-            MethodStat("transfer", "کارت به کارت", groups["transfer"]?.size ?: 0, groups["transfer"]?.sumOf { it.amount } ?: 0L, Color(0xFF2563EB)),
-            MethodStat("pos", "کارتخوان", groups["pos"]?.size ?: 0, groups["pos"]?.sumOf { it.amount } ?: 0L, Color(0xFF059669)),
-            MethodStat("cash", "نقدی", groups["cash"]?.size ?: 0, groups["cash"]?.sumOf { it.amount } ?: 0L, Color(0xFFD97706)),
-            MethodStat("cheque", "چک صیادی", groups["cheque"]?.size ?: 0, groups["cheque"]?.sumOf { it.amount } ?: 0L, Color(0xFF9333EA))
-        ).filter { it.amount > 0 || it.count > 0 }
     }
 
     Dialog(
@@ -239,13 +313,13 @@ fun AnalysisDialog(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
-                .fillMaxWidth(0.96f)
-                .fillMaxHeight(0.94f)
+                .fillMaxWidth(0.97f)
+                .fillMaxHeight(0.95f)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
             ) {
                 // Header Bar
                 Row(
@@ -276,12 +350,12 @@ fun AnalysisDialog(
                                 text = "اطلاعات و آنالیز هوشمند کارگاه",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = primaryTextColor
                             )
                             Text(
-                                text = "تجزیه و تحلیل آماری کارکردها، دریافتی‌ها، نمودارها و رکوردها",
+                                text = "آمار کل، سالیانه، ماهیانه و هفتگی به همراه نمودارها و جدول‌ها",
                                 fontSize = 10.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = secondaryTextColor
                             )
                         }
                     }
@@ -291,346 +365,295 @@ fun AnalysisDialog(
                             onClick = {
                                 shareAnalysisReport(
                                     context = context,
-                                    periodTitle = selectedPeriod.title,
+                                    tabTitle = selectedTab.title,
                                     periodOrders = periodOrders,
                                     periodPayments = periodPayments,
                                     totalWork = totalWork,
                                     totalPaid = totalPaid,
                                     balance = remainingBalance,
                                     currencyUnit = currencyUnit,
-                                    maxWorkOrder = maxWorkOrder,
-                                    minWorkOrder = minWorkOrder,
-                                    maxPayment = maxPayment,
-                                    minPayment = minPayment,
-                                    topModel = topModel,
-                                    topPayer = topPayer
+                                    modelStats = modelStats,
+                                    payerStats = payerStats
                                 )
                             }
                         ) {
-                            Icon(imageVector = Icons.Outlined.Share, contentDescription = "اشتراک گزارش")
+                            Icon(imageVector = Icons.Outlined.Share, contentDescription = "اشتراک گزارش", tint = primaryTextColor)
                         }
                         IconButton(onClick = onDismiss) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "بستن")
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "بستن", tint = primaryTextColor)
                         }
                     }
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = borderColor)
 
-                // Scrollable Body
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                // The 4 Tabs Bar (آمار کل | سالیانه | ماهیانه | هفتگی)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Period Selector Tabs
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            AnalysisPeriod.values().forEach { period ->
-                                val isSelected = selectedPeriod == period
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { selectedPeriod = period }
+                        AnalysisTab.values().forEach { tab ->
+                            val isSelected = selectedTab == tab
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { selectedTab = tab }
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(
-                                        modifier = Modifier.padding(vertical = 8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = period.title,
-                                            fontSize = 11.5.sp,
-                                            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    Text(
+                                        text = tab.title,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else primaryTextColor
+                                    )
                                 }
                             }
                         }
                     }
+                }
 
-                    // Secondary Sub-filter Pickers (Year / Month / Week)
-                    AnimatedVisibility(visible = selectedPeriod != AnalysisPeriod.ALL_TIME) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
-                            modifier = Modifier.fillMaxWidth()
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Period Selectors (سال، ماه، هفته بر اساس تب فعال)
+                AnimatedVisibility(visible = selectedTab != AnalysisTab.TOTAL) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = cardBg,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            // Row 1: Year Selector (for Yearly, Monthly, Weekly)
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                // Year Selector
-                                Text("سال:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                availableYears.forEach { yr ->
-                                    FilterChip(
-                                        selected = selectedYear == yr,
-                                        onClick = { selectedYear = yr },
-                                        label = { Text(PersianUtils.toPersianDigits(yr), fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                                    )
+                                Text(
+                                    text = "انتخاب سال:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = primaryTextColor
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                                ) {
+                                    availableYears.forEach { yr ->
+                                        FilterChip(
+                                            selected = selectedYear == yr,
+                                            onClick = { selectedYear = yr },
+                                            label = {
+                                                Text(
+                                                    text = PersianUtils.toPersianDigits(yr),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = primaryTextColor
+                                                )
+                                            }
+                                        )
+                                    }
                                 }
+                            }
 
-                                if (selectedPeriod == AnalysisPeriod.MONTHLY || selectedPeriod == AnalysisPeriod.WEEKLY) {
-                                    VerticalDivider(modifier = Modifier.height(24.dp))
-                                    Text("ماه:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    ScrollableTabRow(
-                                        selectedTabIndex = selectedMonth - 1,
-                                        edgePadding = 4.dp,
-                                        modifier = Modifier.weight(1f),
-                                        divider = {}
+                            // Row 2: Month Selector (for Monthly and Weekly)
+                            if (selectedTab == AnalysisTab.MONTHLY || selectedTab == AnalysisTab.WEEKLY) {
+                                HorizontalDivider(color = borderColor.copy(alpha = 0.5f))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "انتخاب ماه:",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = primaryTextColor
+                                    )
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.horizontalScroll(rememberScrollState())
                                     ) {
                                         (1..12).forEach { m ->
-                                            Tab(
+                                            val mName = JALALI_MONTH_NAMES.getOrElse(m - 1) { "$m" }
+                                            FilterChip(
                                                 selected = selectedMonth == m,
                                                 onClick = { selectedMonth = m },
-                                                text = {
+                                                label = {
                                                     Text(
-                                                        text = JALALI_MONTH_NAMES.getOrElse(m - 1) { "$m" },
+                                                        text = mName,
                                                         fontSize = 10.5.sp,
-                                                        fontWeight = if (selectedMonth == m) FontWeight.Black else FontWeight.Normal
+                                                        fontWeight = if (selectedMonth == m) FontWeight.Black else FontWeight.Normal,
+                                                        color = primaryTextColor
                                                     )
                                                 }
                                             )
                                         }
                                     }
                                 }
+                            }
 
-                                if (selectedPeriod == AnalysisPeriod.WEEKLY) {
-                                    VerticalDivider(modifier = Modifier.height(24.dp))
-                                    Text("هفته:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    (1..4).forEach { w ->
-                                        FilterChip(
-                                            selected = selectedWeek == w,
-                                            onClick = { selectedWeek = w },
-                                            label = { Text("هفته ${PersianUtils.toPersianDigits(w)}", fontSize = 10.5.sp) }
-                                        )
+                            // Row 3: Week Selector (for Weekly)
+                            if (selectedTab == AnalysisTab.WEEKLY) {
+                                HorizontalDivider(color = borderColor.copy(alpha = 0.5f))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "انتخاب هفته:",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = primaryTextColor
+                                    )
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                                    ) {
+                                        (1..5).forEach { w ->
+                                            val wTitle = when (w) {
+                                                1 -> "هفته ۱ (۱-۷)"
+                                                2 -> "هفته ۲ (۸-۱۴)"
+                                                3 -> "هفته ۳ (۱۵-۲۱)"
+                                                4 -> "هفته ۴ (۲۲-۲۸)"
+                                                else -> "هفته ۵ (۲۹-۳۱)"
+                                            }
+                                            FilterChip(
+                                                selected = selectedWeek == w,
+                                                onClick = { selectedWeek = w },
+                                                label = {
+                                                    Text(
+                                                        text = wTitle,
+                                                        fontSize = 10.5.sp,
+                                                        fontWeight = if (selectedWeek == w) FontWeight.Black else FontWeight.Normal,
+                                                        color = primaryTextColor
+                                                    )
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                }
 
-                    // Section 1: Financial Overview Metric Cards (4 Cards)
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Total Work Card
-                            MetricSummaryCard(
-                                title = "مجموع کارکرد و فاکتورها",
-                                mainValue = PersianUtils.formatCurrency(totalWork, currencyUnit),
-                                subValue = "${PersianUtils.toPersianDigits(periodOrders.size)} فاکتور (${PersianUtils.formatNumberWithCommas(totalUnits)} واحد)",
-                                icon = Icons.Outlined.ReceiptLong,
-                                accentColor = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.weight(1f)
-                            )
-                            // Total Payments Card
-                            MetricSummaryCard(
-                                title = "مجموع کل دریافتی‌ها",
-                                mainValue = PersianUtils.formatCurrency(totalPaid, currencyUnit),
-                                subValue = "${PersianUtils.toPersianDigits(periodPayments.size)} دریافتی ثبت شده",
-                                icon = Icons.Outlined.Payments,
-                                accentColor = Emerald600,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Remaining Balance Card
-                            val balCol = if (remainingBalance > 0) Rose600 else if (remainingBalance == 0L) Emerald600 else Amber600
-                            val balStatus = if (remainingBalance > 0) "بدهکار به کارگاه" else if (remainingBalance == 0L) "تسویه کامل" else "بستانکار"
-                            MetricSummaryCard(
-                                title = "باقی مانده حساب ($balStatus)",
-                                mainValue = if (remainingBalance == 0L) "تسویه کامل" else PersianUtils.formatCurrency(Math.abs(remainingBalance), currencyUnit),
-                                subValue = "تراز مالی کارگاه در این دوره",
-                                icon = Icons.Outlined.AccountBalanceWallet,
-                                accentColor = balCol,
-                                modifier = Modifier.weight(1f)
-                            )
-                            // Average Work per Order Card
-                            MetricSummaryCard(
-                                title = "میانگین دستمزد هر فاکتور",
-                                mainValue = PersianUtils.formatCurrency(avgWorkPerOrder, currencyUnit),
-                                subValue = "میانگین هر واحد: ${PersianUtils.formatCurrency(avgWorkPerUnit, currencyUnit)}",
-                                icon = Icons.Outlined.Speed,
-                                accentColor = Color(0xFF9333EA),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    // Section 2: Max & Min Records and Highlights (بیشترین‌ها و کمترین‌ها)
-                    Text(
-                        text = "🏆 رکوردها، بیشترین‌ها و کمترین‌ها:",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Max Work Order
-                            RecordHighlightCard(
-                                title = "بیشترین کارکرد (فاکتور رکورد)",
-                                mainText = if (maxWorkOrder != null) "${maxWorkOrder.modelName} • #${PersianUtils.toPersianDigits(maxWorkOrder.invoiceNumber)}" else "ثبت نشده",
-                                subText = if (maxWorkOrder != null) "مشتری: ${maxWorkOrder.customerName.ifBlank { "عمومی" }} | تاریخ: ${PersianUtils.toPersianDigits(maxWorkOrder.dateJalali)}" else "-",
-                                amountText = if (maxWorkOrder != null) PersianUtils.formatCurrency(maxWorkOrder.calculatedTotal, currencyUnit) else "-",
-                                isPositive = true,
-                                icon = Icons.Filled.TrendingUp,
-                                accentColor = Emerald600,
-                                modifier = Modifier.weight(1f)
-                            )
-                            // Min Work Order
-                            RecordHighlightCard(
-                                title = "کمترین کارکرد (کوچک‌ترین فاکتور)",
-                                mainText = if (minWorkOrder != null) "${minWorkOrder.modelName} • #${PersianUtils.toPersianDigits(minWorkOrder.invoiceNumber)}" else "ثبت نشده",
-                                subText = if (minWorkOrder != null) "اجزا: ${PersianUtils.toPersianDigits(minWorkOrder.countFormula)} (${PersianUtils.formatNumberWithCommas(minWorkOrder.calculatedUnits)}و)" else "-",
-                                amountText = if (minWorkOrder != null) PersianUtils.formatCurrency(minWorkOrder.calculatedTotal, currencyUnit) else "-",
-                                isPositive = false,
-                                icon = Icons.Filled.TrendingDown,
-                                accentColor = Amber600,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Max Payment
-                            RecordHighlightCard(
-                                title = "بیشترین دریافتی (بالاترین واریزی)",
-                                mainText = if (maxPayment != null) "${maxPayment.customerName.ifBlank { "عمومی" }} (${formatPayMethod(maxPayment.paymentType)})" else "ثبت نشده",
-                                subText = if (maxPayment != null) "تاریخ: ${PersianUtils.toPersianDigits(maxPayment.dateJalali)} | کد: ${PersianUtils.toPersianDigits(maxPayment.referenceNo.ifBlank { "-" })}" else "-",
-                                amountText = if (maxPayment != null) PersianUtils.formatCurrency(maxPayment.amount, currencyUnit) else "-",
-                                isPositive = true,
-                                icon = Icons.Filled.ArrowUpward,
-                                accentColor = Color(0xFF0284C7),
-                                modifier = Modifier.weight(1f)
-                            )
-                            // Min Payment
-                            RecordHighlightCard(
-                                title = "کمترین دریافتی (پایین‌ترین سند)",
-                                mainText = if (minPayment != null) "${minPayment.customerName.ifBlank { "عمومی" }} (${formatPayMethod(minPayment.paymentType)})" else "ثبت نشده",
-                                subText = if (minPayment != null) "تاریخ: ${PersianUtils.toPersianDigits(minPayment.dateJalali)}" else "-",
-                                amountText = if (minPayment != null) PersianUtils.formatCurrency(minPayment.amount, currencyUnit) else "-",
-                                isPositive = false,
-                                icon = Icons.Filled.ArrowDownward,
-                                accentColor = Color(0xFF64748B),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Top Model
-                            RecordHighlightCard(
-                                title = "پرتقاضاترین مدل مبل",
-                                mainText = topModel?.name ?: "ثبت نشده",
-                                subText = if (topModel != null) "${PersianUtils.toPersianDigits(topModel.orderCount)} فاکتور • ${PersianUtils.formatNumberWithCommas(topModel.totalUnits)} واحد تولیدی" else "-",
-                                amountText = if (topModel != null) "${PersianUtils.formatCurrency(topModel.totalAmount, currencyUnit)} (${PersianUtils.toPersianDigits(String.format(java.util.Locale.US, "%.1f", topModel.percentOfTotal))}%)" else "-",
-                                isPositive = true,
-                                icon = Icons.Default.Chair,
-                                accentColor = PersianUtils.parseColor(topModel?.colorCode ?: "#2563EB"),
-                                modifier = Modifier.weight(1f)
-                            )
-                            // Top Payer
-                            RecordHighlightCard(
-                                title = "بیشترین پرداخت‌کننده",
-                                mainText = topPayer?.payerName ?: "ثبت نشده",
-                                subText = if (topPayer != null) "${PersianUtils.toPersianDigits(topPayer.paymentCount)} سند دریافتی (${topPayer.banksUsed})" else "-",
-                                amountText = if (topPayer != null) "کل دریافتی: ${PersianUtils.formatCurrency(topPayer.totalPaid, currencyUnit)}" else "-",
-                                isPositive = true,
-                                icon = Icons.Default.Person,
-                                accentColor = Color(0xFF8B5CF6),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    // Section 3: Visual Charts (نمودارهای گرافیکی تحلیلی)
-                    Text(
-                        text = "📊 نمودارهای تحلیلی و مقایسه‌ای:",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    // Chart 1: Work vs Received Monthly Bar Chart
-                    MonthlyBarChartCard(
-                        trends = monthlyTrends,
+                // Scrollable Content
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Top Overview Metric Cards (کارکرد | دریافتی | مانده حساب)
+                    FinancialOverviewCards(
+                        totalWork = totalWork,
+                        totalPaid = totalPaid,
+                        remainingBalance = remainingBalance,
+                        orderCount = periodOrders.size,
+                        paymentCount = periodPayments.size,
+                        totalUnits = totalUnits,
                         currencyUnit = currencyUnit,
-                        year = selectedYear
+                        primaryTextColor = primaryTextColor,
+                        secondaryTextColor = secondaryTextColor,
+                        cardBg = cardBg,
+                        borderColor = borderColor
                     )
 
-                    // Chart 2: Model Distribution & Payment Methods
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ModelDistributionCard(
-                            modelStats = modelStats.take(5),
-                            currencyUnit = currencyUnit,
-                            modifier = Modifier.weight(1f)
-                        )
-                        PaymentMethodsCard(
-                            methods = methodStats,
-                            currencyUnit = currencyUnit,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    // Section 4: Detailed Breakdown Tables (جدول‌های خط‌کشی‌شده تحلیلی)
-                    Text(
-                        text = "📋 جدول‌های تفکیکی و آماری:",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onSurface
+                    // -------------------------------------------------------------
+                    // CHART 1: نمودار کارکرد و دریافتی
+                    // -------------------------------------------------------------
+                    WorkVsReceivedChartCard(
+                        tab = selectedTab,
+                        items = breakdownItems,
+                        totalWork = totalWork,
+                        totalPaid = totalPaid,
+                        currencyUnit = currencyUnit,
+                        primaryTextColor = primaryTextColor,
+                        secondaryTextColor = secondaryTextColor,
+                        cardBg = cardBg,
+                        borderColor = borderColor
                     )
 
-                    // Table 1: Model Analysis Table
-                    ModelAnalysisTable(
+                    // -------------------------------------------------------------
+                    // CHART 2: نمودار انواع مدل‌ها
+                    // -------------------------------------------------------------
+                    ModelsDistributionChartCard(
+                        tab = selectedTab,
                         modelStats = modelStats,
-                        currencyUnit = currencyUnit
+                        totalWork = totalWork,
+                        currencyUnit = currencyUnit,
+                        primaryTextColor = primaryTextColor,
+                        secondaryTextColor = secondaryTextColor,
+                        cardBg = cardBg,
+                        borderColor = borderColor
                     )
 
-                    // Table 2: Payers Breakdown Table
-                    PayerAnalysisTable(
+                    // -------------------------------------------------------------
+                    // TABLE 1: جدول کارکرد، دریافتی‌ها و پرداخت‌کننده‌ها
+                    // -------------------------------------------------------------
+                    WorkAndPaymentsTableCard(
+                        tab = selectedTab,
+                        items = breakdownItems,
+                        totalWork = totalWork,
+                        totalPaid = totalPaid,
+                        remainingBalance = remainingBalance,
+                        orderCount = periodOrders.size,
+                        paymentCount = periodPayments.size,
                         payerStats = payerStats,
-                        currencyUnit = currencyUnit
+                        currencyUnit = currencyUnit,
+                        primaryTextColor = primaryTextColor,
+                        secondaryTextColor = secondaryTextColor,
+                        captionTextColor = captionTextColor,
+                        tableHeaderBg = tableHeaderBg,
+                        tableAltRowBg = tableAltRowBg,
+                        borderColor = borderColor
+                    )
+
+                    // -------------------------------------------------------------
+                    // TABLE 2: جدول تعداد، واحدها و دستمزد مدل‌ها بر اساس واحد
+                    // -------------------------------------------------------------
+                    ModelWageDetailsTableCard(
+                        tab = selectedTab,
+                        modelStats = modelStats,
+                        totalWork = totalWork,
+                        totalUnits = totalUnits,
+                        currencyUnit = currencyUnit,
+                        primaryTextColor = primaryTextColor,
+                        secondaryTextColor = secondaryTextColor,
+                        captionTextColor = captionTextColor,
+                        tableHeaderBg = tableHeaderBg,
+                        tableAltRowBg = tableAltRowBg,
+                        borderColor = borderColor
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = borderColor)
 
-                // Bottom Action Button
+                // Close Button
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
@@ -643,157 +666,329 @@ fun AnalysisDialog(
     }
 }
 
-// -------------------------------------------------------------
-// Component: Metric Summary Card
-// -------------------------------------------------------------
+// =============================================================================
+// SUB-COMPONENTS: Financial Metric Overview Cards
+// =============================================================================
 @Composable
-private fun MetricSummaryCard(
-    title: String,
-    mainValue: String,
-    subValue: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    accentColor: Color,
-    modifier: Modifier = Modifier
+private fun FinancialOverviewCards(
+    totalWork: Long,
+    totalPaid: Long,
+    remainingBalance: Long,
+    orderCount: Int,
+    paymentCount: Int,
+    totalUnits: Double,
+    currencyUnit: String,
+    primaryTextColor: Color,
+    secondaryTextColor: Color,
+    cardBg: Color,
+    borderColor: Color
 ) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        border = androidx.compose.foundation.BorderStroke(1.2.dp, accentColor.copy(alpha = 0.35f)),
-        modifier = modifier
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        // Card 1: کارکرد کل
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = cardBg,
+            border = androidx.compose.foundation.BorderStroke(1.2.dp, borderColor),
+            modifier = Modifier.weight(1f)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(accentColor.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(imageVector = icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(16.dp))
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF2563EB).copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(imageVector = Icons.Outlined.ReceiptLong, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(15.dp))
+                    }
+                    Text("مجموع کارکرد", fontSize = 10.sp, fontWeight = FontWeight.Black, color = secondaryTextColor)
                 }
                 Text(
-                    text = title,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = PersianUtils.formatCurrency(totalWork, currencyUnit),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF2563EB),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Text(
+                    text = "${PersianUtils.toPersianDigits(orderCount)} فاکتور • ${PersianUtils.formatNumberWithCommas(totalUnits)} واحد",
+                    fontSize = 9.sp,
+                    color = primaryTextColor
+                )
             }
-            Text(
-                text = mainValue,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.Black,
-                color = accentColor
-            )
-            Text(
-                text = subValue,
-                fontSize = 9.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
-    }
-}
 
-// -------------------------------------------------------------
-// Component: Record Highlight Card (Min / Max)
-// -------------------------------------------------------------
-@Composable
-private fun RecordHighlightCard(
-    title: String,
-    mainText: String,
-    subText: String,
-    amountText: String,
-    isPositive: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    accentColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = accentColor.copy(alpha = 0.06f),
-        border = androidx.compose.foundation.BorderStroke(1.2.dp, accentColor.copy(alpha = 0.3f)),
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Card 2: دریافتی کل
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = cardBg,
+            border = androidx.compose.foundation.BorderStroke(1.2.dp, borderColor),
+            modifier = Modifier.weight(1f)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(accentColor.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(imageVector = icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF059669).copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(imageVector = Icons.Outlined.Payments, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(15.dp))
+                    }
+                    Text("مجموع دریافتی", fontSize = 10.sp, fontWeight = FontWeight.Black, color = secondaryTextColor)
+                }
+                Text(
+                    text = PersianUtils.formatCurrency(totalPaid, currencyUnit),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF059669),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${PersianUtils.toPersianDigits(paymentCount)} سند دریافتی ثبت شده",
+                    fontSize = 9.sp,
+                    color = primaryTextColor
+                )
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        }
+
+        // Card 3: مانده حساب (با قانون بدهکاری منفی)
+        val isNegative = remainingBalance < 0
+        val isZero = remainingBalance == 0L
+        val balanceColor = when {
+            isZero -> Color(0xFF059669)
+            isNegative -> Color(0xFFDC2626)
+            else -> Color(0xFF2563EB)
+        }
+        val balanceLabel = when {
+            isZero -> "تسویه کامل"
+            isNegative -> "بدهکاری کارگاه"
+            else -> "طلبکار / مانده"
+        }
+        val balanceValue = when {
+            isZero -> "تسویه کامل"
+            isNegative -> "-${PersianUtils.formatCurrency(Math.abs(remainingBalance), currencyUnit)}"
+            else -> PersianUtils.formatCurrency(remainingBalance, currencyUnit)
+        }
+
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = cardBg,
+            border = androidx.compose.foundation.BorderStroke(1.2.dp, borderColor),
+            modifier = Modifier.weight(1f)
+        ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(balanceColor.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(imageVector = Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = balanceColor, modifier = Modifier.size(15.dp))
+                    }
+                    Text(balanceLabel, fontSize = 10.sp, fontWeight = FontWeight.Black, color = secondaryTextColor)
+                }
                 Text(
-                    text = title,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = mainText,
-                    fontSize = 11.sp,
+                    text = balanceValue,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = balanceColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = amountText,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black,
-                    color = accentColor
-                )
-                Text(
-                    text = subText,
-                    fontSize = 8.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = if (isNegative) "دریافتی بیشتر از کارکرد" else if (isZero) "حساب‌ها تراز است" else "کارکرد تسویه نشده",
+                    fontSize = 9.sp,
+                    color = primaryTextColor
                 )
             }
         }
     }
 }
 
-// -------------------------------------------------------------
-// Component: Monthly Bar Chart (Work vs Received)
-// -------------------------------------------------------------
+// =============================================================================
+// CHART 1: نمودار کارکرد و دریافتی (پشتیبانی از ۴ تب)
+// =============================================================================
 @Composable
-private fun MonthlyBarChartCard(
-    trends: List<MonthTrend>,
+private fun WorkVsReceivedChartCard(
+    tab: AnalysisTab,
+    items: List<PeriodBreakdownItem>,
+    totalWork: Long,
+    totalPaid: Long,
     currencyUnit: String,
-    year: Int
+    primaryTextColor: Color,
+    secondaryTextColor: Color,
+    cardBg: Color,
+    borderColor: Color
 ) {
-    val maxAmount = remember(trends) {
-        val m1 = trends.maxOfOrNull { it.workAmount } ?: 0L
-        val m2 = trends.maxOfOrNull { it.paidAmount } ?: 0L
-        maxOf(m1, m2, 1000000L).toFloat()
-    }
-
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+        color = cardBg,
+        border = androidx.compose.foundation.BorderStroke(1.2.dp, borderColor),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Chart Title and Legend
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(imageVector = Icons.Default.BarChart, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(18.dp))
+                    Text(
+                        text = "نمودار مقایسه‌ای کارکرد و دریافتی (${tab.title})",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Black,
+                        color = primaryTextColor
+                    )
+                }
+                // Legend
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF2563EB)))
+                        Text("کارکرد", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = primaryTextColor)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF059669)))
+                        Text("دریافتی", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = primaryTextColor)
+                    }
+                }
+            }
+
+            if (items.isEmpty() || (totalWork == 0L && totalPaid == 0L)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("اطلاعاتی برای رسم نمودار در این بازه ثبت نشده است", fontSize = 11.sp, color = secondaryTextColor)
+                }
+            } else {
+                val maxAmount = remember(items, totalWork, totalPaid) {
+                    val m1 = items.maxOfOrNull { it.workAmount } ?: 0L
+                    val m2 = items.maxOfOrNull { it.paidAmount } ?: 0L
+                    maxOf(m1, m2, 100000L).toFloat()
+                }
+
+                // Custom Bar Canvas
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                ) {
+                    val w = size.width
+                    val h = size.height
+                    val chartH = h - 10f
+
+                    // Grid lines
+                    for (step in 1..3) {
+                        val lineY = chartH * (step / 4f)
+                        drawLine(
+                            color = Color.LightGray.copy(alpha = 0.35f),
+                            start = Offset(0f, lineY),
+                            end = Offset(w, lineY),
+                            strokeWidth = 1f
+                        )
+                    }
+
+                    val count = items.size
+                    val slotW = w / count
+                    val barW = (slotW * 0.34f).coerceAtMost(22f)
+
+                    items.forEachIndexed { i, item ->
+                        val slotCenter = (i + 0.5f) * slotW
+                        val workH = if (maxAmount > 0) (item.workAmount / maxAmount) * (chartH * 0.88f) else 0f
+                        val paidH = if (maxAmount > 0) (item.paidAmount / maxAmount) * (chartH * 0.88f) else 0f
+
+                        // Draw Work bar (Blue)
+                        if (item.workAmount > 0) {
+                            drawRoundRect(
+                                color = Color(0xFF2563EB),
+                                topLeft = Offset(slotCenter - barW - 1f, chartH - workH),
+                                size = Size(barW, workH),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
+                            )
+                        }
+
+                        // Draw Paid bar (Green)
+                        if (item.paidAmount > 0) {
+                            drawRoundRect(
+                                color = Color(0xFF059669),
+                                topLeft = Offset(slotCenter + 1f, chartH - paidH),
+                                size = Size(barW, paidH),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
+                            )
+                        }
+                    }
+
+                    // Baseline
+                    drawLine(
+                        color = Color.Gray.copy(alpha = 0.5f),
+                        start = Offset(0f, chartH),
+                        end = Offset(w, chartH),
+                        strokeWidth = 1.5f
+                    )
+                }
+
+                // Labels below bars
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    items.forEach { item ->
+                        Text(
+                            text = item.label.take(6),
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = primaryTextColor,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// CHART 2: نمودار انواع مدل‌ها
+// =============================================================================
+@Composable
+private fun ModelsDistributionChartCard(
+    tab: AnalysisTab,
+    modelStats: List<ModelStat>,
+    totalWork: Long,
+    currencyUnit: String,
+    primaryTextColor: Color,
+    secondaryTextColor: Color,
+    cardBg: Color,
+    borderColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = cardBg,
+        border = androidx.compose.foundation.BorderStroke(1.2.dp, borderColor),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
@@ -802,151 +997,102 @@ private fun MonthlyBarChartCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(imageVector = Icons.Default.BarChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.PieChart, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(18.dp))
                     Text(
-                        text = "روند مقایسه‌ای کارکرد در برابر دریافتی (سال ${PersianUtils.toPersianDigits(year)})",
+                        text = "نمودار توزیع و سهم مدل‌های مبل",
                         fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Black
+                        fontWeight = FontWeight.Black,
+                        color = primaryTextColor
                     )
                 }
-                // Legend
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF2563EB)))
-                        Text("کارکرد", fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF059669)))
-                        Text("دریافتی", fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            // Custom Canvas Bar Chart
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp)
-            ) {
-                val w = size.width
-                val h = size.height
-                val chartH = h - 10f
-
-                // Draw background horizontal grid lines
-                for (step in 1..3) {
-                    val lineY = chartH * (step / 4f)
-                    drawLine(
-                        color = Color.LightGray.copy(alpha = 0.25f),
-                        start = Offset(0f, lineY),
-                        end = Offset(w, lineY),
-                        strokeWidth = 1f
-                    )
-                }
-
-                val numBars = 12
-                val slotWidth = w / numBars
-                val barW = slotWidth * 0.34f
-
-                trends.forEachIndexed { i, trend ->
-                    val slotCenter = (i + 0.5f) * slotWidth
-                    val workH = if (maxAmount > 0) (trend.workAmount / maxAmount) * (chartH * 0.88f) else 0f
-                    val paidH = if (maxAmount > 0) (trend.paidAmount / maxAmount) * (chartH * 0.88f) else 0f
-
-                    // Draw Work Bar (Blue)
-                    if (trend.workAmount > 0) {
-                        drawRect(
-                            color = Color(0xFF2563EB),
-                            topLeft = Offset(slotCenter - barW - 1f, chartH - workH),
-                            size = Size(barW, workH)
-                        )
-                    }
-
-                    // Draw Paid Bar (Emerald)
-                    if (trend.paidAmount > 0) {
-                        drawRect(
-                            color = Color(0xFF059669),
-                            topLeft = Offset(slotCenter + 1f, chartH - paidH),
-                            size = Size(barW, paidH)
-                        )
-                    }
-                }
-
-                // Draw baseline
-                drawLine(
-                    color = Color.Gray.copy(alpha = 0.5f),
-                    start = Offset(0f, chartH),
-                    end = Offset(w, chartH),
-                    strokeWidth = 1.5f
+                Text(
+                    text = "${PersianUtils.toPersianDigits(modelStats.size)} مدل تولیدی",
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = primaryTextColor
                 )
             }
 
-            // Month Labels Row below canvas
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                JALALI_MONTH_NAMES.forEach { mName ->
-                    Text(
-                        text = mName.take(3),
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// Component: Model Share Breakdown
-// -------------------------------------------------------------
-@Composable
-private fun ModelDistributionCard(
-    modelStats: List<ModelStat>,
-    currencyUnit: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(imageVector = Icons.Default.PieChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                Text("سهم مدل‌های مبل", fontSize = 11.5.sp, fontWeight = FontWeight.Black)
-            }
-
             if (modelStats.isEmpty()) {
-                Text("داده‌ای ثبت نشده", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("مدلی برای نمایش در این بازه وجود ندارد", fontSize = 11.sp, color = secondaryTextColor)
+                }
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    modelStats.take(4).forEach { stat ->
-                        val parsedCol = PersianUtils.parseColor(stat.colorCode)
-
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(stat.name, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = parsedCol, maxLines = 1)
-                                Text("${PersianUtils.toPersianDigits(String.format(java.util.Locale.US, "%.1f", stat.percentOfTotal))}%", fontSize = 10.sp, fontWeight = FontWeight.Black)
-                            }
-                            LinearProgressIndicator(
-                                progress = { (stat.percentOfTotal / 100.0).toFloat().coerceIn(0.02f, 1f) },
+                // Stacked Bar Representation
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = borderColor.copy(alpha = 0.3f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(16.dp)
+                ) {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        modelStats.take(6).forEach { stat ->
+                            val parsedCol = PersianUtils.parseColor(stat.colorCode)
+                            val weightVal = stat.percentOfTotal.toFloat().coerceAtLeast(1f)
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(5.dp)
-                                    .clip(RoundedCornerShape(3.dp)),
-                                color = parsedCol,
-                                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                                    .weight(weightVal)
+                                    .fillMaxHeight()
+                                    .background(parsedCol)
+                            )
+                        }
+                    }
+                }
+
+                // Model items distribution rows
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    modelStats.take(6).forEachIndexed { idx, stat ->
+                        val parsedCol = PersianUtils.parseColor(stat.colorCode)
+                        val modelDisplayName = if (tab == AnalysisTab.TOTAL || tab == AnalysisTab.YEARLY) {
+                            stat.name
+                        } else {
+                            "${PersianUtils.toPersianDigits(idx + 1)}. ${stat.name}"
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1.5f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(parsedCol)
+                                )
+                                Text(
+                                    text = modelDisplayName,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryTextColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Text(
+                                text = "${PersianUtils.toPersianDigits(stat.orderCount)} دست • ${PersianUtils.formatNumberWithCommas(stat.totalUnits)} واحد",
+                                fontSize = 9.5.sp,
+                                color = primaryTextColor,
+                                modifier = Modifier.weight(1.2f),
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "${PersianUtils.formatCurrency(stat.totalAmount, currencyUnit)} (${PersianUtils.toPersianDigits(String.format(java.util.Locale.US, "%.1f", stat.percentOfTotal))}%)",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = primaryTextColor,
+                                modifier = Modifier.weight(1.5f),
+                                textAlign = TextAlign.End
                             )
                         }
                     }
@@ -956,176 +1102,170 @@ private fun ModelDistributionCard(
     }
 }
 
-// -------------------------------------------------------------
-// Component: Payment Methods Breakdown
-// -------------------------------------------------------------
+// =============================================================================
+// TABLE 1: جدول کارکرد، دریافتی‌ها و پرداخت‌کننده‌ها
+// =============================================================================
 @Composable
-private fun PaymentMethodsCard(
-    methods: List<MethodStat>,
+private fun WorkAndPaymentsTableCard(
+    tab: AnalysisTab,
+    items: List<PeriodBreakdownItem>,
+    totalWork: Long,
+    totalPaid: Long,
+    remainingBalance: Long,
+    orderCount: Int,
+    paymentCount: Int,
+    payerStats: List<PayerStat>,
     currencyUnit: String,
-    modifier: Modifier = Modifier
+    primaryTextColor: Color,
+    secondaryTextColor: Color,
+    captionTextColor: Color,
+    tableHeaderBg: Color,
+    tableAltRowBg: Color,
+    borderColor: Color
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = androidx.compose.foundation.BorderStroke(1.2.dp, Emerald600.copy(alpha = 0.25f)),
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(imageVector = Icons.Default.AccountBalance, contentDescription = null, tint = Emerald600, modifier = Modifier.size(16.dp))
-                Text("روش‌های دریافتی", fontSize = 11.5.sp, fontWeight = FontWeight.Black)
-            }
-
-            if (methods.isEmpty()) {
-                Text("دریافتی ثبت نشده", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    methods.forEach { m ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(m.color))
-                                Text(m.titleFa, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                Text("(${PersianUtils.toPersianDigits(m.count)})", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Text(PersianUtils.formatCurrency(m.amount, currencyUnit), fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = m.color)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// Component: Model Analysis Lined Table
-// -------------------------------------------------------------
-@Composable
-private fun ModelAnalysisTable(
-    modelStats: List<ModelStat>,
-    currencyUnit: String
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-        color = MaterialTheme.colorScheme.surface
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Header Bar
+            // Table Header Title
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 8.dp, vertical = 9.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .background(tableHeaderBg)
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text("ردیف / مدل مبل", fontSize = 10.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
-                Text("تعداد فاکتور", fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                Text("واحدهای تولید", fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                Text("درآمد کل ($currencyUnit)", fontSize = 10.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                Icon(imageVector = Icons.Default.Receipt, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp))
+                Text(
+                    text = "جدول اول: کارکرد، دریافتی‌ها و پرداخت‌کننده‌ها (${tab.title})",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Black,
+                    color = primaryTextColor
+                )
             }
 
-            HorizontalDivider(thickness = 1.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            HorizontalDivider(thickness = 1.2.dp, color = borderColor)
 
-            if (modelStats.isEmpty()) {
-                Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    Text("مدلی در این دوره یافت نشد", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Section A: Breakdown Rows of the active Tab (Days, Weeks, Months, or Total Years)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(tableHeaderBg.copy(alpha = 0.6f))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("بازه زمانی", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Start)
+                Text("فاکتور / کارکرد", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.4f), textAlign = TextAlign.Center)
+                Text("دریافتی / واریزی", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.4f), textAlign = TextAlign.Center)
+                Text("تراز مانده ($currencyUnit)", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.3f), textAlign = TextAlign.End)
+            }
+            HorizontalDivider(thickness = 1.dp, color = borderColor)
+
+            if (items.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().padding(14.dp), contentAlignment = Alignment.Center) {
+                    Text("رکوردی در این دوره یافت نشد", fontSize = 10.5.sp, color = secondaryTextColor)
                 }
             } else {
-                modelStats.forEachIndexed { idx, stat ->
-                    val parsedCol = PersianUtils.parseColor(stat.colorCode)
+                items.forEachIndexed { idx, item ->
+                    val rowBg = if (idx % 2 == 1) tableAltRowBg else Color.Transparent
+                    val bal = item.balance
+                    val balColor = when {
+                        bal == 0L -> Color(0xFF059669)
+                        bal < 0 -> Color(0xFFDC2626)
+                        else -> Color(0xFF2563EB)
+                    }
+                    val balText = when {
+                        bal == 0L -> "تسویه"
+                        bal < 0 -> "-${PersianUtils.formatNumberWithCommas(Math.abs(bal))}"
+                        else -> PersianUtils.formatNumberWithCommas(bal)
+                    }
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(parsedCol.copy(alpha = 0.08f))
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                            .background(rowBg)
+                            .padding(horizontal = 8.dp, vertical = 6.5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Color stripe
-                        Box(modifier = Modifier.width(3.5.dp).height(20.dp).clip(RoundedCornerShape(2.dp)).background(parsedCol))
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        Text("${PersianUtils.toPersianDigits(idx + 1)}. ${stat.name}", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = parsedCol, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
-                        Text("${PersianUtils.toPersianDigits(stat.orderCount)} فاکتور", fontSize = 10.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                        Text("${PersianUtils.formatNumberWithCommas(stat.totalUnits)} واحد", fontSize = 10.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                        Text(PersianUtils.formatNumberWithCommas(stat.totalAmount), fontSize = 11.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                        Text(item.label, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = primaryTextColor, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Start)
+                        Text("${PersianUtils.toPersianDigits(item.orderCount)} فقره | ${PersianUtils.formatNumberWithCommas(item.workAmount)}", fontSize = 9.sp, color = primaryTextColor, modifier = Modifier.weight(1.4f), textAlign = TextAlign.Center)
+                        Text("${PersianUtils.toPersianDigits(item.paymentCount)} سند | ${PersianUtils.formatNumberWithCommas(item.paidAmount)}", fontSize = 9.sp, color = primaryTextColor, modifier = Modifier.weight(1.4f), textAlign = TextAlign.Center)
+                        Text(balText, fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = balColor, modifier = Modifier.weight(1.3f), textAlign = TextAlign.End)
                     }
-                    if (idx < modelStats.size - 1) {
-                        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                    }
+                    HorizontalDivider(thickness = 0.5.dp, color = borderColor.copy(alpha = 0.5f))
                 }
             }
-        }
-    }
-}
 
-// -------------------------------------------------------------
-// Component: Payer Analysis Lined Table
-// -------------------------------------------------------------
-@Composable
-private fun PayerAnalysisTable(
-    payerStats: List<PayerStat>,
-    currencyUnit: String
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Header Bar
+            // Summary Totals Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 8.dp, vertical = 9.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .background(tableHeaderBg.copy(alpha = 0.85f))
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("پرداخت‌کننده", fontSize = 10.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
-                Text("تعداد دریافتی", fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                Text("بانک / حساب", fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                Text("مجموع دریافتی ($currencyUnit)", fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                Text("جمع کل دوره", fontSize = 10.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Start)
+                Text("${PersianUtils.toPersianDigits(orderCount)} کارکرد | ${PersianUtils.formatNumberWithCommas(totalWork)}", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = Color(0xFF2563EB), modifier = Modifier.weight(1.4f), textAlign = TextAlign.Center)
+                Text("${PersianUtils.toPersianDigits(paymentCount)} دریافتی | ${PersianUtils.formatNumberWithCommas(totalPaid)}", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = Color(0xFF059669), modifier = Modifier.weight(1.4f), textAlign = TextAlign.Center)
+                val totalBalColor = if (remainingBalance < 0) Color(0xFFDC2626) else if (remainingBalance == 0L) Color(0xFF059669) else Color(0xFF2563EB)
+                val totalBalText = if (remainingBalance < 0) "-${PersianUtils.formatNumberWithCommas(Math.abs(remainingBalance))} (بدهکاری)" else if (remainingBalance == 0L) "تسویه کامل" else PersianUtils.formatNumberWithCommas(remainingBalance)
+                Text(totalBalText, fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = totalBalColor, modifier = Modifier.weight(1.3f), textAlign = TextAlign.End)
             }
 
-            HorizontalDivider(thickness = 1.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            HorizontalDivider(thickness = 1.5.dp, color = borderColor)
+
+            // Section B: Payer and Customer Breakdown List
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(tableHeaderBg.copy(alpha = 0.45f))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("نام پرداخت‌کننده / مشتری", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Start)
+                Text("تعداد اسناد", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(0.9f), textAlign = TextAlign.Center)
+                Text("بانک / درگاه", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.1f), textAlign = TextAlign.Center)
+                Text("مجموع واریزی ($currencyUnit)", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.5f), textAlign = TextAlign.End)
+            }
+            HorizontalDivider(thickness = 0.8.dp, color = borderColor)
 
             if (payerStats.isEmpty()) {
-                Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    Text("پرداخت‌کننده‌ای در این دوره یافت نشد", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(modifier = Modifier.fillMaxWidth().padding(10.dp), contentAlignment = Alignment.Center) {
+                    Text("پرداخت‌کننده‌ای برای این دوره ثبت نشده است", fontSize = 10.sp, color = secondaryTextColor)
                 }
             } else {
                 payerStats.forEachIndexed { idx, pStat ->
+                    val pRowBg = if (idx % 2 == 1) tableAltRowBg else Color.Transparent
+                    val displayPayerName = if (tab == AnalysisTab.TOTAL || tab == AnalysisTab.YEARLY) {
+                        pStat.payerName
+                    } else {
+                        "${PersianUtils.toPersianDigits(idx + 1)}. ${pStat.payerName}"
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(if (idx % 2 == 1) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f) else Color.Transparent)
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                            .background(pRowBg)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("${PersianUtils.toPersianDigits(idx + 1)}. ${pStat.payerName}", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
-                        Text("${PersianUtils.toPersianDigits(pStat.paymentCount)} سند", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                        Text(pStat.banksUsed, fontSize = 9.5.sp, color = Emerald600, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(displayPayerName, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = primaryTextColor, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Start, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${PersianUtils.toPersianDigits(pStat.paymentCount)} سند", fontSize = 9.sp, color = primaryTextColor, modifier = Modifier.weight(0.9f), textAlign = TextAlign.Center)
+                        Text(pStat.banksUsed, fontSize = 8.5.sp, color = secondaryTextColor, modifier = Modifier.weight(1.1f), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            text = PersianUtils.formatNumberWithCommas(pStat.totalPaid),
-                            fontSize = 11.sp,
+                            text = "${PersianUtils.formatNumberWithCommas(pStat.totalPaid)} (${PersianUtils.toPersianDigits(String.format(java.util.Locale.US, "%.1f", pStat.percentOfTotalPaid))}%)",
+                            fontSize = 9.5.sp,
                             fontWeight = FontWeight.Black,
-                            color = Emerald600,
-                            modifier = Modifier.weight(1f),
+                            color = Color(0xFF059669),
+                            modifier = Modifier.weight(1.5f),
                             textAlign = TextAlign.End
                         )
                     }
                     if (idx < payerStats.size - 1) {
-                        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                        HorizontalDivider(thickness = 0.5.dp, color = borderColor.copy(alpha = 0.4f))
                     }
                 }
             }
@@ -1133,57 +1273,222 @@ private fun PayerAnalysisTable(
     }
 }
 
-// -------------------------------------------------------------
-// Helper: Share full text analysis report
-// -------------------------------------------------------------
+// =============================================================================
+// TABLE 2: جدول تعداد، واحدها و دستمزد هر مدل بر اساس واحد
+// =============================================================================
+@Composable
+private fun ModelWageDetailsTableCard(
+    tab: AnalysisTab,
+    modelStats: List<ModelStat>,
+    totalWork: Long,
+    totalUnits: Double,
+    currencyUnit: String,
+    primaryTextColor: Color,
+    secondaryTextColor: Color,
+    captionTextColor: Color,
+    tableHeaderBg: Color,
+    tableAltRowBg: Color,
+    borderColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Table Header Title
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(tableHeaderBg)
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(imageVector = Icons.Default.Weekend, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(16.dp))
+                Text(
+                    text = "جدول دوم: تعداد فاکتورها، مجموع واحدها و دستمزد مدل‌ها",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Black,
+                    color = primaryTextColor
+                )
+            }
+
+            HorizontalDivider(thickness = 1.2.dp, color = borderColor)
+
+            // Table Column Headers: نام مدل، مجموع تعداد فاکتورها، مجموع تعداد واحدها، مجموع دستمزد هر مدل بر اساس واحد
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(tableHeaderBg.copy(alpha = 0.6f))
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(if (tab == AnalysisTab.TOTAL || tab == AnalysisTab.YEARLY) "نام مدل" else "ردیف و نام مدل", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.3f), textAlign = TextAlign.Start)
+                Text("تعداد فاکتورها", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.0f), textAlign = TextAlign.Center)
+                Text("مجموع واحدها", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.0f), textAlign = TextAlign.Center)
+                Text("مجموع دستمزد ($currencyUnit)", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.4f), textAlign = TextAlign.End)
+            }
+
+            HorizontalDivider(thickness = 1.dp, color = borderColor)
+
+            if (modelStats.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().padding(14.dp), contentAlignment = Alignment.Center) {
+                    Text("اطلاعات مدلی در این بازه ثبت نشده است", fontSize = 10.5.sp, color = secondaryTextColor)
+                }
+            } else {
+                modelStats.forEachIndexed { idx, stat ->
+                    val parsedCol = PersianUtils.parseColor(stat.colorCode)
+                    val rowBg = if (idx % 2 == 1) tableAltRowBg else Color.Transparent
+                    val displayModelName = if (tab == AnalysisTab.TOTAL || tab == AnalysisTab.YEARLY) {
+                        stat.name
+                    } else {
+                        "${PersianUtils.toPersianDigits(idx + 1)}. ${stat.name}"
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(rowBg)
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // ۱. نام مدل با نوار رنگی
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier.weight(1.3f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .height(20.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(parsedCol)
+                            )
+                            Text(
+                                text = displayModelName,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = primaryTextColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        // ۲. مجموع تعداد فاکتورها از هر مدل
+                        Text(
+                            text = "${PersianUtils.toPersianDigits(stat.orderCount)} فاکتور",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = primaryTextColor,
+                            modifier = Modifier.weight(1.0f),
+                            textAlign = TextAlign.Center
+                        )
+
+                        // ۳. مجموع تعداد واحدها در هر مدل
+                        Text(
+                            text = "${PersianUtils.formatNumberWithCommas(stat.totalUnits)} واحد",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = primaryTextColor,
+                            modifier = Modifier.weight(1.0f),
+                            textAlign = TextAlign.Center
+                        )
+
+                        // ۴. مجموع دستمزد هر مدل بر اساس واحد
+                        Column(
+                            modifier = Modifier.weight(1.4f),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                text = PersianUtils.formatNumberWithCommas(stat.totalAmount),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = primaryTextColor,
+                                textAlign = TextAlign.End
+                            )
+                            Text(
+                                text = "(${PersianUtils.toPersianDigits(String.format(java.util.Locale.US, "%.1f", stat.percentOfTotal))}٪)",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = secondaryTextColor,
+                                textAlign = TextAlign.End
+                            )
+                        }
+                    }
+
+                    if (idx < modelStats.size - 1) {
+                        HorizontalDivider(thickness = 0.5.dp, color = borderColor.copy(alpha = 0.4f))
+                    }
+                }
+
+                // سطر جمع کل جدول دوم
+                HorizontalDivider(thickness = 1.2.dp, color = borderColor)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(tableHeaderBg.copy(alpha = 0.85f))
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("جمع کل (${PersianUtils.toPersianDigits(modelStats.size)} مدل)", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.3f), textAlign = TextAlign.Start)
+                    Text("${PersianUtils.toPersianDigits(modelStats.sumOf { it.orderCount })} فاکتور", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.0f), textAlign = TextAlign.Center)
+                    Text("${PersianUtils.formatNumberWithCommas(totalUnits)} واحد", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.0f), textAlign = TextAlign.Center)
+                    Text(PersianUtils.formatCurrency(totalWork, currencyUnit), fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color(0xFF2563EB), modifier = Modifier.weight(1.4f), textAlign = TextAlign.End)
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// HELPER: اشتراک‌گذاری متن کامل گزارش آنالیز هوشمند
+// =============================================================================
 private fun shareAnalysisReport(
     context: Context,
-    periodTitle: String,
+    tabTitle: String,
     periodOrders: List<FurnitureOrder>,
     periodPayments: List<PaymentRecord>,
     totalWork: Long,
     totalPaid: Long,
     balance: Long,
     currencyUnit: String,
-    maxWorkOrder: FurnitureOrder?,
-    minWorkOrder: FurnitureOrder?,
-    maxPayment: PaymentRecord?,
-    minPayment: PaymentRecord?,
-    topModel: ModelStat?,
-    topPayer: PayerStat?
+    modelStats: List<ModelStat>,
+    payerStats: List<PayerStat>
 ) {
     try {
         val sb = StringBuilder()
-        sb.append("📊 گزارش جامع اطلاعات و آنالیز SheetOn\n")
-        sb.append("بازه زمانی: $periodTitle\n")
+        sb.append("📊 گزارش جامع اطلاعات و آنالیز هوشمند SheetOn\n")
+        sb.append("بخش: $tabTitle\n")
         sb.append("تاریخ گزارش: ${PersianUtils.toPersianDigits(PersianUtils.getTodayJalaliString())}\n")
         sb.append("==================================\n\n")
 
-        sb.append("📈 خلاصه شاخص‌های مالی و کارکرد:\n")
+        sb.append("📈 خلاصه وضعیت مالی و کارکرد:\n")
         sb.append("• مجموع کارکرد فاکتورها: ${PersianUtils.formatCurrency(totalWork, currencyUnit)} (${PersianUtils.toPersianDigits(periodOrders.size)} فاکتور)\n")
         sb.append("• مجموع کل دریافتی‌ها: ${PersianUtils.formatCurrency(totalPaid, currencyUnit)} (${PersianUtils.toPersianDigits(periodPayments.size)} دریافتی)\n")
-        val balStatus = if (balance > 0) "مانده حساب" else if (balance == 0L) "تسویه کامل" else "بستانکار"
-        sb.append("• باقی مانده حساب ($balStatus): ${if (balance == 0L) "تسویه کامل" else PersianUtils.formatCurrency(Math.abs(balance), currencyUnit)}\n\n")
+        val balText = PersianUtils.formatRemainingBalanceText(balance, currencyUnit)
+        sb.append("• وضعیت مانده حساب: $balText\n\n")
 
-        sb.append("🏆 رکوردها، بیشترین‌ها و کمترین‌ها:\n")
-        if (maxWorkOrder != null) {
-            sb.append("• بیشترین کارکرد: ${maxWorkOrder.modelName} (فاکتور #${PersianUtils.toPersianDigits(maxWorkOrder.invoiceNumber)}) به مبلغ ${PersianUtils.formatCurrency(maxWorkOrder.calculatedTotal, currencyUnit)}\n")
+        if (modelStats.isNotEmpty()) {
+            sb.append("🛋️ برترین مدل‌های تولیدی بر اساس درآمد:\n")
+            modelStats.take(5).forEachIndexed { i, m ->
+                sb.append("${PersianUtils.toPersianDigits(i + 1)}. ${m.name}: ${PersianUtils.toPersianDigits(m.orderCount)} دست، ${PersianUtils.formatNumberWithCommas(m.totalUnits)} واحد، درآمد: ${PersianUtils.formatCurrency(m.totalAmount, currencyUnit)}\n")
+            }
+            sb.append("\n")
         }
-        if (minWorkOrder != null) {
-            sb.append("• کمترین کارکرد: ${minWorkOrder.modelName} (فاکتور #${PersianUtils.toPersianDigits(minWorkOrder.invoiceNumber)}) به مبلغ ${PersianUtils.formatCurrency(minWorkOrder.calculatedTotal, currencyUnit)}\n")
-        }
-        if (maxPayment != null) {
-            sb.append("• بیشترین دریافتی: ${maxPayment.customerName.ifBlank { "عمومی" }} به مبلغ ${PersianUtils.formatCurrency(maxPayment.amount, currencyUnit)}\n")
-        }
-        if (topModel != null) {
-            sb.append("• پرتقاضاترین مدل: ${topModel.name} (${PersianUtils.toPersianDigits(topModel.orderCount)} فاکتور - مجموع درآمد: ${PersianUtils.formatCurrency(topModel.totalAmount, currencyUnit)})\n")
-        }
-        if (topPayer != null) {
-            sb.append("• بیشترین پرداخت‌کننده: ${topPayer.payerName} (${PersianUtils.toPersianDigits(topPayer.paymentCount)} سند دریافتی - مجموع دریافتی: ${PersianUtils.formatCurrency(topPayer.totalPaid, currencyUnit)})\n")
+
+        if (payerStats.isNotEmpty()) {
+            sb.append("💳 پرداخت‌کنندگان و طرف‌حساب‌ها:\n")
+            payerStats.take(5).forEachIndexed { i, p ->
+                sb.append("${PersianUtils.toPersianDigits(i + 1)}. ${p.payerName}: ${PersianUtils.toPersianDigits(p.paymentCount)} واریزی، مبلغ: ${PersianUtils.formatCurrency(p.totalPaid, currencyUnit)}\n")
+            }
         }
 
         sb.append("\n==================================\n")
-        sb.append("نرم‌افزار مدیریت هوشمند کارکرد و حسابداری SheetOn")
+        sb.append("نرم‌افزار مدیریت هوشمند کارکرد و حسابداری کارگاه SheetOn")
 
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
@@ -1193,15 +1498,5 @@ private fun shareAnalysisReport(
         context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری گزارش تحلیلی"))
     } catch (e: Exception) {
         e.printStackTrace()
-    }
-}
-
-private fun formatPayMethod(method: String): String {
-    return when (method) {
-        "transfer" -> "کارت به کارت"
-        "cash" -> "نقدی"
-        "pos" -> "کارتخوان"
-        "cheque" -> "چک"
-        else -> "واریزی"
     }
 }

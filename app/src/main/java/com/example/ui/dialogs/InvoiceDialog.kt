@@ -518,12 +518,12 @@ fun InvoiceDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val status = if (balance > 0) "باقی مانده حساب:" else if (balance == 0L) "باقی مانده حساب:" else "باقی مانده حساب (بستانکار):"
-                                val col = if (balance > 0) Rose600 else if (balance == 0L) Emerald600 else Amber600
+                                val status = if (balance > 0) "باقی مانده حساب:" else if (balance == 0L) "باقی مانده حساب:" else "باقی مانده حساب (بدهکاری):"
+                                val col = if (balance > 0) Rose600 else if (balance == 0L) Emerald600 else Rose600
                                 Text(text = status, fontSize = 13.sp, fontWeight = FontWeight.Black, color = col)
                                 Text(
-                                    text = if (balance == 0L) "تسویه حساب کامل" else PersianUtils.formatCurrency(Math.abs(balance), currencyUnit),
-                                    fontSize = 15.sp,
+                                    text = PersianUtils.formatRemainingBalanceText(balance, currencyUnit),
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.Black,
                                     color = col
                                 )

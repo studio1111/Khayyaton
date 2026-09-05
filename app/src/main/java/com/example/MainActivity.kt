@@ -21,10 +21,12 @@ class MainActivity : ComponentActivity() {
 
         val database = AppDatabase.getDatabase(applicationContext)
         val repository = WorkshopRepository(
+            context = applicationContext,
             orderDao = database.orderDao(),
             paymentDao = database.paymentDao(),
             modelPresetDao = database.modelPresetDao(),
-            unitRuleDao = database.unitRuleDao()
+            unitRuleDao = database.unitRuleDao(),
+            workshopDao = database.workshopDao()
         )
 
         val viewModel: SheetOnViewModel by viewModels {

@@ -25,7 +25,6 @@ import com.example.model.FeedItem
 import com.example.ui.components.*
 import com.example.ui.dialogs.*
 import com.example.ui.screens.GlassyAuthScreen
-import com.example.ui.screens.SplashScreen
 import com.example.ui.theme.SheetOnTheme
 import kotlinx.coroutines.launch
 
@@ -68,7 +67,11 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
     val isBackupDialogOpen by viewModel.isBackupDialogOpen.collectAsStateWithLifecycle()
     val isSearchDialogOpen by viewModel.isSearchDialogOpen.collectAsStateWithLifecycle()
     val isAuthDialogOpen by viewModel.isAuthDialogOpen.collectAsStateWithLifecycle()
+    val isWorkshopsDialogOpen by viewModel.isWorkshopsDialogOpen.collectAsStateWithLifecycle()
+    val activeWorkshop by viewModel.activeWorkshop.collectAsStateWithLifecycle()
+    val workshops by viewModel.workshops.collectAsStateWithLifecycle()
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val customUsername by viewModel.customUsername.collectAsStateWithLifecycle()
     val deleteTarget by viewModel.deleteTarget.collectAsStateWithLifecycle()
 
     val unitRules by viewModel.unitRules.collectAsStateWithLifecycle()
@@ -87,33 +90,18 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
         context.getSharedPreferences("sheeton_prefs", android.content.Context.MODE_PRIVATE)
     }
 
-    var showSplash by remember { mutableStateOf(true) }
     var hasCompletedFirstLaunchAuth by remember {
         mutableStateOf(sharedPrefs.getBoolean("has_completed_first_auth", false))
     }
 
-    // If splash is showing, render the elegant SplashScreen
-    if (showSplash) {
-        SplashScreen(
-            onSplashFinished = {
-                showSplash = false
-            }
-        )
-        return
-    }
-
-    // If first-time user hasn't authenticated or skipped, show GlassyAuthScreen
+    // If user hasn't completed authentication with email/username and is not logged in, show GlassyAuthScreen (no offline skip)
     if (!hasCompletedFirstLaunchAuth && currentUser == null) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             SheetOnTheme(themeMode = themeMode) {
                 GlassyAuthScreen(
                     isFirstLaunch = true,
-                    onAuthSuccess = { user ->
-                        viewModel.onUserLoggedIn(user)
-                        sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
-                        hasCompletedFirstLaunchAuth = true
-                    },
-                    onSkip = {
+                    onAuthSuccess = { user, username, workshopName ->
+                        viewModel.onUserLoggedIn(user, username, workshopName)
                         sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
                         hasCompletedFirstLaunchAuth = true
                     }
@@ -138,6 +126,10 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                         cardSortOrder = cardSortOrder,
                         onSelectCardSortOrder = { viewModel.cardSortOrder.value = it },
                         currentUser = currentUser,
+                        customUsername = customUsername,
+                        onUpdateCustomUsername = { viewModel.updateCustomUsername(it) },
+                        activeWorkshop = activeWorkshop,
+                        onOpenWorkshops = { viewModel.isWorkshopsDialogOpen.value = true },
                         onOpenAuth = { viewModel.isAuthDialogOpen.value = true },
                         onOpenSearch = { viewModel.isSearchDialogOpen.value = true },
                         onOpenAnalysis = { viewModel.isAnalysisDialogOpen.value = true },
@@ -295,6 +287,7 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                 nextOrderNumber = viewModel.getNextOrderNumber(),
                 onDismiss = { viewModel.isOrderDialogOpen.value = false },
                 onDeleteModel = { viewModel.deletePresetByName(it) },
+                onUpdateModelColor = { modelName, newColor -> viewModel.updateModelColor(modelName, newColor) },
                 onSave = { order, addToPresets ->
                     viewModel.saveOrder(order, addToPresets)
                 }
@@ -384,6 +377,17 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
             AuthAndCloudSyncDialog(
                 isOpen = isAuthDialogOpen,
                 currentUser = currentUser,
+                customUsername = customUsername,
+                onUpdateCustomUsername = { viewModel.updateCustomUsername(it) },
+                activeWorkshop = activeWorkshop,
+                onUpdateWorkshopName = { name ->
+                    val cur = activeWorkshop
+                    if (cur != null) {
+                        viewModel.renameWorkshop(cur.id, name)
+                    } else {
+                        viewModel.createWorkshop(name)
+                    }
+                },
                 orders = orders,
                 payments = payments,
                 presets = modelPresets,
@@ -427,6 +431,17 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                 deleteTarget = deleteTarget,
                 onDismiss = { viewModel.deleteTarget.value = null },
                 onConfirm = { viewModel.confirmDelete() }
+            )
+
+            WorkshopsDialog(
+                isOpen = isWorkshopsDialogOpen,
+                workshops = workshops,
+                activeWorkshop = activeWorkshop,
+                onDismiss = { viewModel.isWorkshopsDialogOpen.value = false },
+                onSelectWorkshop = { wsId -> viewModel.selectWorkshop(wsId) },
+                onCreateWorkshop = { name -> viewModel.createWorkshop(name) },
+                onRenameWorkshop = { id, name -> viewModel.renameWorkshop(id, name) },
+                onDeleteWorkshop = { ws -> viewModel.deleteWorkshop(ws) }
             )
         }
     }

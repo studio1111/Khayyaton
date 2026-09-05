@@ -232,12 +232,14 @@ fun ModelPresetsDialog(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Button(
                                         onClick = {
-                                            if (name.isBlank()) return@Button
+                                            val trimmedName = name.trim()
+                                            if (trimmedName.isBlank()) return@Button
                                             val price = PersianUtils.toEnglishDigits(priceStr).toLongOrNull() ?: 2000000L
                                             val units = PersianUtils.toEnglishDigits(unitsStr).toDoubleOrNull() ?: 6.0
+                                            val existing = presets.find { it.name.trim().equals(trimmedName, ignoreCase = true) }
                                             val preset = ModelPreset(
-                                                id = editingPreset?.id ?: 0L,
-                                                name = name.trim(),
+                                                id = editingPreset?.id ?: (existing?.id ?: 0L),
+                                                name = trimmedName,
                                                 defaultPricePerSet = price,
                                                 defaultUnitsPerSet = units,
                                                 colorCode = colorCode,

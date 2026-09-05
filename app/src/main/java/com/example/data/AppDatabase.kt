@@ -4,16 +4,35 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.model.FurnitureOrder
 import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
 import com.example.model.UnitConversionRule
+import com.example.model.Workshop
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
 
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS workshops (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+        db.execSQL("INSERT OR IGNORE INTO workshops (id, name, createdAt) VALUES (1, 'کارگاه اصلی', ${System.currentTimeMillis()})")
+        try {
+            db.execSQL("ALTER TABLE furniture_orders ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 1")
+        } catch (_: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE payment_records ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 1")
+        } catch (_: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE model_presets ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 1")
+        } catch (_: Exception) {}
+    }
+}
+
 @Database(
-    entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class],
-    version = 4,
+    entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -21,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun paymentDao(): PaymentDao
     abstract fun modelPresetDao(): ModelPresetDao
     abstract fun unitRuleDao(): UnitRuleDao
+    abstract fun workshopDao(): WorkshopDao
 
     companion object {
         @Volatile
@@ -33,6 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sheeton_workshop.db"
                 )
+                    .addMigrations(MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
@@ -43,19 +64,112 @@ abstract class AppDatabase : RoomDatabase() {
 }
 
 class WorkshopRepository(
-    private val orderDao: OrderDao,
-    private val paymentDao: PaymentDao,
-    private val modelPresetDao: ModelPresetDao,
-    private val unitRuleDao: UnitRuleDao
+    private val context: android.content.Context? = null,
+    val orderDao: OrderDao,
+    val paymentDao: PaymentDao,
+    val modelPresetDao: ModelPresetDao,
+    val unitRuleDao: UnitRuleDao,
+    val workshopDao: WorkshopDao
 ) {
+    private val prefs by lazy {
+        context?.getSharedPreferences("sheeton_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
+    fun getSavedActiveWorkshopId(): Long {
+        return prefs?.getLong("active_workshop_id", -1L) ?: -1L
+    }
+
+    fun saveActiveWorkshopId(id: Long) {
+        prefs?.edit()?.putLong("active_workshop_id", id)?.apply()
+    }
+
+    fun getCustomUsername(): String {
+        return prefs?.getString("custom_username", "") ?: ""
+    }
+
+    fun saveCustomUsername(username: String) {
+        prefs?.edit()?.putString("custom_username", username.trim())?.apply()
+    }
+
     val orders: Flow<List<FurnitureOrder>> = orderDao.getAllOrders()
     val payments: Flow<List<PaymentRecord>> = paymentDao.getAllPayments()
     val modelPresets: Flow<List<ModelPreset>> = modelPresetDao.getAllPresets()
     val unitRules: Flow<List<UnitConversionRule>> = unitRuleDao.getAllRules()
+    val workshops: Flow<List<Workshop>> = workshopDao.getAllWorkshops()
+
+    fun getOrdersFlow(workshopId: Long): Flow<List<FurnitureOrder>> =
+        orderDao.getOrdersByWorkshop(workshopId)
+
+    fun getPaymentsFlow(workshopId: Long): Flow<List<PaymentRecord>> =
+        paymentDao.getPaymentsByWorkshop(workshopId)
+
+    fun getPresetsFlow(workshopId: Long): Flow<List<ModelPreset>> =
+        modelPresetDao.getPresetsByWorkshop(workshopId)
+
+    suspend fun getAllWorkshopsSync(): List<Workshop> =
+        workshopDao.getAllWorkshopsSync()
+
+    suspend fun getWorkshopById(id: Long): Workshop? =
+        workshopDao.getWorkshopById(id)
+
+    suspend fun ensureDefaultWorkshop(): Long {
+        val existing = workshopDao.getAllWorkshopsSync()
+        return if (existing.isEmpty()) {
+            val defaultWorkshop = Workshop(id = 1L, name = "کارگاه اصلی")
+            workshopDao.insertWorkshop(defaultWorkshop)
+            1L
+        } else {
+            existing.first().id
+        }
+    }
+
+    suspend fun saveWorkshop(workshop: Workshop): Long {
+        val trimmed = workshop.name.trim()
+        val toSave = workshop.copy(name = if (trimmed.isBlank()) "کارگاه جدید" else trimmed)
+        return if (toSave.id == 0L) {
+            workshopDao.insertWorkshop(toSave)
+        } else {
+            workshopDao.updateWorkshop(toSave)
+            toSave.id
+        }
+    }
+
+    suspend fun deleteWorkshopAndAllData(workshopId: Long) {
+        workshopDao.deleteOrdersByWorkshop(workshopId)
+        workshopDao.deletePaymentsByWorkshop(workshopId)
+        workshopDao.deletePresetsByWorkshop(workshopId)
+        workshopDao.deleteWorkshopById(workshopId)
+    }
+
+    suspend fun updateOrdersColorForModel(modelName: String, newColor: String, workshopId: Long) {
+        orderDao.updateModelColor(modelName, newColor, workshopId)
+        modelPresetDao.updatePresetColor(modelName, newColor, workshopId)
+    }
 
     suspend fun saveOrder(order: FurnitureOrder) {
         if (order.id == 0L) {
-            orderDao.insertOrder(order)
+            val existing = orderDao.getOrdersByWorkshopSync(order.workshopId)
+            val normInv = com.example.util.PersianUtils.toEnglishDigits(order.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
+            val normCust = order.customerName.trim().lowercase(java.util.Locale.ROOT)
+            val normModel = order.modelName.trim().lowercase(java.util.Locale.ROOT)
+            val normDate = com.example.util.PersianUtils.toEnglishDigits(order.dateJalali.trim())
+
+            val match = existing.find { ex ->
+                val exInv = com.example.util.PersianUtils.toEnglishDigits(ex.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
+                val exCust = ex.customerName.trim().lowercase(java.util.Locale.ROOT)
+                val exModel = ex.modelName.trim().lowercase(java.util.Locale.ROOT)
+                val exDate = com.example.util.PersianUtils.toEnglishDigits(ex.dateJalali.trim())
+
+                (normInv.isNotBlank() && normInv != "0" && exInv == normInv) ||
+                (ex.orderNumber == order.orderNumber && (exCust == normCust || ex.createdAt == order.createdAt)) ||
+                (normCust.isNotBlank() && exCust == normCust && exModel == normModel && ex.calculatedTotal == order.calculatedTotal && exDate == normDate)
+            }
+
+            if (match != null) {
+                orderDao.updateOrder(order.copy(id = match.id))
+            } else {
+                orderDao.insertOrder(order)
+            }
         } else {
             orderDao.updateOrder(order)
         }
@@ -71,7 +185,26 @@ class WorkshopRepository(
 
     suspend fun savePayment(payment: PaymentRecord) {
         if (payment.id == 0L) {
-            paymentDao.insertPayment(payment)
+            val existing = paymentDao.getPaymentsByWorkshopSync(payment.workshopId)
+            val normRef = com.example.util.PersianUtils.toEnglishDigits(payment.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
+            val normCust = payment.customerName.trim().lowercase(java.util.Locale.ROOT)
+            val normDate = com.example.util.PersianUtils.toEnglishDigits(payment.dateJalali.trim())
+
+            val match = existing.find { ex ->
+                val exRef = com.example.util.PersianUtils.toEnglishDigits(ex.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
+                val exCust = ex.customerName.trim().lowercase(java.util.Locale.ROOT)
+                val exDate = com.example.util.PersianUtils.toEnglishDigits(ex.dateJalali.trim())
+
+                (normRef.isNotBlank() && exRef == normRef) ||
+                (ex.paymentNumber == payment.paymentNumber && (exCust == normCust || ex.createdAt == payment.createdAt)) ||
+                (normCust.isNotBlank() && exCust == normCust && ex.amount == payment.amount && exDate == normDate)
+            }
+
+            if (match != null) {
+                paymentDao.updatePayment(payment.copy(id = match.id))
+            } else {
+                paymentDao.insertPayment(payment)
+            }
         } else {
             paymentDao.updatePayment(payment)
         }
@@ -85,11 +218,122 @@ class WorkshopRepository(
         paymentDao.deletePaymentById(id)
     }
 
+    suspend fun getAllOrdersSync(): List<FurnitureOrder> = orderDao.getAllOrdersSync()
+    suspend fun getOrdersByWorkshopSync(workshopId: Long): List<FurnitureOrder> =
+        orderDao.getOrdersByWorkshopSync(workshopId)
+
+    suspend fun getAllPaymentsSync(): List<PaymentRecord> = paymentDao.getAllPaymentsSync()
+    suspend fun getPaymentsByWorkshopSync(workshopId: Long): List<PaymentRecord> =
+        paymentDao.getPaymentsByWorkshopSync(workshopId)
+
+    suspend fun getAllPresetsSync(): List<ModelPreset> = modelPresetDao.getAllPresetsSync()
+    suspend fun getPresetsByWorkshopSync(workshopId: Long): List<ModelPreset> =
+        modelPresetDao.getPresetsByWorkshopSync(workshopId)
+
+    suspend fun getPresetByName(name: String): ModelPreset? = modelPresetDao.getPresetByName(name.trim())
+    suspend fun getPresetByNameAndWorkshop(name: String, workshopId: Long): ModelPreset? =
+        modelPresetDao.getPresetByNameAndWorkshop(name.trim(), workshopId)
+
+    suspend fun deduplicatePresets() {
+        val all = modelPresetDao.getAllPresetsSync()
+        val seen = mutableSetOf<String>()
+        for (preset in all) {
+            val key = "${preset.workshopId}_${preset.name.trim().lowercase(java.util.Locale.ROOT)}"
+            if (preset.name.trim().isBlank()) {
+                modelPresetDao.deletePreset(preset)
+            } else if (key in seen) {
+                modelPresetDao.deletePreset(preset)
+            } else {
+                seen.add(key)
+            }
+        }
+    }
+
+    suspend fun deduplicateOrders() {
+        val all = orderDao.getAllOrdersSync()
+        val seenOrderNum = mutableSetOf<String>()
+        val seenInvoiceNum = mutableSetOf<String>()
+        val seenContent = mutableSetOf<String>()
+        val toDelete = mutableListOf<FurnitureOrder>()
+
+        for (ord in all) {
+            val wsId = ord.workshopId
+            val normInv = com.example.util.PersianUtils.toEnglishDigits(ord.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
+            val normCust = ord.customerName.trim().lowercase(java.util.Locale.ROOT)
+            val normModel = ord.modelName.trim().lowercase(java.util.Locale.ROOT)
+            val normTotal = ord.calculatedTotal
+            val normDate = com.example.util.PersianUtils.toEnglishDigits(ord.dateJalali.trim())
+
+            val keyOrderNum = "${wsId}_${ord.orderNumber}"
+            val keyInv = if (normInv.isNotBlank() && normInv != "0") "${wsId}_$normInv" else null
+            val keyContent = "${wsId}_${normCust}_${normModel}_${normTotal}_$normDate"
+
+            val isDuplicate = (keyOrderNum in seenOrderNum) ||
+                    (keyInv != null && keyInv in seenInvoiceNum) ||
+                    (normCust.isNotBlank() && keyContent in seenContent)
+
+            if (isDuplicate) {
+                toDelete.add(ord)
+            } else {
+                seenOrderNum.add(keyOrderNum)
+                if (keyInv != null) seenInvoiceNum.add(keyInv)
+                if (normCust.isNotBlank()) seenContent.add(keyContent)
+            }
+        }
+        for (ord in toDelete) {
+            orderDao.deleteOrder(ord)
+        }
+    }
+
+    suspend fun deduplicatePayments() {
+        val all = paymentDao.getAllPaymentsSync()
+        val seenPayNum = mutableSetOf<String>()
+        val seenRefNo = mutableSetOf<String>()
+        val seenContent = mutableSetOf<String>()
+        val toDelete = mutableListOf<PaymentRecord>()
+
+        for (pay in all) {
+            val wsId = pay.workshopId
+            val normRef = com.example.util.PersianUtils.toEnglishDigits(pay.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
+            val normCust = pay.customerName.trim().lowercase(java.util.Locale.ROOT)
+            val normAmt = pay.amount
+            val normDate = com.example.util.PersianUtils.toEnglishDigits(pay.dateJalali.trim())
+
+            val keyPayNum = "${wsId}_${pay.paymentNumber}"
+            val keyRef = if (normRef.isNotBlank()) "${wsId}_$normRef" else null
+            val keyContent = "${wsId}_${normCust}_${normAmt}_$normDate"
+
+            val isDuplicate = (keyPayNum in seenPayNum) ||
+                    (keyRef != null && keyRef in seenRefNo) ||
+                    (normCust.isNotBlank() && keyContent in seenContent)
+
+            if (isDuplicate) {
+                toDelete.add(pay)
+            } else {
+                seenPayNum.add(keyPayNum)
+                if (keyRef != null) seenRefNo.add(keyRef)
+                if (normCust.isNotBlank()) seenContent.add(keyContent)
+            }
+        }
+        for (pay in toDelete) {
+            paymentDao.deletePayment(pay)
+        }
+    }
+
     suspend fun savePreset(preset: ModelPreset) {
-        if (preset.id == 0L) {
-            modelPresetDao.insertPreset(preset)
+        val trimmed = preset.name.trim()
+        if (trimmed.isBlank()) return
+        val existing = modelPresetDao.getPresetByNameAndWorkshop(trimmed, preset.workshopId)
+        if (existing != null) {
+            modelPresetDao.updatePreset(
+                preset.copy(id = existing.id, name = trimmed)
+            )
         } else {
-            modelPresetDao.updatePreset(preset)
+            if (preset.id == 0L) {
+                modelPresetDao.insertPreset(preset.copy(name = trimmed))
+            } else {
+                modelPresetDao.updatePreset(preset.copy(name = trimmed))
+            }
         }
     }
 
@@ -103,6 +347,10 @@ class WorkshopRepository(
 
     suspend fun deletePresetByName(name: String) {
         modelPresetDao.deletePresetByName(name)
+    }
+
+    suspend fun deletePresetByNameAndWorkshop(name: String, workshopId: Long) {
+        modelPresetDao.deletePresetByNameAndWorkshop(name, workshopId)
     }
 
     suspend fun saveUnitRule(rule: UnitConversionRule) {

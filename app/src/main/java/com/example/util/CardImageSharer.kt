@@ -312,16 +312,15 @@ object CardImageSharer {
         // Divider 2
         canvas.drawLine(footerRect.left + 20f + fColW, footerRect.top + 25f, footerRect.left + 20f + fColW, footerRect.bottom - 25f, divPaint)
 
-        // Column 3: باقی‌مانده (بدون کلمه بدهکار)
-        val fLabel3 = if (remainingBalance == 0L) "تسویه کامل" else "باقی‌مانده"
-        val fVal3 = PersianUtils.formatCurrency(Math.abs(remainingBalance), currencyUnit)
+        // Column 3: باقی‌مانده (با قانون بدهکاری منفی)
+        val fLabel3 = if (remainingBalance < 0) "باقی‌مانده (بدهکاری)" else if (remainingBalance == 0L) "تسویه کامل" else "باقی‌مانده"
+        val fVal3 = PersianUtils.formatRemainingBalanceText(remainingBalance, currencyUnit)
         val fX3 = footerRect.left + 20f + fColW * 0.5f
 
         val fValBalPaint = Paint().apply {
-            color = if (remainingBalance > 0) android.graphics.Color.parseColor("#F87171")
-            else if (remainingBalance == 0L) android.graphics.Color.parseColor("#34D399")
-            else android.graphics.Color.parseColor("#FBBF24")
-            textSize = 26f
+            color = if (remainingBalance == 0L) android.graphics.Color.parseColor("#34D399")
+            else android.graphics.Color.parseColor("#F87171")
+            textSize = if (fVal3.length > 20) 20f else 24f
             isFakeBoldText = true
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
@@ -575,15 +574,14 @@ object CardImageSharer {
         // Divider 2
         canvas.drawLine(footerRect.left + 20f + fColW, footerRect.top + 25f, footerRect.left + 20f + fColW, footerRect.bottom - 25f, divPaint)
 
-        // Column 3: باقی‌مانده
-        val fLabel3 = if (remainingBalance == 0L) "تسویه کامل" else "باقی‌مانده"
-        val fVal3 = PersianUtils.formatCurrency(Math.abs(remainingBalance), currencyUnit)
+        // Column 3: باقی‌مانده (با قانون بدهکاری منفی)
+        val fLabel3 = if (remainingBalance < 0) "باقی‌مانده (بدهکاری)" else if (remainingBalance == 0L) "تسویه کامل" else "باقی‌مانده"
+        val fVal3 = PersianUtils.formatRemainingBalanceText(remainingBalance, currencyUnit)
         val fX3 = footerRect.left + 20f + fColW * 0.5f
         val fValBalPaint = Paint().apply {
-            color = if (remainingBalance > 0) android.graphics.Color.parseColor("#F87171")
-            else if (remainingBalance == 0L) android.graphics.Color.parseColor("#34D399")
-            else android.graphics.Color.parseColor("#FBBF24")
-            textSize = 26f
+            color = if (remainingBalance == 0L) android.graphics.Color.parseColor("#34D399")
+            else android.graphics.Color.parseColor("#F87171")
+            textSize = if (fVal3.length > 20) 20f else 24f
             isFakeBoldText = true
             isAntiAlias = true
             textAlign = Paint.Align.CENTER

@@ -354,4 +354,55 @@ object PersianUtils {
         }
         return null
     }
+
+    /**
+     * Formats remaining balance following the rule:
+     * When total received > total work (balance < 0), display negative number with "(بدهکاری)"
+     */
+    fun formatRemainingBalanceText(balance: Long, currencyUnit: String): String {
+        return when {
+            balance == 0L -> "تسویه حساب کامل"
+            balance > 0 -> formatCurrency(balance, currencyUnit)
+            else -> "-${formatCurrency(Math.abs(balance), currencyUnit)} (بدهکاری)"
+        }
+    }
+
+    fun getRemainingBalanceLabel(balance: Long): String {
+        return when {
+            balance == 0L -> "تسویه حساب کامل"
+            balance < 0 -> "باقی‌مانده (بدهکاری)"
+            else -> "باقی‌مانده"
+        }
+    }
+
+    /**
+     * Returns 0 for شنبه (Saturday) through 6 for جمعه (Friday)
+     */
+    fun getJalaliDayOfWeek(jalaliDateStr: String): Int? {
+        val jp = parseJalaliParts(jalaliDateStr) ?: return null
+        val g = jalaliToGregorian(jp.year, jp.month, jp.day)
+        val cal = Calendar.getInstance().apply {
+            set(g.year, g.month - 1, g.day)
+        }
+        return when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.SATURDAY -> 0
+            Calendar.SUNDAY -> 1
+            Calendar.MONDAY -> 2
+            Calendar.TUESDAY -> 3
+            Calendar.WEDNESDAY -> 4
+            Calendar.THURSDAY -> 5
+            Calendar.FRIDAY -> 6
+            else -> 0
+        }
+    }
+
+    val PERSIAN_WEEKDAY_NAMES = listOf(
+        "شنبه",
+        "یکشنبه",
+        "دوشنبه",
+        "سه‌شنبه",
+        "چهارشنبه",
+        "پنجشنبه",
+        "جمعه"
+    )
 }

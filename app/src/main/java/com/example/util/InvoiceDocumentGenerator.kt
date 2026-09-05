@@ -29,8 +29,9 @@ object InvoiceDocumentGenerator {
         val totalPaid = payments.sumOf { it.amount }
         val balance = totalWork - totalPaid
 
-        val statusText = if (balance > 0) "مانده حساب" else if (balance == 0L) "تسویه حساب کامل" else "بستانکار"
-        val statusColor = if (balance > 0) "#DC2626" else if (balance == 0L) "#059669" else "#D97706"
+        val statusText = if (balance > 0) "مانده حساب" else if (balance == 0L) "تسویه حساب کامل" else "بدهکاری"
+        val statusColor = if (balance > 0) "#DC2626" else if (balance == 0L) "#059669" else "#DC2626"
+        val formattedBal = PersianUtils.formatRemainingBalanceText(balance, currencyUnit)
 
         val sb = StringBuilder()
         sb.append("""
@@ -206,7 +207,7 @@ object InvoiceDocumentGenerator {
             </div>
             <div class="summary-row total-balance" style="color: $statusColor;">
                 <span>باقی مانده حساب ($statusText):</span>
-                <span>${if (balance == 0L) "تسویه کامل" else PersianUtils.formatCurrency(Math.abs(balance), currencyUnit)}</span>
+                <span>$formattedBal</span>
             </div>
         </div>
 
@@ -529,9 +530,9 @@ object InvoiceDocumentGenerator {
 
             val status = if (balance > 0) "باقی مانده حساب: ${PersianUtils.formatCurrency(balance, currencyUnit)}"
                          else if (balance == 0L) "باقی مانده حساب: تسویه کامل"
-                         else "باقی مانده حساب (بستانکار): ${PersianUtils.formatCurrency(Math.abs(balance), currencyUnit)}"
+                         else "باقی مانده حساب (بدهکاری): -${PersianUtils.formatCurrency(Math.abs(balance), currencyUnit)} (بدهکاری)"
             
-            val statPaint = if (balance > 0) redPaint else greenPaint
+            val statPaint = if (balance == 0L) greenPaint else redPaint
             statPaint.textSize = 10f
             canvas.drawText(status, (pageWidth - 275).toFloat(), summaryTop + 34f, statPaint)
 

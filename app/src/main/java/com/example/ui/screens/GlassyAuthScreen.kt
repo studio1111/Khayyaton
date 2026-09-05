@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,7 +30,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,6 +40,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.firebase.FirebaseService
 import com.example.data.firebase.FirebaseUserDto
 import com.example.ui.theme.Emerald500
@@ -57,7 +61,7 @@ enum class GlassAuthTab {
 
 @Composable
 fun GlassyAuthScreen(
-    onAuthSuccess: (FirebaseUserDto) -> Unit,
+    onAuthSuccess: (FirebaseUserDto, String, String) -> Unit,
     onSkip: (() -> Unit)? = null,
     isFirstLaunch: Boolean = false,
     modifier: Modifier = Modifier
@@ -67,6 +71,7 @@ fun GlassyAuthScreen(
 
     var activeTab by remember { mutableStateOf(if (isFirstLaunch) GlassAuthTab.SIGN_UP else GlassAuthTab.SIGN_IN) }
     var username by remember { mutableStateOf("") }
+    var workshopName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -152,11 +157,13 @@ fun GlassyAuthScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CloudSync,
-                        contentDescription = null,
-                        tint = NeonGreen,
-                        modifier = Modifier.size(34.dp)
+                    Image(
+                        painter = painterResource(id = R.drawable.sheeton_logo_icon),
+                        contentDescription = "لوگوی SheetOn",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(RoundedCornerShape(14.dp))
                     )
                 }
 
@@ -310,15 +317,37 @@ fun GlassyAuthScreen(
                         }
                     }
 
-                    // Username field (shown on Sign Up)
+                    // Username field (shown on Sign Up and Sign In to ensure username is known)
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it; errorMessage = null },
+                        label = { Text("نام کاربری") },
+                        placeholder = { Text("مثلاً: علی رضایی") },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.AccountCircle, contentDescription = null, tint = NeonGreen)
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = glassTextFieldColors(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Workshop name field (shown on Sign Up)
                     if (activeTab == GlassAuthTab.SIGN_UP) {
                         OutlinedTextField(
-                            value = username,
-                            onValueChange = { username = it; errorMessage = null },
-                            label = { Text("نام کاربری یا نام کارگاه") },
+                            value = workshopName,
+                            onValueChange = { workshopName = it; errorMessage = null },
+                            label = { Text("نام کارگاه") },
                             placeholder = { Text("مثلاً: کارگاه مبل آریا") },
                             leadingIcon = {
-                                Icon(Icons.Outlined.AccountCircle, contentDescription = null, tint = NeonGreen)
+                                Icon(Icons.Outlined.Storefront, contentDescription = null, tint = NeonGreen)
                             },
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp),
@@ -449,6 +478,11 @@ fun GlassyAuthScreen(
                             errorMessage = null
                             successMessage = null
 
+                            if (username.isBlank() && activeTab != GlassAuthTab.FORGOT_PASSWORD) {
+                                errorMessage = "لطفاً نام کاربری خود را وارد نمایید."
+                                return@Button
+                            }
+
                             if (email.isBlank()) {
                                 errorMessage = "لطفاً آدرس ایمیل خود را وارد نمایید."
                                 return@Button
@@ -494,7 +528,7 @@ fun GlassyAuthScreen(
                                         user
                                     }
                                     successMessage = if (activeTab == GlassAuthTab.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد."
-                                    onAuthSuccess(finalUser)
+                                    onAuthSuccess(finalUser, username.trim(), workshopName.trim())
                                 } else {
                                     errorMessage = res.exceptionOrNull()?.message ?: "عملیات ناموفق بود."
                                 }
@@ -545,20 +579,7 @@ fun GlassyAuthScreen(
                         }
                     }
 
-                    // Optional skip button for first launch if user wants offline use
-                    if (onSkip != null) {
-                        TextButton(
-                            onClick = onSkip,
-                            modifier = Modifier.padding(top = 2.dp)
-                        ) {
-                            Text(
-                                text = "ورود به صورت آفلاین بدون حساب کاربری",
-                                color = Color.White.copy(alpha = 0.65f),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
+                    // ورود آفلاین برای بار اول حذف شد تا حتما با ثبت ایمیل و نام کاربری وارد شوند
                 }
             }
         }

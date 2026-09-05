@@ -134,7 +134,8 @@ object FirebaseService {
         orders: List<FurnitureOrder>,
         payments: List<PaymentRecord>,
         presets: List<ModelPreset>,
-        unitRules: List<UnitConversionRule>
+        unitRules: List<UnitConversionRule>,
+        workshops: List<com.example.model.Workshop> = emptyList()
     ): Result<CloudSyncResult> {
         val user = auth?.currentUser ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
         val db = firestore ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
@@ -142,11 +143,23 @@ object FirebaseService {
         return try {
             val userDoc = db.collection("users").document(user.uid)
             
+            // 0. Workshops upload
+            val wsCol = userDoc.collection("workshops")
+            for (ws in workshops) {
+                val wsMap = mapOf(
+                    "id" to ws.id,
+                    "name" to ws.name,
+                    "createdAt" to ws.createdAt
+                )
+                wsCol.document("ws_${ws.id}").set(wsMap, SetOptions.merge()).await()
+            }
+
             // 1. Orders batch upload
             val ordersCol = userDoc.collection("orders")
             for (order in orders) {
                 val orderMap = mapOf(
                     "id" to order.id,
+                    "workshopId" to order.workshopId,
                     "orderNumber" to order.orderNumber,
                     "invoiceNumber" to order.invoiceNumber,
                     "modelName" to order.modelName,
@@ -173,6 +186,7 @@ object FirebaseService {
             for (payment in payments) {
                 val payMap = mapOf(
                     "id" to payment.id,
+                    "workshopId" to payment.workshopId,
                     "paymentNumber" to payment.paymentNumber,
                     "amount" to payment.amount,
                     "dateJalali" to payment.dateJalali,
@@ -194,6 +208,7 @@ object FirebaseService {
             for (preset in presets) {
                 val presetMap = mapOf(
                     "id" to preset.id,
+                    "workshopId" to preset.workshopId,
                     "name" to preset.name,
                     "defaultPricePerSet" to preset.defaultPricePerSet,
                     "defaultUnitsPerSet" to preset.defaultUnitsPerSet,
@@ -252,15 +267,52 @@ object FirebaseService {
         return try {
             val userDoc = db.collection("users").document(user.uid)
 
-            // 1. Download Orders
+            // 0. Download Workshops
+            try {
+                val wsSnapshot = userDoc.collection("workshops").get().await()
+                val localWs = repository.getAllWorkshopsSync()
+                for (doc in wsSnapshot.documents) {
+                    val data = doc.data ?: continue
+                    val name = (data["name"] as? String)?.trim() ?: continue
+                    if (name.isBlank()) continue
+                    val existing = localWs.find { it.name.trim().equals(name, ignoreCase = true) }
+                    if (existing == null) {
+                        repository.saveWorkshop(
+                            com.example.model.Workshop(
+                                id = 0L,
+                                name = name,
+                                createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Workshops download skipped or empty", e)
+            }
+
+            // 1. Download Orders (Deduplicating by invoiceNumber, createdAt, or orderNumber)
             val ordersSnapshot = userDoc.collection("orders").get().await()
+            val localOrders = repository.getAllOrdersSync().toMutableList()
             var ordCount = 0
             for (doc in ordersSnapshot.documents) {
                 val data = doc.data ?: continue
+                val invNum = data["invoiceNumber"] as? String ?: ""
+                val crAt = (data["createdAt"] as? Number)?.toLong() ?: 0L
+                val ordNum = (data["orderNumber"] as? Number)?.toLong() ?: 1L
+                val cust = data["customerName"] as? String ?: ""
+                val wsId = (data["workshopId"] as? Number)?.toLong() ?: 1L
+
+                val existingOrder = localOrders.find { local ->
+                    (invNum.isNotBlank() && local.invoiceNumber == invNum && local.workshopId == wsId) ||
+                    (crAt > 0L && local.createdAt == crAt && local.workshopId == wsId) ||
+                    (local.orderNumber == ordNum && local.customerName == cust && local.workshopId == wsId)
+                }
+
                 val order = FurnitureOrder(
-                    id = 0L, // fresh auto-generated id or merge
-                    orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
-                    invoiceNumber = data["invoiceNumber"] as? String ?: "",
+                    id = existingOrder?.id ?: 0L,
+                    workshopId = wsId,
+                    orderNumber = ordNum,
+                    invoiceNumber = invNum,
                     modelName = data["modelName"] as? String ?: "",
                     pricePerSet = (data["pricePerSet"] as? Number)?.toLong() ?: 0L,
                     unitsPerSet = (data["unitsPerSet"] as? Number)?.toDouble() ?: 6.0,
@@ -269,51 +321,79 @@ object FirebaseService {
                     calculatedTotal = (data["calculatedTotal"] as? Number)?.toLong() ?: 0L,
                     dateJalali = data["dateJalali"] as? String ?: "",
                     dateGregorian = data["dateGregorian"] as? String ?: "",
-                    customerName = data["customerName"] as? String ?: "",
+                    customerName = cust,
                     phone = data["phone"] as? String ?: "",
                     fabricName = data["fabricName"] as? String ?: "",
                     workshopInvoiceNumber = data["workshopInvoiceNumber"] as? String ?: "",
                     notes = data["notes"] as? String ?: "",
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    createdAt = if (crAt > 0L) crAt else System.currentTimeMillis()
                 )
                 repository.saveOrder(order)
+                if (existingOrder == null) {
+                    localOrders.add(order)
+                }
                 ordCount++
             }
 
-            // 2. Download Payments
+            // 2. Download Payments (Deduplicating by referenceNo, createdAt, or paymentNumber)
             val paymentsSnapshot = userDoc.collection("payments").get().await()
+            val localPayments = repository.getAllPaymentsSync().toMutableList()
             var payCount = 0
             for (doc in paymentsSnapshot.documents) {
                 val data = doc.data ?: continue
+                val refNo = data["referenceNo"] as? String ?: ""
+                val crAt = (data["createdAt"] as? Number)?.toLong() ?: 0L
+                val payNum = (data["paymentNumber"] as? Number)?.toLong() ?: 1L
+                val cust = data["customerName"] as? String ?: ""
+                val amt = (data["amount"] as? Number)?.toLong() ?: 0L
+                val wsId = (data["workshopId"] as? Number)?.toLong() ?: 1L
+
+                val existingPayment = localPayments.find { local ->
+                    (refNo.isNotBlank() && local.referenceNo == refNo && local.workshopId == wsId) ||
+                    (crAt > 0L && local.createdAt == crAt && local.workshopId == wsId) ||
+                    (local.paymentNumber == payNum && local.amount == amt && local.customerName == cust && local.workshopId == wsId)
+                }
+
                 val payment = PaymentRecord(
-                    id = 0L,
-                    paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
-                    amount = (data["amount"] as? Number)?.toLong() ?: 0L,
+                    id = existingPayment?.id ?: 0L,
+                    workshopId = wsId,
+                    paymentNumber = payNum,
+                    amount = amt,
                     dateJalali = data["dateJalali"] as? String ?: "",
                     dateGregorian = data["dateGregorian"] as? String ?: "",
-                    customerName = data["customerName"] as? String ?: "",
+                    customerName = cust,
                     description = data["description"] as? String ?: "",
                     paymentType = data["paymentType"] as? String ?: "transfer",
-                    referenceNo = data["referenceNo"] as? String ?: "",
+                    referenceNo = refNo,
                     bankName = data["bankName"] as? String ?: "",
                     cardNumber = data["cardNumber"] as? String ?: "",
                     relatedOrderId = (data["relatedOrderId"] as? Number)?.toLong(),
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    createdAt = if (crAt > 0L) crAt else System.currentTimeMillis()
                 )
                 repository.savePayment(payment)
+                if (existingPayment == null) {
+                    localPayments.add(payment)
+                }
                 payCount++
             }
 
-            // 3. Download Presets
+            // 3. Download Presets (Strict Deduplication: Only 1 item per model name per workshop)
             val presetsSnapshot = userDoc.collection("presets").get().await()
+            val localPresets = repository.getAllPresetsSync()
             var preCount = 0
             for (doc in presetsSnapshot.documents) {
                 val data = doc.data ?: continue
-                val name = data["name"] as? String ?: continue
+                val rawName = data["name"] as? String ?: continue
+                val trimmedName = rawName.trim()
+                if (trimmedName.isBlank()) continue
+                val wsId = (data["workshopId"] as? Number)?.toLong() ?: 1L
+
+                val existingPreset = localPresets.find { it.name.trim().equals(trimmedName, ignoreCase = true) && it.workshopId == wsId }
                 val preset = ModelPreset(
-                    id = 0L,
-                    name = name,
+                    id = existingPreset?.id ?: 0L,
+                    workshopId = wsId,
+                    name = trimmedName,
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
                     defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
@@ -322,6 +402,9 @@ object FirebaseService {
                 repository.savePreset(preset)
                 preCount++
             }
+            repository.deduplicatePresets()
+            repository.deduplicateOrders()
+            repository.deduplicatePayments()
 
             // 4. Download Unit Rules
             val rulesSnapshot = userDoc.collection("unitRules").get().await()

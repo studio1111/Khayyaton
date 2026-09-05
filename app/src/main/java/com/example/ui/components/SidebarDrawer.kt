@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AppThemeMode
@@ -43,6 +44,10 @@ fun SidebarDrawer(
     cardSortOrder: CardSortOrder,
     onSelectCardSortOrder: (CardSortOrder) -> Unit,
     currentUser: com.example.data.firebase.FirebaseUserDto? = null,
+    customUsername: String = "",
+    onUpdateCustomUsername: (String) -> Unit = {},
+    activeWorkshop: com.example.model.Workshop? = null,
+    onOpenWorkshops: () -> Unit = {},
     onOpenAuth: () -> Unit = {},
     onOpenSearch: () -> Unit,
     onOpenAnalysis: () -> Unit,
@@ -57,6 +62,8 @@ fun SidebarDrawer(
     var isSortOrderExpanded by remember { mutableStateOf(false) }
     var isCurrencyMenuExpanded by remember { mutableStateOf(false) }
     var isThemeMenuExpanded by remember { mutableStateOf(false) }
+    var showEditUsernameDialog by remember { mutableStateOf(false) }
+    var editingUsernameText by remember { mutableStateOf("") }
 
     val currencyList = listOf(
         "تومان",
@@ -68,6 +75,62 @@ fun SidebarDrawer(
         "درهم (امارات)",
         "میلیون تومان"
     )
+
+    if (showEditUsernameDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditUsernameDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.AccountCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "تعیین نام کاربری دلخواه",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "نام کاربری دلخواه خود را وارد کنید تا در بالای منوی برنامه نمایش داده شود:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = editingUsernameText,
+                        onValueChange = { editingUsernameText = it },
+                        placeholder = { Text("مثلاً: علی احمدی یا کارگاه برتر") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editingUsernameText.isNotBlank()) {
+                            onUpdateCustomUsername(editingUsernameText.trim())
+                        }
+                        showEditUsernameDialog = false
+                    },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("ذخیره")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditUsernameDialog = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
 
     ModalDrawerSheet(
         modifier = modifier.width(320.dp),
@@ -81,31 +144,87 @@ fun SidebarDrawer(
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.navigationBars)
         ) {
-            // Header with App Title & Close Button (Logo removed as requested)
+            // Header: جایگزینی «منوی برنامه» با نام کاربری دلخواه کاربر و نام کارگاه
+            val effectiveUsername = customUsername.ifBlank {
+                currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "کاربر گرامی"
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
-                    Text(
-                        text = "منوی برنامه",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            editingUsernameText = effectiveUsername
+                            showEditUsernameDialog = true
+                        }
+                ) {
+                    // ۱. نام کاربری دلخواه کاربر به جای نوشته منوی برنامه
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = effectiveUsername,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "ویرایش نام کاربری دلخواه",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(3.dp))
+
+                    // ۲. نام کارگاه فعال
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.clickable {
+                            onOpenWorkshops()
+                            onClose()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Storefront,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "کارگاه: ${activeWorkshop?.name ?: "کارگاه اصلی"}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
                     if (currentUser != null) {
                         Text(
                             text = currentUser.email,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
+
                 IconButton(
                     onClick = onClose,
                     modifier = Modifier
@@ -135,9 +254,10 @@ fun SidebarDrawer(
             ) {
                 // Section 1: Primary Action Items
                 DrawerItem(
-                    icon = if (currentUser != null) Icons.Outlined.CloudDone else Icons.Outlined.AccountCircle,
-                    title = if (currentUser != null) "حساب ابری (${currentUser.email.substringBefore("@")})" else "ورود و ثبت‌نام با ایمیل (Firebase)",
-                    onClick = { onOpenAuth(); onClose() }
+                    icon = Icons.Outlined.Storefront,
+                    title = "مدیریت کارگاه‌ها",
+                    badge = activeWorkshop?.name ?: "کارگاه اصلی",
+                    onClick = { onOpenWorkshops(); onClose() }
                 )
                 DrawerItem(
                     icon = Icons.Outlined.Analytics,
@@ -369,6 +489,7 @@ fun SidebarDrawer(
 private fun DrawerItem(
     icon: ImageVector,
     title: String,
+    badge: String? = null,
     onClick: () -> Unit
 ) {
     Surface(
@@ -383,20 +504,39 @@ private fun DrawerItem(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            if (badge != null) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = badge,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
     }
 }

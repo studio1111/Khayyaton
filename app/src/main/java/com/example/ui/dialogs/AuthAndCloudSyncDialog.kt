@@ -55,6 +55,10 @@ enum class AuthScreenMode {
 fun AuthAndCloudSyncDialog(
     isOpen: Boolean,
     currentUser: FirebaseUserDto?,
+    customUsername: String = "",
+    onUpdateCustomUsername: (String) -> Unit = {},
+    activeWorkshop: com.example.model.Workshop? = null,
+    onUpdateWorkshopName: (String) -> Unit = {},
     orders: List<FurnitureOrder>,
     payments: List<PaymentRecord>,
     presets: List<ModelPreset>,
@@ -74,6 +78,8 @@ fun AuthAndCloudSyncDialog(
     }
 
     var mode by remember { mutableStateOf(AuthScreenMode.SIGN_IN) }
+    var dialogUsername by remember { mutableStateOf("") }
+    var dialogWorkshopName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -83,6 +89,9 @@ fun AuthAndCloudSyncDialog(
     var isSyncing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
+
+    var isEditingUsernameInDialog by remember { mutableStateOf(false) }
+    var tempUsernameInDialog by remember(customUsername) { mutableStateOf(customUsername) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -249,6 +258,92 @@ fun AuthAndCloudSyncDialog(
 
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
+                                // ۱. نام کاربری دلخواه کاربر با قابلیت ویرایش
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("نام کاربری دلخواه:", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (!isEditingUsernameInDialog) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.clickable {
+                                                tempUsernameInDialog = customUsername.ifBlank { currentUser.displayName ?: "" }
+                                                isEditingUsernameInDialog = true
+                                            }
+                                        ) {
+                                            Text(
+                                                text = customUsername.ifBlank { currentUser.displayName?.takeIf { it.isNotBlank() } ?: "تعیین نشده (لمس برای ویرایش)" },
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "ویرایش نام کاربری دلخواه",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            OutlinedTextField(
+                                                value = tempUsernameInDialog,
+                                                onValueChange = { tempUsernameInDialog = it },
+                                                singleLine = true,
+                                                modifier = Modifier.width(130.dp).height(46.dp),
+                                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    if (tempUsernameInDialog.isNotBlank()) {
+                                                        onUpdateCustomUsername(tempUsernameInDialog.trim())
+                                                    }
+                                                    isEditingUsernameInDialog = false
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.Check, contentDescription = "تایید", tint = Emerald600)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                                // ۲. نام کارگاه فعال
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("نام کارگاه:", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Storefront,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = activeWorkshop?.name ?: "کارگاه اصلی",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -379,6 +474,46 @@ fun AuthAndCloudSyncDialog(
                             }
                         }
 
+                        // Username field
+                        OutlinedTextField(
+                            value = dialogUsername,
+                            onValueChange = { dialogUsername = it; errorMessage = null },
+                            label = { Text("نام کاربری") },
+                            placeholder = { Text("مثلاً: علی رضایی") },
+                            leadingIcon = { Icon(Icons.Outlined.AccountCircle, contentDescription = null) },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                            ),
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Workshop name field (for Sign Up)
+                        if (mode == AuthScreenMode.SIGN_UP) {
+                            OutlinedTextField(
+                                value = dialogWorkshopName,
+                                onValueChange = { dialogWorkshopName = it; errorMessage = null },
+                                label = { Text("نام کارگاه") },
+                                placeholder = { Text("مثلاً: کارگاه مبل آریا") },
+                                leadingIcon = { Icon(Icons.Outlined.Storefront, contentDescription = null) },
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Text,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                                ),
+                                singleLine = true,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
                         // Email field
                         OutlinedTextField(
                             value = email,
@@ -460,6 +595,11 @@ fun AuthAndCloudSyncDialog(
                                 errorMessage = null
                                 successMessage = null
 
+                                if (dialogUsername.isBlank() && mode != AuthScreenMode.FORGOT_PASSWORD) {
+                                    errorMessage = "لطفاً نام کاربری خود را وارد نمایید."
+                                    return@Button
+                                }
+
                                 if (email.isBlank()) {
                                     errorMessage = "لطفاً آدرس ایمیل خود را وارد نمایید."
                                     return@Button
@@ -499,6 +639,12 @@ fun AuthAndCloudSyncDialog(
                                     isLoading = false
                                     if (res.isSuccess) {
                                         val user = res.getOrNull()
+                                        if (dialogUsername.isNotBlank()) {
+                                            onUpdateCustomUsername(dialogUsername.trim())
+                                        }
+                                        if (dialogWorkshopName.isNotBlank()) {
+                                            onUpdateWorkshopName(dialogWorkshopName.trim())
+                                        }
                                         onUserChanged(user)
                                         successMessage = if (mode == AuthScreenMode.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد و وارد شدید."
                                     } else {

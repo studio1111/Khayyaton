@@ -59,6 +59,7 @@ fun OrderDialog(
     nextOrderNumber: Long,
     onDismiss: () -> Unit,
     onDeleteModel: (String) -> Unit = {},
+    onUpdateModelColor: (String, String) -> Unit = { _, _ -> },
     onSave: (FurnitureOrder, Boolean) -> Unit
 ) {
     if (!isOpen) return
@@ -156,6 +157,53 @@ fun OrderDialog(
         }
     }
 
+    // Map of colors currently used by other models (excluding the current model being edited)
+    val otherModelsUsedColors = remember(knownModels, modelName) {
+        val map = mutableMapOf<String, String>()
+        knownModels.filter { !it.name.trim().equals(modelName.trim(), ignoreCase = true) }
+            .forEach { m ->
+                val hex = m.colorCode.lowercase()
+                if (!map.containsKey(hex)) {
+                    map[hex] = m.name
+                }
+            }
+        map
+    }
+
+    // Check whether all 36 palette colors have already been used by other models
+    val allPaletteColorsUsed = remember(otherModelsUsedColors) {
+        COLOR_PALETTE.all { c -> otherModelsUsedColors.containsKey(c.hex.lowercase()) }
+    }
+
+    // Track original color of the currently selected model
+    var originalModelColor by remember(modelName) {
+        val match = knownModels.find { it.name.trim().equals(modelName.trim(), ignoreCase = true) }
+        mutableStateOf(initialOrder?.colorCode?.ifBlank { null } ?: match?.colorCode)
+    }
+
+    var showConflictDialog by remember { mutableStateOf(false) }
+    var colorConflictMessage by remember { mutableStateOf<String?>(null) }
+    var showColorChangeWarningDialog by remember { mutableStateOf(false) }
+    var pendingNewColor by remember { mutableStateOf<String?>(null) }
+
+    fun onAttemptSelectColor(selectedHex: String, colorTitle: String = selectedHex) {
+        val cleanHex = selectedHex.trim()
+        val otherModelName = otherModelsUsedColors[cleanHex.lowercase()]
+        if (otherModelName != null && !allPaletteColorsUsed) {
+            colorConflictMessage = "رنگ «$colorTitle» قبلاً برای مدل «$otherModelName» ثبت شده است.\n\nتا زمانی که تمام رنگ‌های پالت استفاده نشده باشند، دو مدل مختلف مجاز نیستند از یک رنگ استفاده کنند."
+            showConflictDialog = true
+            return
+        }
+
+        val orig = originalModelColor
+        if (orig != null && orig.isNotBlank() && !cleanHex.equals(orig, ignoreCase = true) && modelName.isNotBlank()) {
+            pendingNewColor = cleanHex
+            showColorChangeWarningDialog = true
+        } else {
+            colorCode = cleanHex
+        }
+    }
+
     fun applyModel(suggestion: ModelSuggestion) {
         modelName = suggestion.name
         pricePerSet = suggestion.pricePerSet.toString()
@@ -165,6 +213,7 @@ fun OrderDialog(
             suggestion.unitsPerSet.toString()
         }
         colorCode = suggestion.colorCode
+        originalModelColor = suggestion.colorCode
         isModelDropdownExpanded = false
     }
 
@@ -301,8 +350,11 @@ fun OrderDialog(
                                     val exact = knownModels.find { it.name.equals(trimmed, ignoreCase = true) }
                                     if (exact != null) {
                                         colorCode = exact.colorCode
+                                        originalModelColor = exact.colorCode
                                     } else {
-                                        colorCode = PersianUtils.getModelColor(input)
+                                        val unusedColor = COLOR_PALETTE.firstOrNull { !otherModelsUsedColors.containsKey(it.hex.lowercase()) }?.hex ?: PersianUtils.getModelColor(input)
+                                        colorCode = unusedColor
+                                        originalModelColor = null
                                     }
                                 }
                                 isModelDropdownExpanded = true
@@ -563,17 +615,19 @@ fun OrderDialog(
                                     ) {
                                         rowColors.forEach { c ->
                                             val isSelected = colorCode.equals(c.hex, ignoreCase = true)
+                                            val otherModelUsingThisColor = otherModelsUsedColors[c.hex.lowercase()]
+                                            val isReservedByOtherModel = otherModelUsingThisColor != null && !allPaletteColorsUsed
                                             Box(
                                                 modifier = Modifier
                                                     .size(24.dp)
                                                     .clip(CircleShape)
-                                                    .background(c.color)
+                                                    .background(if (isReservedByOtherModel && !isSelected) c.color.copy(alpha = 0.35f) else c.color)
                                                     .border(
                                                         if (isSelected) 2.dp else 0.5.dp,
                                                         if (isSelected) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.2f),
                                                         CircleShape
                                                     )
-                                                    .clickable { colorCode = c.hex },
+                                                    .clickable { onAttemptSelectColor(c.hex, c.name) },
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 if (isSelected) {
@@ -582,6 +636,13 @@ fun OrderDialog(
                                                         contentDescription = null,
                                                         tint = Color.White,
                                                         modifier = Modifier.size(14.dp)
+                                                    )
+                                                } else if (isReservedByOtherModel) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Lock,
+                                                        contentDescription = "رزرو شده برای مدل $otherModelUsingThisColor",
+                                                        tint = Color.White.copy(alpha = 0.9f),
+                                                        modifier = Modifier.size(11.dp)
                                                     )
                                                 }
                                             }
@@ -818,6 +879,9 @@ fun OrderDialog(
                                 colorCode = colorCode,
                                 createdAt = initialOrder?.createdAt ?: System.currentTimeMillis()
                             )
+                            if (modelName.isNotBlank()) {
+                                onUpdateModelColor(modelName.trim(), colorCode)
+                            }
                             onSave(order, addToPresets)
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -946,8 +1010,9 @@ fun OrderDialog(
 
                         Button(
                             onClick = {
-                                colorCode = customHexInput.trim()
+                                val inputHex = customHexInput.trim()
                                 isCustomColorDialogOpen = false
+                                onAttemptSelectColor(inputHex, inputHex)
                             },
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -957,5 +1022,120 @@ fun OrderDialog(
                 }
             }
         }
+    }
+
+    // Warning Dialog: Changing an existing model's color updates all prior cards
+    if (showColorChangeWarningDialog && pendingNewColor != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showColorChangeWarningDialog = false
+                pendingNewColor = null
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.WarningAmber,
+                    contentDescription = null,
+                    tint = Color(0xFFD97706),
+                    modifier = Modifier.size(34.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "هشدار تغییر رنگ مدل",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "شما در حال تغییر رنگ مدل «${modelName.trim()}» هستید.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "با تایید شما، رنگ تمامی کارت‌ها و فاکتورهای قبلی ثبت‌شده برای این مدل نیز به این رنگ جدید به‌روزرسانی خواهند شد.",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        lineHeight = 18.sp
+                    )
+                    Text(
+                        text = "آیا از تغییر رنگ و بروزرسانی کارت‌های پیشین اطمینان دارید؟",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        colorCode = pendingNewColor!!
+                        showColorChangeWarningDialog = false
+                        pendingNewColor = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text("تایید تغییر رنگ", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showColorChangeWarningDialog = false
+                        pendingNewColor = null
+                    }
+                ) {
+                    Text("انصراف", fontSize = 11.5.sp)
+                }
+            }
+        )
+    }
+
+    // Conflict Dialog: Preventing duplicate color usage until all colors are used
+    if (showConflictDialog && colorConflictMessage != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showConflictDialog = false
+                colorConflictMessage = null
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(34.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "رنگ تکراری مجاز نیست",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = colorConflictMessage!!,
+                    fontSize = 11.5.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConflictDialog = false
+                        colorConflictMessage = null
+                    }
+                ) {
+                    Text("متوجه شدم", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 }

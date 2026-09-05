@@ -21,14 +21,26 @@ import kotlinx.coroutines.launch
 
 class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
 
-    val orders: StateFlow<List<FurnitureOrder>> = repository.orders
+    val workshops: StateFlow<List<com.example.model.Workshop>> = repository.workshops
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val payments: StateFlow<List<PaymentRecord>> = repository.payments
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val activeWorkshopId = MutableStateFlow(1L)
 
-    val modelPresets: StateFlow<List<ModelPreset>> = repository.modelPresets
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val activeWorkshop: StateFlow<com.example.model.Workshop?> = combine(workshops, activeWorkshopId) { list, id ->
+        list.find { it.id == id } ?: list.firstOrNull()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val orders: StateFlow<List<FurnitureOrder>> = combine(repository.orders, activeWorkshopId) { all, currentWsId ->
+        all.filter { it.workshopId == currentWsId }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val payments: StateFlow<List<PaymentRecord>> = combine(repository.payments, activeWorkshopId) { all, currentWsId ->
+        all.filter { it.workshopId == currentWsId }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val modelPresets: StateFlow<List<ModelPreset>> = combine(repository.modelPresets, activeWorkshopId) { all, currentWsId ->
+        all.filter { it.workshopId == currentWsId }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val unitRules: StateFlow<List<com.example.model.UnitConversionRule>> = repository.unitRules
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -69,22 +81,57 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isBackupDialogOpen = MutableStateFlow(false)
     val isSearchDialogOpen = MutableStateFlow(false)
     val isAuthDialogOpen = MutableStateFlow(false)
+    val isWorkshopsDialogOpen = MutableStateFlow(false)
     val currentUser = MutableStateFlow<FirebaseUserDto?>(null)
+    val customUsername = MutableStateFlow<String>("")
     val isDrawerOpen = MutableStateFlow(false)
     val isAutoSyncing = MutableStateFlow(false)
     val autoSyncStatusMessage = MutableStateFlow<String?>(null)
 
     init {
-        // App initialized clean without sample data; insert default unit rules if empty
         viewModelScope.launch {
+            val savedUser = repository.getCustomUsername()
+            if (savedUser.isNotBlank()) {
+                customUsername.value = savedUser
+            }
+
+            val defWsId = repository.ensureDefaultWorkshop()
+            val savedWsId = repository.getSavedActiveWorkshopId()
+            val allWorkshops = repository.getAllWorkshopsSync()
+            if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) {
+                activeWorkshopId.value = savedWsId
+            } else {
+                activeWorkshopId.value = defWsId
+                repository.saveActiveWorkshopId(defWsId)
+            }
+            repository.deduplicatePresets()
+            repository.deduplicateOrders()
+            repository.deduplicatePayments()
             repository.insertDefaultUnitRulesIfEmpty()
+
             val user = FirebaseService.getCurrentUser()
             currentUser.value = user
             if (user != null) {
-                // Automatically restore/sync user data on startup if logged in
-                performAutoSync(user)
+                if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
+                    customUsername.value = user.displayName
+                    repository.saveCustomUsername(user.displayName)
+                }
+                val localOrders = repository.getAllOrdersSync()
+                val localPayments = repository.getAllPaymentsSync()
+                // If local data already exists, DO NOT restore duplicates from cloud!
+                if (localOrders.isEmpty() && localPayments.isEmpty()) {
+                    performAutoSync(user, shouldDownload = true)
+                } else {
+                    performAutoSync(user, shouldDownload = false)
+                }
             }
         }
+    }
+
+    fun updateCustomUsername(name: String) {
+        val trimmed = name.trim()
+        customUsername.value = trimmed
+        repository.saveCustomUsername(trimmed)
     }
 
     // Filtered orders stream
@@ -326,6 +373,7 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
             val newNum = getNextOrderNumber()
             val duplicated = order.copy(
                 id = 0L,
+                workshopId = activeWorkshopId.value,
                 orderNumber = newNum,
                 invoiceNumber = newNum.toString(),
                 dateJalali = todayDate.value,
@@ -338,26 +386,33 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun saveOrder(order: FurnitureOrder, addToPresets: Boolean) {
         viewModelScope.launch {
-            repository.saveOrder(order)
-            if (order.modelName.isNotBlank()) {
-                val trimmedName = order.modelName.trim()
+            val wsId = activeWorkshopId.value
+            val orderToSave = if (order.workshopId <= 0L) order.copy(workshopId = wsId) else order
+            repository.saveOrder(orderToSave)
+            if (orderToSave.modelName.isNotBlank()) {
+                val trimmedName = orderToSave.modelName.trim()
+                if (orderToSave.colorCode.isNotBlank()) {
+                    repository.updateOrdersColorForModel(trimmedName, orderToSave.colorCode, wsId)
+                }
                 val existingPreset = modelPresets.value.find { it.name.trim().equals(trimmedName, ignoreCase = true) }
                 if (existingPreset != null) {
                     repository.savePreset(
                         existingPreset.copy(
-                            defaultPricePerSet = order.pricePerSet,
-                            defaultUnitsPerSet = order.unitsPerSet,
-                            colorCode = order.colorCode.ifBlank { existingPreset.colorCode }
+                            workshopId = wsId,
+                            defaultPricePerSet = orderToSave.pricePerSet,
+                            defaultUnitsPerSet = orderToSave.unitsPerSet,
+                            colorCode = orderToSave.colorCode.ifBlank { existingPreset.colorCode }
                         )
                     )
                 } else {
                     repository.savePreset(
                         ModelPreset(
+                            workshopId = wsId,
                             name = trimmedName,
-                            defaultPricePerSet = order.pricePerSet,
-                            defaultUnitsPerSet = order.unitsPerSet,
-                            colorCode = order.colorCode,
-                            description = if (order.fabricName.isNotBlank()) "پارچه ${order.fabricName}" else ""
+                            defaultPricePerSet = orderToSave.pricePerSet,
+                            defaultUnitsPerSet = orderToSave.unitsPerSet,
+                            colorCode = orderToSave.colorCode,
+                            description = if (orderToSave.fabricName.isNotBlank()) "پارچه ${orderToSave.fabricName}" else ""
                         )
                     )
                 }
@@ -368,9 +423,19 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
         }
     }
 
+    fun updateModelColor(modelName: String, newColor: String) {
+        viewModelScope.launch {
+            val wsId = activeWorkshopId.value
+            repository.updateOrdersColorForModel(modelName, newColor, wsId)
+            triggerAutoUpload()
+        }
+    }
+
     fun savePayment(payment: PaymentRecord) {
         viewModelScope.launch {
-            repository.savePayment(payment)
+            val wsId = activeWorkshopId.value
+            val paymentToSave = if (payment.workshopId <= 0L) payment.copy(workshopId = wsId) else payment
+            repository.savePayment(paymentToSave)
             isPaymentDialogOpen.value = false
             editingPayment.value = null
             triggerAutoUpload()
@@ -381,8 +446,15 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun savePreset(preset: ModelPreset) {
         viewModelScope.launch {
-            repository.savePreset(preset)
+            val wsId = activeWorkshopId.value
+            val presetToSave = if (preset.workshopId <= 0L) preset.copy(workshopId = wsId) else preset
+            repository.savePreset(presetToSave)
             manuallyDeletedModelNames.value = manuallyDeletedModelNames.value - preset.name.trim().lowercase()
+            // When updating a preset's color, also update existing orders for this model in this workshop
+            if (preset.name.isNotBlank() && preset.colorCode.isNotBlank()) {
+                repository.updateOrdersColorForModel(preset.name.trim(), preset.colorCode, wsId)
+            }
+            triggerAutoUpload()
         }
     }
 
@@ -395,8 +467,47 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun deletePresetByName(name: String) {
         viewModelScope.launch {
-            repository.deletePresetByName(name)
+            val wsId = activeWorkshopId.value
+            repository.deletePresetByNameAndWorkshop(name, wsId)
             manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + name.trim().lowercase()
+        }
+    }
+
+    fun selectWorkshop(id: Long) {
+        activeWorkshopId.value = id
+        repository.saveActiveWorkshopId(id)
+        clearFilters()
+    }
+
+    fun createWorkshop(name: String) {
+        viewModelScope.launch {
+            val newId = repository.saveWorkshop(com.example.model.Workshop(name = name))
+            activeWorkshopId.value = newId
+            repository.saveActiveWorkshopId(newId)
+            clearFilters()
+            triggerAutoUpload()
+        }
+    }
+
+    fun renameWorkshop(id: Long, newName: String) {
+        viewModelScope.launch {
+            val existing = repository.getWorkshopById(id) ?: return@launch
+            repository.saveWorkshop(existing.copy(name = newName))
+            triggerAutoUpload()
+        }
+    }
+
+    fun deleteWorkshop(workshop: com.example.model.Workshop) {
+        viewModelScope.launch {
+            val all = repository.getAllWorkshopsSync()
+            if (all.size <= 1) return@launch
+            repository.deleteWorkshopAndAllData(workshop.id)
+            val remaining = repository.getAllWorkshopsSync()
+            val nextActive = remaining.firstOrNull()?.id ?: 1L
+            activeWorkshopId.value = nextActive
+            repository.saveActiveWorkshopId(nextActive)
+            clearFilters()
+            triggerAutoUpload()
         }
     }
 
@@ -435,10 +546,29 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
      * Automatic sync and restore when a user enters email/signs in or registers.
      * Restores existing cloud data if available, then syncs local state to Firebase.
      */
-    fun onUserLoggedIn(user: FirebaseUserDto) {
+    fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
         currentUser.value = user
+        val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
+            ?: customUsername.value.takeIf { it.isNotBlank() }
+            ?: user.displayName?.takeIf { it.isNotBlank() }
+        if (!chosenName.isNullOrBlank()) {
+            updateCustomUsername(chosenName)
+        }
+
         viewModelScope.launch {
-            performAutoSync(user)
+            if (!workshopName.isNullOrBlank()) {
+                val currentWs = activeWorkshop.value
+                if (currentWs != null) {
+                    renameWorkshop(currentWs.id, workshopName.trim())
+                } else {
+                    createWorkshop(workshopName.trim())
+                }
+            }
+
+            val localOrders = repository.getAllOrdersSync()
+            val localPayments = repository.getAllPaymentsSync()
+            val shouldDownload = localOrders.isEmpty() && localPayments.isEmpty()
+            performAutoSync(user, shouldDownload = shouldDownload)
         }
     }
 
@@ -448,27 +578,29 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
         autoSyncStatusMessage.value = null
     }
 
-    private suspend fun performAutoSync(user: FirebaseUserDto) {
+    private suspend fun performAutoSync(user: FirebaseUserDto, shouldDownload: Boolean = false) {
         isAutoSyncing.value = true
         try {
-            // Step 1: Download existing data from cloud and restore into local repository
-            val downloadRes = FirebaseService.downloadFromCloud(repository)
-            if (downloadRes.isSuccess) {
-                autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
+            if (shouldDownload) {
+                val downloadRes = FirebaseService.downloadFromCloud(repository)
+                if (downloadRes.isSuccess) {
+                    autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
+                }
             }
 
-            // Step 2: Now upload latest combined data to Firebase Firestore
-            val currentOrders = orders.value
-            val currentPayments = payments.value
-            val currentPresets = modelPresets.value
+            val currentOrders = repository.getAllOrdersSync()
+            val currentPayments = repository.getAllPaymentsSync()
+            val currentPresets = repository.getAllPresetsSync()
             val currentUnitRules = unitRules.value
+            val currentWorkshops = repository.getAllWorkshopsSync()
 
             if (currentOrders.isNotEmpty() || currentPayments.isNotEmpty() || currentPresets.isNotEmpty()) {
                 FirebaseService.uploadAllToCloud(
                     orders = currentOrders,
                     payments = currentPayments,
                     presets = currentPresets,
-                    unitRules = currentUnitRules
+                    unitRules = currentUnitRules,
+                    workshops = currentWorkshops
                 )
             }
             autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
@@ -484,10 +616,11 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
         viewModelScope.launch {
             try {
                 FirebaseService.uploadAllToCloud(
-                    orders = orders.value,
-                    payments = payments.value,
-                    presets = modelPresets.value,
-                    unitRules = unitRules.value
+                    orders = repository.getAllOrdersSync(),
+                    payments = repository.getAllPaymentsSync(),
+                    presets = repository.getAllPresetsSync(),
+                    unitRules = unitRules.value,
+                    workshops = repository.getAllWorkshopsSync()
                 )
             } catch (_: Exception) {}
         }
