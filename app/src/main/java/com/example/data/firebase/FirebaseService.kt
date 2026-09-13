@@ -26,11 +26,11 @@ object FirebaseService {
                 if (initialized == null) {
                     // Fallback to explicit options from google-services.json
                     val options = FirebaseOptions.Builder()
-                        .setApplicationId("1:144639141025:android:3316d8a7e58c1736d63ce0")
-                        .setApiKey("AIzaSyBnIb8j3W8NThD89aHuw2qv45rXnBdbKCc")
-                        .setProjectId("sheeton-bb54b")
-                        .setStorageBucket("sheeton-bb54b.firebasestorage.app")
-                        .setGcmSenderId("144639141025")
+                        .setApplicationId("1:691934091850:android:8432fe49108b5ad33f24b3")
+                        .setApiKey("AIzaSyCiHK0Ka-vzr4n2zpYXFl611yHWJZhQsUU")
+                        .setProjectId("sheeton-f1719")
+                        .setStorageBucket("sheeton-f1719.firebasestorage.app")
+                        .setGcmSenderId("691934091850")
                         .build()
                     FirebaseApp.initializeApp(context, options)
                     Log.d(TAG, "Firebase initialized with explicit options")
@@ -44,11 +44,11 @@ object FirebaseService {
             Log.e(TAG, "Error initializing Firebase: ${e.message}", e)
             try {
                 val options = FirebaseOptions.Builder()
-                    .setApplicationId("1:144639141025:android:3316d8a7e58c1736d63ce0")
-                    .setApiKey("AIzaSyBnIb8j3W8NThD89aHuw2qv45rXnBdbKCc")
-                    .setProjectId("sheeton-bb54b")
-                    .setStorageBucket("sheeton-bb54b.firebasestorage.app")
-                    .setGcmSenderId("144639141025")
+                    .setApplicationId("1:691934091850:android:8432fe49108b5ad33f24b3")
+                    .setApiKey("AIzaSyCiHK0Ka-vzr4n2zpYXFl611yHWJZhQsUU")
+                    .setProjectId("sheeton-f1719")
+                    .setStorageBucket("sheeton-f1719.firebasestorage.app")
+                    .setGcmSenderId("691934091850")
                     .build()
                 FirebaseApp.initializeApp(context, options)
                 Log.d(TAG, "Firebase recovered with explicit options")
@@ -94,7 +94,7 @@ object FirebaseService {
                 Result.failure(Exception("ورود ناموفق بود."))
             }
         } catch (e: Exception) {
-            Result.failure(Exception(parseFirebaseError(e)))
+            Result.failure(Exception(parseCloudError(e)))
         }
     }
 
@@ -109,7 +109,79 @@ object FirebaseService {
                 Result.failure(Exception("ثبت‌نام ناموفق بود."))
             }
         } catch (e: Exception) {
-            Result.failure(Exception(parseFirebaseError(e)))
+            Result.failure(Exception(parseCloudError(e)))
+        }
+    }
+
+    /**
+     * Check if a username is available (not already taken) in Firestore.
+     * Usernames are stored (lowercased) as document IDs under "usernames".
+     */
+    suspend fun isUsernameAvailable(username: String): Boolean {
+        val db = firestore ?: return false
+        val normalized = username.trim().lowercase()
+        return try {
+            val doc = db.collection("usernames").document(normalized).get().await()
+            !doc.exists()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking username: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * Register with email, password, and a unique username.
+     * Checks username availability first, then creates the Firebase Auth account,
+     * then reserves the username permanently linked to this user's uid.
+     */
+    suspend fun registerWithEmailAndUsername(
+        username: String,
+        email: String,
+        pass: String
+    ): Result<FirebaseUserDto> {
+        val fbAuth = auth ?: return Result.failure(Exception("سرویس فایربیس راه‌اندازی نشده است. فایل google-services.json را بررسی کنید."))
+        val db = firestore ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
+        val normalizedUsername = username.trim().lowercase()
+
+        if (normalizedUsername.isBlank()) {
+            return Result.failure(Exception("لطفاً نام کاربری را وارد کنید."))
+        }
+
+        // Step 1: Check username availability before creating the account
+        val available = try {
+            isUsernameAvailable(normalizedUsername)
+        } catch (e: Exception) {
+            return Result.failure(Exception(parseCloudError(e)))
+        }
+        if (!available) {
+            return Result.failure(Exception("این نام کاربری قبلاً استفاده شده است. لطفاً نام دیگری انتخاب کنید."))
+        }
+
+        // Step 2: Create the Firebase Auth account
+        return try {
+            val result = fbAuth.createUserWithEmailAndPassword(email.trim(), pass).await()
+            val user = result.user ?: return Result.failure(Exception("ثبت‌نام ناموفق بود."))
+
+            // Step 3: Reserve the username, linked to this user's uid (best-effort)
+            try {
+                db.collection("usernames").document(normalizedUsername)
+                    .set(mapOf("uid" to user.uid, "email" to (user.email ?: email)))
+                    .await()
+
+                db.collection("users").document(user.uid)
+                    .set(
+                        mapOf("username" to username.trim(), "email" to (user.email ?: email)),
+                        SetOptions.merge()
+                    )
+                    .await()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error reserving username: ${e.message}", e)
+                // Not fatal: the auth account was already created successfully
+            }
+
+            Result.success(FirebaseUserDto(user.uid, user.email ?: email, username.trim()))
+        } catch (e: Exception) {
+            Result.failure(Exception(parseCloudError(e)))
         }
     }
 
@@ -119,7 +191,7 @@ object FirebaseService {
             fbAuth.sendPasswordResetEmail(email.trim()).await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(Exception(parseFirebaseError(e)))
+            Result.failure(Exception(parseCloudError(e)))
         }
     }
 
@@ -134,32 +206,19 @@ object FirebaseService {
         orders: List<FurnitureOrder>,
         payments: List<PaymentRecord>,
         presets: List<ModelPreset>,
-        unitRules: List<UnitConversionRule>,
-        workshops: List<com.example.model.Workshop> = emptyList()
+        unitRules: List<UnitConversionRule>
     ): Result<CloudSyncResult> {
         val user = auth?.currentUser ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
         val db = firestore ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
 
         return try {
             val userDoc = db.collection("users").document(user.uid)
-            
-            // 0. Workshops upload
-            val wsCol = userDoc.collection("workshops")
-            for (ws in workshops) {
-                val wsMap = mapOf(
-                    "id" to ws.id,
-                    "name" to ws.name,
-                    "createdAt" to ws.createdAt
-                )
-                wsCol.document("ws_${ws.id}").set(wsMap, SetOptions.merge()).await()
-            }
 
             // 1. Orders batch upload
             val ordersCol = userDoc.collection("orders")
             for (order in orders) {
                 val orderMap = mapOf(
                     "id" to order.id,
-                    "workshopId" to order.workshopId,
                     "orderNumber" to order.orderNumber,
                     "invoiceNumber" to order.invoiceNumber,
                     "modelName" to order.modelName,
@@ -186,7 +245,6 @@ object FirebaseService {
             for (payment in payments) {
                 val payMap = mapOf(
                     "id" to payment.id,
-                    "workshopId" to payment.workshopId,
                     "paymentNumber" to payment.paymentNumber,
                     "amount" to payment.amount,
                     "dateJalali" to payment.dateJalali,
@@ -208,7 +266,6 @@ object FirebaseService {
             for (preset in presets) {
                 val presetMap = mapOf(
                     "id" to preset.id,
-                    "workshopId" to preset.workshopId,
                     "name" to preset.name,
                     "defaultPricePerSet" to preset.defaultPricePerSet,
                     "defaultUnitsPerSet" to preset.defaultUnitsPerSet,
@@ -253,7 +310,7 @@ object FirebaseService {
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error uploading to Firestore", e)
-            Result.failure(Exception("خطا در همگام‌سازی با فضای ابری: ${e.localizedMessage}"))
+            Result.failure(Exception(parseCloudError(e)))
         }
     }
 
@@ -267,52 +324,15 @@ object FirebaseService {
         return try {
             val userDoc = db.collection("users").document(user.uid)
 
-            // 0. Download Workshops
-            try {
-                val wsSnapshot = userDoc.collection("workshops").get().await()
-                val localWs = repository.getAllWorkshopsSync()
-                for (doc in wsSnapshot.documents) {
-                    val data = doc.data ?: continue
-                    val name = (data["name"] as? String)?.trim() ?: continue
-                    if (name.isBlank()) continue
-                    val existing = localWs.find { it.name.trim().equals(name, ignoreCase = true) }
-                    if (existing == null) {
-                        repository.saveWorkshop(
-                            com.example.model.Workshop(
-                                id = 0L,
-                                name = name,
-                                createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
-                            )
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Workshops download skipped or empty", e)
-            }
-
-            // 1. Download Orders (Deduplicating by invoiceNumber, createdAt, or orderNumber)
+            // 1. Download Orders
             val ordersSnapshot = userDoc.collection("orders").get().await()
-            val localOrders = repository.getAllOrdersSync().toMutableList()
             var ordCount = 0
             for (doc in ordersSnapshot.documents) {
                 val data = doc.data ?: continue
-                val invNum = data["invoiceNumber"] as? String ?: ""
-                val crAt = (data["createdAt"] as? Number)?.toLong() ?: 0L
-                val ordNum = (data["orderNumber"] as? Number)?.toLong() ?: 1L
-                val cust = data["customerName"] as? String ?: ""
-                val wsId = (data["workshopId"] as? Number)?.toLong() ?: 1L
-
-                val existingOrder = localOrders.find { local ->
-                    (invNum.isNotBlank() && local.invoiceNumber == invNum && local.workshopId == wsId) ||
-                    (crAt > 0L && local.createdAt == crAt && local.workshopId == wsId) ||
-                    (local.orderNumber == ordNum && local.customerName == cust && local.workshopId == wsId)
-                }
-
                 val order = FurnitureOrder(
-                    id = existingOrder?.id ?: 0L,
-                    workshopId = wsId,
-                    orderNumber = ordNum,
-                    invoiceNumber = invNum,
+                    id = 0L, // fresh auto-generated id or merge
+                    orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
+                    invoiceNumber = data["invoiceNumber"] as? String ?: "",
                     modelName = data["modelName"] as? String ?: "",
                     pricePerSet = (data["pricePerSet"] as? Number)?.toLong() ?: 0L,
                     unitsPerSet = (data["unitsPerSet"] as? Number)?.toDouble() ?: 6.0,
@@ -321,79 +341,51 @@ object FirebaseService {
                     calculatedTotal = (data["calculatedTotal"] as? Number)?.toLong() ?: 0L,
                     dateJalali = data["dateJalali"] as? String ?: "",
                     dateGregorian = data["dateGregorian"] as? String ?: "",
-                    customerName = cust,
+                    customerName = data["customerName"] as? String ?: "",
                     phone = data["phone"] as? String ?: "",
                     fabricName = data["fabricName"] as? String ?: "",
                     workshopInvoiceNumber = data["workshopInvoiceNumber"] as? String ?: "",
                     notes = data["notes"] as? String ?: "",
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
-                    createdAt = if (crAt > 0L) crAt else System.currentTimeMillis()
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
                 repository.saveOrder(order)
-                if (existingOrder == null) {
-                    localOrders.add(order)
-                }
                 ordCount++
             }
 
-            // 2. Download Payments (Deduplicating by referenceNo, createdAt, or paymentNumber)
+            // 2. Download Payments
             val paymentsSnapshot = userDoc.collection("payments").get().await()
-            val localPayments = repository.getAllPaymentsSync().toMutableList()
             var payCount = 0
             for (doc in paymentsSnapshot.documents) {
                 val data = doc.data ?: continue
-                val refNo = data["referenceNo"] as? String ?: ""
-                val crAt = (data["createdAt"] as? Number)?.toLong() ?: 0L
-                val payNum = (data["paymentNumber"] as? Number)?.toLong() ?: 1L
-                val cust = data["customerName"] as? String ?: ""
-                val amt = (data["amount"] as? Number)?.toLong() ?: 0L
-                val wsId = (data["workshopId"] as? Number)?.toLong() ?: 1L
-
-                val existingPayment = localPayments.find { local ->
-                    (refNo.isNotBlank() && local.referenceNo == refNo && local.workshopId == wsId) ||
-                    (crAt > 0L && local.createdAt == crAt && local.workshopId == wsId) ||
-                    (local.paymentNumber == payNum && local.amount == amt && local.customerName == cust && local.workshopId == wsId)
-                }
-
                 val payment = PaymentRecord(
-                    id = existingPayment?.id ?: 0L,
-                    workshopId = wsId,
-                    paymentNumber = payNum,
-                    amount = amt,
+                    id = 0L,
+                    paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
+                    amount = (data["amount"] as? Number)?.toLong() ?: 0L,
                     dateJalali = data["dateJalali"] as? String ?: "",
                     dateGregorian = data["dateGregorian"] as? String ?: "",
-                    customerName = cust,
+                    customerName = data["customerName"] as? String ?: "",
                     description = data["description"] as? String ?: "",
                     paymentType = data["paymentType"] as? String ?: "transfer",
-                    referenceNo = refNo,
+                    referenceNo = data["referenceNo"] as? String ?: "",
                     bankName = data["bankName"] as? String ?: "",
                     cardNumber = data["cardNumber"] as? String ?: "",
                     relatedOrderId = (data["relatedOrderId"] as? Number)?.toLong(),
-                    createdAt = if (crAt > 0L) crAt else System.currentTimeMillis()
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
                 repository.savePayment(payment)
-                if (existingPayment == null) {
-                    localPayments.add(payment)
-                }
                 payCount++
             }
 
-            // 3. Download Presets (Strict Deduplication: Only 1 item per model name per workshop)
+            // 3. Download Presets
             val presetsSnapshot = userDoc.collection("presets").get().await()
-            val localPresets = repository.getAllPresetsSync()
             var preCount = 0
             for (doc in presetsSnapshot.documents) {
                 val data = doc.data ?: continue
-                val rawName = data["name"] as? String ?: continue
-                val trimmedName = rawName.trim()
-                if (trimmedName.isBlank()) continue
-                val wsId = (data["workshopId"] as? Number)?.toLong() ?: 1L
-
-                val existingPreset = localPresets.find { it.name.trim().equals(trimmedName, ignoreCase = true) && it.workshopId == wsId }
+                val name = data["name"] as? String ?: continue
                 val preset = ModelPreset(
-                    id = existingPreset?.id ?: 0L,
-                    workshopId = wsId,
-                    name = trimmedName,
+                    id = 0L,
+                    name = name,
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
                     defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
@@ -402,9 +394,6 @@ object FirebaseService {
                 repository.savePreset(preset)
                 preCount++
             }
-            repository.deduplicatePresets()
-            repository.deduplicateOrders()
-            repository.deduplicatePayments()
 
             // 4. Download Unit Rules
             val rulesSnapshot = userDoc.collection("unitRules").get().await()
@@ -434,26 +423,61 @@ object FirebaseService {
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading from Firestore", e)
-            Result.failure(Exception("خطا در بازیابی اطلاعات از فایربیس: ${e.localizedMessage}"))
+            Result.failure(Exception(parseCloudError(e)))
         }
     }
 
-    private fun parseFirebaseError(e: Exception): String {
+    /**
+     * Translates any Firebase Auth / Firestore / network exception into a clear
+     * Persian message for the user. Specifically detects the case where Google's
+     * servers return an HTTP 403 (Forbidden) block page instead of JSON — this
+     * happens for users in Iran connecting without (or with a blocked) VPN, since
+     * Google blocks direct access from Iranian IP addresses due to sanctions.
+     */
+    private fun parseCloudError(e: Exception): String {
         val msg = e.message ?: ""
+        val lowerMsg = msg.lowercase()
+
         return when {
-            msg.contains("The email address is badly formatted", ignoreCase = true) ->
+            // Google 403 block page (sanctions-related access block) — most common
+            // cause of "JSON conversion failed" / "Error 403 (Forbidden)" errors
+            lowerMsg.contains("403") ||
+                lowerMsg.contains("forbidden") ||
+                lowerMsg.contains("json conversion failed") ||
+                lowerMsg.contains("failed to parse") ->
+                "دسترسی به سرور گوگل برقرار نشد (خطای ۴۰۳). برای استفاده از ذخیره‌سازی و بازیابی خودکار، لطفاً یک فیلترشکن (VPN) معتبر روشن کنید و دوباره تلاش نمایید."
+
+            lowerMsg.contains("api key not valid") || lowerMsg.contains("api key expired") ->
+                "کلید ارتباطی برنامه با سرور نامعتبر است. لطفاً از آخرین نسخه برنامه استفاده کنید یا با پشتیبانی تماس بگیرید."
+
+            lowerMsg.contains("the email address is badly formatted") ->
                 "فرمت آدرس ایمیل وارد شده صحیح نمی‌باشد."
-            msg.contains("The password is invalid", ignoreCase = true) || msg.contains("Password should be at least", ignoreCase = true) ->
+
+            lowerMsg.contains("the password is invalid") || lowerMsg.contains("password should be at least") ->
                 "رمز عبور باید حداقل ۶ کاراکتر باشد."
-            msg.contains("There is no user record", ignoreCase = true) || msg.contains("user-not-found", ignoreCase = true) ->
+
+            lowerMsg.contains("there is no user record") || lowerMsg.contains("user-not-found") ->
                 "کاربری با این ایمیل یافت نشد."
-            msg.contains("wrong-password", ignoreCase = true) || msg.contains("INVALID_LOGIN_CREDENTIALS", ignoreCase = true) ->
+
+            lowerMsg.contains("wrong-password") || lowerMsg.contains("invalid_login_credentials") ->
                 "ایمیل یا کلمه عبور اشتباه است."
-            msg.contains("email-already-in-use", ignoreCase = true) ->
+
+            lowerMsg.contains("email-already-in-use") ->
                 "حسابی با این ایمیل قبلاً ثبت‌نام شده است."
-            msg.contains("network-request-failed", ignoreCase = true) || msg.contains("Unable to resolve host", ignoreCase = true) ->
-                "خطای اتصال به اینترنت. لطفاً اینترنت یا VPN خود را بررسی فرمایید."
-            else -> e.localizedMessage ?: "خطای ناشناخته در احراز هویت رخ داد."
+
+            lowerMsg.contains("too-many-requests") ->
+                "تعداد تلاش‌های شما زیاد بوده است. لطفاً چند دقیقه دیگر دوباره تلاش کنید."
+
+            lowerMsg.contains("network-request-failed") ||
+                lowerMsg.contains("unable to resolve host") ||
+                lowerMsg.contains("timeout") ||
+                lowerMsg.contains("failed to connect") ->
+                "خطای اتصال به اینترنت. لطفاً اتصال اینترنت خود را بررسی کنید و در صورت نیاز فیلترشکن (VPN) را روشن نمایید."
+
+            lowerMsg.contains("permission_denied") || lowerMsg.contains("permission denied") ->
+                "دسترسی لازم برای این عملیات وجود ندارد. لطفاً دوباره وارد حساب کاربری خود شوید."
+
+            else -> "خطایی در ارتباط با سرور فایربیس رخ داد. لطفاً از روشن بودن اینترنت و فیلترشکن (VPN) خود اطمینان حاصل کرده و دوباره تلاش کنید."
         }
     }
 }
