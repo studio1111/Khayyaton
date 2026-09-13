@@ -7,6 +7,7 @@ import com.example.model.FurnitureOrder
 import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
 import com.example.model.UnitConversionRule
+import com.example.model.Workshop
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
@@ -206,7 +207,8 @@ object FirebaseService {
         orders: List<FurnitureOrder>,
         payments: List<PaymentRecord>,
         presets: List<ModelPreset>,
-        unitRules: List<UnitConversionRule>
+        unitRules: List<UnitConversionRule>,
+        workshops: List<Workshop> = emptyList()
     ): Result<CloudSyncResult> {
         val user = auth?.currentUser ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
         val db = firestore ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
@@ -214,11 +216,23 @@ object FirebaseService {
         return try {
             val userDoc = db.collection("users").document(user.uid)
 
+            // 0. Workshops upload
+            val workshopsCol = userDoc.collection("workshops")
+            for (workshop in workshops) {
+                val workshopMap = mapOf(
+                    "id" to workshop.id,
+                    "name" to workshop.name,
+                    "createdAt" to workshop.createdAt
+                )
+                workshopsCol.document("wrk_${workshop.id}").set(workshopMap, SetOptions.merge()).await()
+            }
+
             // 1. Orders batch upload
             val ordersCol = userDoc.collection("orders")
             for (order in orders) {
                 val orderMap = mapOf(
                     "id" to order.id,
+                    "workshopId" to order.workshopId,
                     "orderNumber" to order.orderNumber,
                     "invoiceNumber" to order.invoiceNumber,
                     "modelName" to order.modelName,
@@ -245,6 +259,7 @@ object FirebaseService {
             for (payment in payments) {
                 val payMap = mapOf(
                     "id" to payment.id,
+                    "workshopId" to payment.workshopId,
                     "paymentNumber" to payment.paymentNumber,
                     "amount" to payment.amount,
                     "dateJalali" to payment.dateJalali,
@@ -266,6 +281,7 @@ object FirebaseService {
             for (preset in presets) {
                 val presetMap = mapOf(
                     "id" to preset.id,
+                    "workshopId" to preset.workshopId,
                     "name" to preset.name,
                     "defaultPricePerSet" to preset.defaultPricePerSet,
                     "defaultUnitsPerSet" to preset.defaultUnitsPerSet,
@@ -324,6 +340,20 @@ object FirebaseService {
         return try {
             val userDoc = db.collection("users").document(user.uid)
 
+            // 0. Download Workshops
+            val workshopsSnapshot = userDoc.collection("workshops").get().await()
+            var workshopCount = 0
+            for (doc in workshopsSnapshot.documents) {
+                val data = doc.data ?: continue
+                val workshop = Workshop(
+                    id = 0L,
+                    name = data["name"] as? String ?: "",
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                )
+                repository.saveWorkshop(workshop)
+                workshopCount++
+            }
+
             // 1. Download Orders
             val ordersSnapshot = userDoc.collection("orders").get().await()
             var ordCount = 0
@@ -331,6 +361,7 @@ object FirebaseService {
                 val data = doc.data ?: continue
                 val order = FurnitureOrder(
                     id = 0L, // fresh auto-generated id or merge
+                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
                     orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
                     invoiceNumber = data["invoiceNumber"] as? String ?: "",
                     modelName = data["modelName"] as? String ?: "",
@@ -360,6 +391,7 @@ object FirebaseService {
                 val data = doc.data ?: continue
                 val payment = PaymentRecord(
                     id = 0L,
+                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
                     paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
                     amount = (data["amount"] as? Number)?.toLong() ?: 0L,
                     dateJalali = data["dateJalali"] as? String ?: "",
@@ -385,6 +417,7 @@ object FirebaseService {
                 val name = data["name"] as? String ?: continue
                 val preset = ModelPreset(
                     id = 0L,
+                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
                     name = name,
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
                     defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
