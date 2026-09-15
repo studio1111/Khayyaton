@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "SheetOn"
+rootProject.name = "KhayyatOn"
 
 include(":app")

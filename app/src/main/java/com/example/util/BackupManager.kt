@@ -28,7 +28,7 @@ object BackupManager {
         presets: List<ModelPreset>
     ): String {
         val root = JSONObject()
-        root.put("app", "SheetOn")
+        root.put("app", "KhayyatOn")
         root.put("version", 2)
         root.put("exportedAt", System.currentTimeMillis())
         root.put("exportedDateJalali", PersianUtils.getTodayJalaliString())
@@ -108,7 +108,7 @@ object BackupManager {
     ): File? {
         return try {
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val fileName = "SheetOn_Backup_$timeStamp.json"
+            val fileName = "Khayyaton_Backup_$timeStamp.json"
 
             val targetDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
             if (!targetDir.exists()) targetDir.mkdirs()
@@ -138,7 +138,7 @@ object BackupManager {
             if (!cacheDir.exists()) cacheDir.mkdirs()
 
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val file = File(cacheDir, "SheetOn_Backup_$timeStamp.json")
+            val file = File(cacheDir, "Khayyaton_Backup_$timeStamp.json")
             file.writeText(json, Charsets.UTF_8)
 
             val uri = FileProvider.getUriForFile(
@@ -150,8 +150,8 @@ object BackupManager {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/json"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "پشتیبان اطلاعات کارگاه SheetOn")
-                putExtra(Intent.EXTRA_TEXT, "فایل پشتیبان کامل داده‌های کارگاه مبل SheetOn شامل ${orders.size} سفارش و ${payments.size} دریافتی.")
+                putExtra(Intent.EXTRA_SUBJECT, "پشتیبان اطلاعات کارگاه خیاطان")
+                putExtra(Intent.EXTRA_TEXT, "فایل پشتیبان کامل داده‌های کارگاه خیاطان شامل ${orders.size} سفارش و ${payments.size} دریافتی.")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 if (preferGoogleDrive) {
                     setPackage("com.google.android.apps.docs")

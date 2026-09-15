@@ -28,11 +28,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -159,7 +163,7 @@ fun GlassyAuthScreen(
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.sheeton_logo_icon),
-                        contentDescription = "لوگوی SheetOn",
+                        contentDescription = "لوگوی خیاطان",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .size(54.dp)
@@ -170,15 +174,22 @@ fun GlassyAuthScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "SheetOn",
-                    color = NeonYellowGlow,
-                    fontSize = 28.sp,
+                    text = "خیاطان",
+                    color = Color(0xFFD97706),
+                    fontSize = 32.sp,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp
+                    fontFamily = FontFamily.Serif,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color(0xFFD97706).copy(alpha = 0.45f),
+                            offset = Offset(0f, 2f),
+                            blurRadius = 8f
+                        )
+                    )
                 )
 
                 Text(
-                    text = if (isFirstLaunch) "خوش آمدید! ثبت نام و ورود اولیه" else "ورود به حساب ابری SheetOn",
+                    text = if (isFirstLaunch) "خوش آمدید! ثبت نام و ورود اولیه" else "ورود به حساب ابری خیاطان",
                     color = Color.White.copy(alpha = 0.85f),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold

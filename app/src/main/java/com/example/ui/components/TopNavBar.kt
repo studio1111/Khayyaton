@@ -11,7 +11,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,11 +83,18 @@ fun TopNavBar(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "SheetOn",
+                        text = "خیاطان",
                         color = Color(0xFFD97706),
-                        fontSize = 16.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Black,
-                        letterSpacing = 0.5.sp
+                        fontFamily = FontFamily.Serif,
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = Color(0xFFD97706).copy(alpha = 0.3f),
+                                offset = Offset(0f, 1f),
+                                blurRadius = 4f
+                            )
+                        )
                     )
 
                     Icon(

@@ -14,10 +14,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -128,7 +132,7 @@ fun SplashScreen(
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.sheeton_logo_icon),
-                    contentDescription = "لوگوی SheetOn",
+                    contentDescription = "لوگوی خیاطان",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .size(68.dp)
@@ -139,11 +143,18 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "SheetOn",
-                color = NeonYellowGlow,
-                fontSize = 36.sp,
+                text = "خیاطان",
+                color = Color(0xFFD97706),
+                fontSize = 38.sp,
                 fontWeight = FontWeight.Black,
-                letterSpacing = 1.5.sp
+                fontFamily = FontFamily.Serif,
+                style = TextStyle(
+                    shadow = Shadow(
+                        color = Color(0xFFD97706).copy(alpha = 0.5f),
+                        offset = Offset(0f, 3f),
+                        blurRadius = 10f
+                    )
+                )
             )
 
             Spacer(modifier = Modifier.height(6.dp))

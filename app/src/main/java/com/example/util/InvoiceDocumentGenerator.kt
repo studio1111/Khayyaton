@@ -40,7 +40,7 @@ object InvoiceDocumentGenerator {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>صورتحساب کارکرد و دریافتی ها - SheetOn</title>
+    <title>صورتحساب کارکرد و دریافتی ها - خیاطان</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Vazirmatn', 'Tahoma', 'Segoe UI', sans-serif; }
         body { background-color: #f8fafc; color: #0f172a; padding: 24px; direction: rtl; }
@@ -82,7 +82,7 @@ object InvoiceDocumentGenerator {
         <!-- Header -->
         <div class="header">
             <div class="logo-title">
-                <h1>SheetOn</h1>
+                <h1>خیاطان</h1>
                 <p>صورتحساب کارکرد و دریافتی ها</p>
             </div>
             <div class="meta-info">
@@ -212,7 +212,7 @@ object InvoiceDocumentGenerator {
         </div>
 
         <div class="footer">
-            فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با SheetOn
+            فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با خیاطان
         </div>
     </div>
 </body>
@@ -239,7 +239,7 @@ object InvoiceDocumentGenerator {
             if (!cacheDir.exists()) cacheDir.mkdirs()
 
             val sanitizedCustomer = if (targetCustomer.isNotBlank()) "_${targetCustomer.replace(" ", "_")}" else ""
-            val file = File(cacheDir, "SheetOn_Invoice${sanitizedCustomer}_${System.currentTimeMillis()}.html")
+            val file = File(cacheDir, "Khayyaton_Invoice${sanitizedCustomer}_${System.currentTimeMillis()}.html")
             file.writeText(htmlContent, Charsets.UTF_8)
 
             val uri = FileProvider.getUriForFile(
@@ -251,8 +251,8 @@ object InvoiceDocumentGenerator {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/html"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با SheetOn")
-                putExtra(Intent.EXTRA_TEXT, "فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با SheetOn")
+                putExtra(Intent.EXTRA_SUBJECT, "فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با خیاطان")
+                putExtra(Intent.EXTRA_TEXT, "فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با خیاطان")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
@@ -346,7 +346,7 @@ object InvoiceDocumentGenerator {
             })
             canvas.drawRect(20f, 20f, (pageWidth - 20).toFloat(), 75f, borderPaint)
 
-            canvas.drawText("SheetOn - صورتحساب کارکرد و دریافتی ها", 35f, 44f, titlePaint)
+            canvas.drawText("خیاطان - صورتحساب کارکرد و دریافتی ها", 35f, 44f, titlePaint)
             textPaint.textSize = 8.5f
             canvas.drawText("نمایش جدول کارکرد و دریافتی ها با تاریخ فاکتور", 35f, 60f, textPaint)
 
@@ -539,7 +539,7 @@ object InvoiceDocumentGenerator {
             // Footer
             textPaint.textSize = 7.5f
             textPaint.color = Color.rgb(148, 163, 184)
-            canvas.drawText("فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با SheetOn", (pageWidth / 2 - 120).toFloat(), (pageHeight - 20).toFloat(), textPaint)
+            canvas.drawText("فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با خیاطان", (pageWidth / 2 - 120).toFloat(), (pageHeight - 20).toFloat(), textPaint)
 
             doc.finishPage(page)
 
@@ -548,7 +548,7 @@ object InvoiceDocumentGenerator {
             if (!cacheDir.exists()) cacheDir.mkdirs()
 
             val sanitizedCustomer = if (targetCustomer.isNotBlank()) "_${targetCustomer.replace(" ", "_")}" else ""
-            val pdfFile = File(cacheDir, "SheetOn_Invoice${sanitizedCustomer}_${System.currentTimeMillis()}.pdf")
+            val pdfFile = File(cacheDir, "Khayyaton_Invoice${sanitizedCustomer}_${System.currentTimeMillis()}.pdf")
             val fos = FileOutputStream(pdfFile)
             doc.writeTo(fos)
             fos.close()
@@ -563,8 +563,8 @@ object InvoiceDocumentGenerator {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با SheetOn")
-                putExtra(Intent.EXTRA_TEXT, "فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با SheetOn")
+                putExtra(Intent.EXTRA_SUBJECT, "فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با خیاطان")
+                putExtra(Intent.EXTRA_TEXT, "فایل PDF صورتحساب کارکرد و دریافتی ها ساخته شده با خیاطان")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 

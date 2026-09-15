@@ -29,7 +29,7 @@ class GreetingScreenshotTest {
     composeTestRule.setContent {
       SheetOnTheme {
         Box(modifier = Modifier.padding(16.dp)) {
-          Text("SheetOn Upholstery Workshop")
+          Text("خیاطان")
         }
       }
     }

@@ -167,7 +167,7 @@ fun CardShareDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "ساخته شده با برنامه SheetOn",
+                                text = "ساخته شده با برنامه خیاطان",
                                 color = Color(0xFFF8FAFC),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Black

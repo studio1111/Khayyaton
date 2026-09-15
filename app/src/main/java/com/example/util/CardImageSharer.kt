@@ -91,7 +91,7 @@ object CardImageSharer {
         }
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
 
-        // 2. Header Brand Banner (مدیریت کارگاه مبل SheetOn)
+        // 2. Header Brand Banner (مدیریت کارگاه خیاطان)
         val headerPaint = Paint().apply {
             color = android.graphics.Color.parseColor("#0B192A")
             isAntiAlias = true
@@ -114,7 +114,7 @@ object CardImageSharer {
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("ساخته شده با برنامه SheetOn", width / 2f, 96f, brandPaint)
+        canvas.drawText("ساخته شده با برنامه خیاطان", width / 2f, 96f, brandPaint)
 
         // 3. Main Order Card Background (Color of the Model)
         val modelColorInt = PersianUtils.parseColor(
@@ -353,7 +353,7 @@ object CardImageSharer {
         }
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
 
-        // 2. Header Brand Banner (SheetOn Neon)
+        // 2. Header Brand Banner (خیاطان)
         val headerPaint = Paint().apply {
             color = android.graphics.Color.parseColor("#0B192A")
             isAntiAlias = true
@@ -376,7 +376,7 @@ object CardImageSharer {
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("ساخته شده با برنامه SheetOn", width / 2f, 96f, brandPaint)
+        canvas.drawText("ساخته شده با برنامه خیاطان", width / 2f, 96f, brandPaint)
 
         // 3. Main Payment Card Background
         val cardRect = RectF(40f, 150f, width - 40f, 1000f)
@@ -635,7 +635,7 @@ object CardImageSharer {
                 val contentValues = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
                     put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SheetOn")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/KhayyatOn")
                 }
                 val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
                 if (uri != null) {
@@ -643,7 +643,7 @@ object CardImageSharer {
                 }
             } else {
                 val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val appDir = File(picturesDir, "SheetOn").apply { mkdirs() }
+                val appDir = File(picturesDir, "KhayyatOn").apply { mkdirs() }
                 val imageFile = File(appDir, filename)
                 outputStream = FileOutputStream(imageFile)
             }
@@ -668,7 +668,7 @@ object CardImageSharer {
         bitmap: Bitmap,
         subjectTitle: String,
         shareText: String = "",
-        fileNamePrefix: String = "SheetOn_Card"
+        fileNamePrefix: String = "Khayyaton_Card"
     ) {
         try {
             val cachePath = File(context.cacheDir, "images").apply { mkdirs() }

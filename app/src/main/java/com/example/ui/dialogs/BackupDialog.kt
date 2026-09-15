@@ -426,7 +426,7 @@ fun BackupDialog(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("انتخاب و بازیابی از فایل JSON", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                Text("انتخاب فایل پشتیبان SheetOn از حافظه گوشی برای بازگردانی اطلاعات", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("انتخاب فایل پشتیبان خیاطان از حافظه گوشی برای بازگردانی اطلاعات", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

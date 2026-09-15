@@ -77,7 +77,7 @@ data class UnitConversionRule(
 )
 
 enum class AppThemeMode(val titleFa: String) {
-    NEON_GLASS("نئونی شیشه‌ای سبز و زرد (SheetOn Neon)"),
+    NEON_GLASS("نئونی شیشه‌ای سبز و زرد (خیاطان)"),
     LIGHT("روشن (استاندارد)"),
     DARK("تاریک (محیط شب)"),
     GLASS_BLUE("شیشه‌ای سرمه‌ای"),

@@ -1461,7 +1461,7 @@ private fun shareAnalysisReport(
 ) {
     try {
         val sb = StringBuilder()
-        sb.append("📊 گزارش جامع اطلاعات و آنالیز هوشمند SheetOn\n")
+        sb.append("📊 گزارش جامع اطلاعات و آنالیز هوشمند خیاطان\n")
         sb.append("بخش: $tabTitle\n")
         sb.append("تاریخ گزارش: ${PersianUtils.toPersianDigits(PersianUtils.getTodayJalaliString())}\n")
         sb.append("==================================\n\n")
@@ -1488,7 +1488,7 @@ private fun shareAnalysisReport(
         }
 
         sb.append("\n==================================\n")
-        sb.append("نرم‌افزار مدیریت هوشمند کارکرد و حسابداری کارگاه SheetOn")
+        sb.append("نرم‌افزار مدیریت هوشمند کارکرد و حسابداری کارگاه خیاطان")
 
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
