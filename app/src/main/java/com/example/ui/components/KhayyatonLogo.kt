@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.sp
  * خیاطان Brand Typography Component.
  * Displays the artistic brand title "خیاطان" with dark yellow-orange color.
  */
-val DarkYellowBrandColor = Color(0xFFD97706) // زرد تیره مایل به نارنجی (Dark Golden Amber-Orange)
+val DarkYellowBrandColor = Color(0xFFD97706)
 
 @Composable
 fun KhayyatonLogo(
@@ -39,12 +39,3 @@ fun KhayyatonLogo(
         modifier = modifier
     )
 }
-
-@Composable
-fun SheetOnLogo(
-    modifier: Modifier = Modifier,
-    fontSize: TextUnit = 24.sp
-) {
-    KhayyatonLogo(modifier = modifier, fontSize = fontSize)
-}
-
