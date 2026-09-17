@@ -15,11 +15,13 @@ import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
 import com.example.data.firebase.FirebaseService
 import com.example.data.firebase.FirebaseUserDto
+import com.example.data.subscription.SubscriptionManager
+import com.example.model.UserSubscription
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
+class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     val workshops: StateFlow<List<com.example.model.Workshop>> = repository.workshops
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -82,11 +84,17 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isSearchDialogOpen = MutableStateFlow(false)
     val isAuthDialogOpen = MutableStateFlow(false)
     val isWorkshopsDialogOpen = MutableStateFlow(false)
+    val isSubscriptionDialogOpen = MutableStateFlow(false)
+    val subscriptionState: StateFlow<UserSubscription> = SubscriptionManager.subscriptionState
     val currentUser = MutableStateFlow<FirebaseUserDto?>(null)
     val customUsername = MutableStateFlow<String>("")
     val isDrawerOpen = MutableStateFlow(false)
     val isAutoSyncing = MutableStateFlow(false)
     val autoSyncStatusMessage = MutableStateFlow<String?>(null)
+
+    fun hasPremiumAccess(): Boolean {
+        return SubscriptionManager.hasPremiumAccess()
+    }
 
     init {
         viewModelScope.launch {
@@ -111,6 +119,7 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
 
             val user = FirebaseService.getCurrentUser()
             currentUser.value = user
+            SubscriptionManager.syncSubscriptionWithFirebase()
             if (user != null) {
                 if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
                     customUsername.value = user.displayName
@@ -548,6 +557,7 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
      */
     fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
         currentUser.value = user
+        SubscriptionManager.syncSubscriptionWithFirebase()
         val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
             ?: customUsername.value.takeIf { it.isNotBlank() }
             ?: user.displayName?.takeIf { it.isNotBlank() }
@@ -627,12 +637,15 @@ class SheetOnViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 }
 
-class SheetOnViewModelFactory(private val repository: WorkshopRepository) : ViewModelProvider.Factory {
+class KhayyatonViewModelFactory(private val repository: WorkshopRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(SheetOnViewModel::class.java)) {
+        if (modelClass.isAssignableFrom(KhayyatonViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return SheetOnViewModel(repository) as T
+            return KhayyatonViewModel(repository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
+
+typealias SheetOnViewModel = KhayyatonViewModel
+typealias SheetOnViewModelFactory = KhayyatonViewModelFactory

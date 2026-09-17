@@ -27,7 +27,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.model.FurnitureOrder
 import com.example.model.PaymentRecord
-import com.example.ui.components.SheetOnLogo
+import com.example.ui.components.KhayyatonLogo
 import com.example.ui.theme.Amber600
 import com.example.ui.theme.Emerald600
 import com.example.ui.theme.Rose600
@@ -206,7 +206,7 @@ fun InvoiceDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            SheetOnLogo(fontSize = 20.sp)
+                            KhayyatonLogo(fontSize = 20.sp)
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     text = "تاریخ صدور: ${PersianUtils.toPersianDigits(todayDate)}",

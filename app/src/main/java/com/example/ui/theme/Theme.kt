@@ -99,7 +99,7 @@ private val NeonGlassColorScheme = darkColorScheme(
 )
 
 @Composable
-fun SheetOnTheme(
+fun KhayyatonTheme(
     themeMode: AppThemeMode = AppThemeMode.NEON_GLASS,
     content: @Composable () -> Unit
 ) {
@@ -116,4 +116,12 @@ fun SheetOnTheme(
         typography = Typography,
         content = content
     )
+}
+
+@Composable
+fun SheetOnTheme(
+    themeMode: AppThemeMode = AppThemeMode.NEON_GLASS,
+    content: @Composable () -> Unit
+) {
+    KhayyatonTheme(themeMode = themeMode, content = content)
 }

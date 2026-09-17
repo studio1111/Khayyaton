@@ -7,9 +7,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import com.example.data.AppDatabase
 import com.example.data.WorkshopRepository
-import com.example.ui.SheetOnApp
-import com.example.ui.SheetOnViewModel
-import com.example.ui.SheetOnViewModelFactory
+import com.example.ui.KhayyatonApp
+import com.example.ui.KhayyatonViewModel
+import com.example.ui.KhayyatonViewModelFactory
 
 class MainActivity : ComponentActivity() {
 
@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         com.example.data.firebase.FirebaseService.initialize(applicationContext)
+        com.example.data.subscription.SubscriptionManager.initialize(applicationContext)
 
         val database = AppDatabase.getDatabase(applicationContext)
         val repository = WorkshopRepository(
@@ -29,12 +30,17 @@ class MainActivity : ComponentActivity() {
             workshopDao = database.workshopDao()
         )
 
-        val viewModel: SheetOnViewModel by viewModels {
-            SheetOnViewModelFactory(repository)
+        val viewModel: KhayyatonViewModel by viewModels {
+            KhayyatonViewModelFactory(repository)
         }
 
         setContent {
-            SheetOnApp(viewModel = viewModel)
+            KhayyatonApp(viewModel = viewModel)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        com.example.data.subscription.SubscriptionManager.disconnect()
     }
 }

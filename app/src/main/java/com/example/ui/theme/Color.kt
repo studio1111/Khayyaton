@@ -50,7 +50,7 @@ val NavyBg = Color(0xFF071120)
 val NavySurface = Color(0xFF0E1E38)
 val NavyAccent = Color(0xFF38BDF8)
 
-// Neon Glass Green & Yellow (SheetOn Theme)
+// Neon Glass Green & Yellow (Khayyaton Theme)
 val NeonGreen = Color(0xFF00E676)
 val NeonGreenGlow = Color(0xFF22C55E)
 val NeonGreenDeep = Color(0xFF059669)

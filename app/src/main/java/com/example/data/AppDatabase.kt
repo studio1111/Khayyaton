@@ -51,7 +51,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "sheeton_workshop.db"
+                    "khayyaton_workshop.db"
                 )
                     .addMigrations(MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
@@ -72,7 +72,7 @@ class WorkshopRepository(
     val workshopDao: WorkshopDao
 ) {
     private val prefs by lazy {
-        context?.getSharedPreferences("sheeton_prefs", android.content.Context.MODE_PRIVATE)
+        context?.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
     }
 
     fun getSavedActiveWorkshopId(): Long {

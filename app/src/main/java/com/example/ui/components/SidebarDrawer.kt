@@ -55,6 +55,8 @@ fun SidebarDrawer(
     onOpenUnitRules: () -> Unit,
     onOpenInvoice: () -> Unit,
     onOpenBackup: () -> Unit,
+    subscriptionState: com.example.model.UserSubscription? = null,
+    onOpenSubscription: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -253,6 +255,19 @@ fun SidebarDrawer(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Section 1: Primary Action Items
+                val subBadge = when (subscriptionState?.status) {
+                    com.example.model.SubscriptionStatus.SUBSCRIBED -> "ویژه"
+                    com.example.model.SubscriptionStatus.TRIAL_ACTIVE -> "آزمایشی (${com.example.util.PersianUtils.toPersianDigits(subscriptionState.remainingDays)} روز)"
+                    com.example.model.SubscriptionStatus.TRIAL_EXPIRED -> "منقضی شده"
+                    com.example.model.SubscriptionStatus.EXPIRED -> "تمدید اشتراک"
+                    else -> null
+                }
+                DrawerItem(
+                    icon = Icons.Outlined.WorkspacePremium,
+                    title = "اشتراک برنامه و ارتقا",
+                    badge = subBadge,
+                    onClick = { onOpenSubscription(); onClose() }
+                )
                 DrawerItem(
                     icon = Icons.Outlined.Storefront,
                     title = "مدیریت کارگاه‌ها",

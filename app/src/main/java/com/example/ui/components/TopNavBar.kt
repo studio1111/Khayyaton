@@ -62,7 +62,7 @@ fun TopNavBar(
                 )
             }
 
-            // 2. Search Bar with SheetOn Brand Name on one side and Search Magnifying Glass Icon on the other side
+            // 2. Search Bar with Khayyaton Brand Name on one side and Search Magnifying Glass Icon on the other side
             Surface(
                 onClick = onOpenSearch,
                 shape = RoundedCornerShape(12.dp),

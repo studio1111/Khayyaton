@@ -25,11 +25,11 @@ import com.example.model.FeedItem
 import com.example.ui.components.*
 import com.example.ui.dialogs.*
 import com.example.ui.screens.GlassyAuthScreen
-import com.example.ui.theme.SheetOnTheme
+import com.example.ui.theme.KhayyatonTheme
 import kotlinx.coroutines.launch
 
 @Composable
-fun SheetOnApp(viewModel: SheetOnViewModel) {
+fun KhayyatonApp(viewModel: KhayyatonViewModel) {
     val orders by viewModel.orders.collectAsStateWithLifecycle()
     val filteredOrders by viewModel.filteredOrders.collectAsStateWithLifecycle()
     val payments by viewModel.payments.collectAsStateWithLifecycle()
@@ -68,6 +68,8 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
     val isSearchDialogOpen by viewModel.isSearchDialogOpen.collectAsStateWithLifecycle()
     val isAuthDialogOpen by viewModel.isAuthDialogOpen.collectAsStateWithLifecycle()
     val isWorkshopsDialogOpen by viewModel.isWorkshopsDialogOpen.collectAsStateWithLifecycle()
+    val isSubscriptionDialogOpen by viewModel.isSubscriptionDialogOpen.collectAsStateWithLifecycle()
+    val subscriptionState by viewModel.subscriptionState.collectAsStateWithLifecycle()
     val activeWorkshop by viewModel.activeWorkshop.collectAsStateWithLifecycle()
     val workshops by viewModel.workshops.collectAsStateWithLifecycle()
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
@@ -87,7 +89,7 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val sharedPrefs = remember {
-        context.getSharedPreferences("sheeton_prefs", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
     }
 
     var hasCompletedFirstLaunchAuth by remember {
@@ -97,7 +99,7 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
     // If user hasn't completed authentication with email/username and is not logged in, show GlassyAuthScreen (no offline skip)
     if (!hasCompletedFirstLaunchAuth && currentUser == null) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            SheetOnTheme(themeMode = themeMode) {
+            KhayyatonTheme(themeMode = themeMode) {
                 GlassyAuthScreen(
                     isFirstLaunch = true,
                     onAuthSuccess = { user, username, workshopName ->
@@ -112,7 +114,7 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        SheetOnTheme(themeMode = themeMode) {
+        KhayyatonTheme(themeMode = themeMode) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
@@ -137,16 +139,31 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                         onOpenUnitRules = { viewModel.isUnitRulesDialogOpen.value = true },
                         onOpenInvoice = { viewModel.openInvoice(null) },
                         onOpenBackup = { viewModel.isBackupDialogOpen.value = true },
+                        subscriptionState = subscriptionState,
+                        onOpenSubscription = { viewModel.isSubscriptionDialogOpen.value = true },
                         onClose = { coroutineScope.launch { drawerState.close() } }
                     )
                 }
             ) {
+                fun checkAccessAndExecute(action: () -> Unit) {
+                    if (viewModel.hasPremiumAccess()) {
+                        action()
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            "دوره آزمایشی ۳ روزه شما به پایان رسیده است. لطفاً برای ثبت سفارش و استفاده از امکانات، اشتراک تهیه فرمایید.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                        viewModel.isSubscriptionDialogOpen.value = true
+                    }
+                }
+
                 Scaffold(
                     topBar = {
                         TopNavBar(
                             todayDate = todayDate,
-                            onOpenNewOrder = { viewModel.openNewOrder() },
-                            onOpenNewPayment = { viewModel.openNewPayment() },
+                            onOpenNewOrder = { checkAccessAndExecute { viewModel.openNewOrder() } },
+                            onOpenNewPayment = { checkAccessAndExecute { viewModel.openNewPayment() } },
                             onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
                             onOpenSearch = { viewModel.isSearchDialogOpen.value = true }
                         )
@@ -193,7 +210,7 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                                 // UNIFIED MODE: All cards (orders and payments) displayed chronologically in one feed
                                 if (feedItems.isEmpty()) {
                                     item {
-                                        EmptyFeedState(onNewOrder = { viewModel.openNewOrder() })
+                                        EmptyFeedState(onNewOrder = { checkAccessAndExecute { viewModel.openNewOrder() } })
                                     }
                                 } else {
                                     items(
@@ -237,7 +254,7 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                                 // SEPARATED MODE: Work orders first, followed by Recent Payments section
                                 if (filteredOrders.isEmpty()) {
                                     item {
-                                        EmptyFeedState(onNewOrder = { viewModel.openNewOrder() })
+                                        EmptyFeedState(onNewOrder = { checkAccessAndExecute { viewModel.openNewOrder() } })
                                     }
                                 } else {
                                     items(
@@ -443,6 +460,11 @@ fun SheetOnApp(viewModel: SheetOnViewModel) {
                 onRenameWorkshop = { id, name -> viewModel.renameWorkshop(id, name) },
                 onDeleteWorkshop = { ws -> viewModel.deleteWorkshop(ws) }
             )
+
+            SubscriptionDialog(
+                isOpen = isSubscriptionDialogOpen,
+                onDismiss = { viewModel.isSubscriptionDialogOpen.value = false }
+            )
         }
     }
 }
@@ -504,4 +526,9 @@ private fun EmptyFeedState(onNewOrder: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun SheetOnApp(viewModel: KhayyatonViewModel) {
+    KhayyatonApp(viewModel = viewModel)
 }
