@@ -27,25 +27,25 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF1D4ED8), // Rich high-contrast royal blue
+    primary = Color(0xFF1D4ED8),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFDBEAFE),
-    onPrimaryContainer = Color(0xFF0F172A), // Deep navy on blue container
-    secondary = Color(0xFF047857), // High-contrast Emerald
+    onPrimaryContainer = Color(0xFF0F172A),
+    secondary = Color(0xFF047857),
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFD1FAE5),
-    onSecondaryContainer = Color(0xFF064E3B), // Deep forest green on emerald container
-    tertiary = Color(0xFFB45309), // Amber high contrast
+    onSecondaryContainer = Color(0xFF064E3B),
+    tertiary = Color(0xFFB45309),
     onTertiary = Color.White,
     tertiaryContainer = Color(0xFFFEF3C7),
     onTertiaryContainer = Color(0xFF78350F),
-    background = Color(0xFFF8FAFC), // Pure clean light slate
+    background = Color(0xFFF8FAFC),
     surface = Color.White,
-    surfaceVariant = Color(0xFFE2E8F0), // Crisp light surface
-    onBackground = Color(0xFF000000), // Solid black for guaranteed readability
-    onSurface = Color(0xFF000000), // Solid black for guaranteed readability
-    onSurfaceVariant = Color(0xFF0F172A), // Deepest dark slate (nearly black) - never semi-transparent or light
-    outline = Color(0xFF475569), // Clear dark outline
+    surfaceVariant = Color(0xFFE2E8F0),
+    onBackground = Color(0xFF000000),
+    onSurface = Color(0xFF000000),
+    onSurfaceVariant = Color(0xFF0F172A),
+    outline = Color(0xFF475569),
     outlineVariant = Color(0xFF94A3B8)
 )
 
@@ -116,12 +116,4 @@ fun KhayyatonTheme(
         typography = Typography,
         content = content
     )
-}
-
-@Composable
-fun SheetOnTheme(
-    themeMode: AppThemeMode = AppThemeMode.NEON_GLASS,
-    content: @Composable () -> Unit
-) {
-    KhayyatonTheme(themeMode = themeMode, content = content)
 }
