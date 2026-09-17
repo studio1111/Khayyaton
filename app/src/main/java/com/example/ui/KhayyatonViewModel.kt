@@ -57,65 +57,20 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         PersianUtils.getTodayDateByCalendar(calType)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PersianUtils.getTodayJalaliString())
 
+    // Search & Filters
     val searchQuery = MutableStateFlow("")
     val selectedCustomerFilter = MutableStateFlow<String?>(null)
     val selectedModelFilter = MutableStateFlow<String?>(null)
     val selectedDateFilter = MutableStateFlow<String?>(null)
-    val selectedInvoiceFilter = MutableStateFlow<Boolean?>(null)
+    val selectedInvoiceFilter = MutableStateFlow<String?>(null)
 
-    val filteredOrders: StateFlow<List<FurnitureOrder>> = combine(
-        orders, searchQuery, selectedCustomerFilter, selectedModelFilter, selectedDateFilter, selectedInvoiceFilter
-    ) { currentOrders, query, customer, model, date, invoice ->
-        currentOrders.filter { order ->
-            (query.isBlank() || order.customerName.contains(query, ignoreCase = true) || order.modelName.contains(query, ignoreCase = true) || order.orderNumber.toString().contains(query)) &&
-            (customer == null || order.customerName == customer) &&
-            (model == null || order.modelName == model) &&
-            (date == null || order.date == date) &&
-            (invoice == null || order.invoiceIssued == invoice)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val filteredPayments: StateFlow<List<PaymentRecord>> = combine(
-        payments, searchQuery, selectedCustomerFilter, selectedDateFilter
-    ) { currentPayments, query, customer, date ->
-        currentPayments.filter { payment ->
-            (query.isBlank() || payment.customerName.contains(query, ignoreCase = true) || payment.paymentNumber.toString().contains(query)) &&
-            (customer == null || payment.customerName == customer) &&
-            (date == null || payment.date == date)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val feedItems: StateFlow<List<FeedItem>> = combine(filteredOrders, filteredPayments, cardSortOrder) { currentOrders, currentPayments, sortOrder ->
-        val combined = buildList {
-            addAll(currentOrders.map { FeedItem.OrderItem(it) })
-            addAll(currentPayments.mapIndexed { index, payment -> FeedItem.PaymentItem(payment, index + 1) })
-        }
-        when (sortOrder) {
-            CardSortOrder.NEWEST_TOP -> combined.sortedByDescending { item ->
-                when (item) {
-                    is FeedItem.OrderItem -> item.order.createdAt
-                    is FeedItem.PaymentItem -> item.payment.createdAt
-                }
-            }
-            CardSortOrder.NEWEST_BOTTOM -> combined.sortedBy { item ->
-                when (item) {
-                    is FeedItem.OrderItem -> item.order.createdAt
-                    is FeedItem.PaymentItem -> item.payment.createdAt
-                }
-            }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val uniqueCustomers: StateFlow<List<String>> = orders.map { list ->
-        list.map { it.customerName }.filter { it.isNotBlank() }.distinct().sorted()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val totalWork: StateFlow<Long> = filteredOrders.map { list -> list.sumOf { it.totalPrice } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
-    val totalReceived: StateFlow<Long> = filteredPayments.map { list -> list.sumOf { it.amount } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
-    val remainingBalance: StateFlow<Long> = combine(totalWork, totalReceived) { work, received -> work - received }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+    // Dialog & UI Selection States
+    val editingOrder = MutableStateFlow<FurnitureOrder?>(null)
+    val editingPayment = MutableStateFlow<PaymentRecord?>(null)
+    val selectedInvoiceOrder = MutableStateFlow<FurnitureOrder?>(null)
+    val cardShareOrder = MutableStateFlow<FurnitureOrder?>(null)
+    val cardSharePayment = MutableStateFlow<PaymentRecord?>(null)
+    val deleteTarget = MutableStateFlow<DeleteTarget?>(null)
 
     val isOrderDialogOpen = MutableStateFlow(false)
     val isPaymentDialogOpen = MutableStateFlow(false)
@@ -130,106 +85,463 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isAuthDialogOpen = MutableStateFlow(false)
     val isWorkshopsDialogOpen = MutableStateFlow(false)
     val isSubscriptionDialogOpen = MutableStateFlow(false)
-
     val subscriptionState: StateFlow<UserSubscription> = SubscriptionManager.subscriptionState
-    val subscriptionLoading: StateFlow<Boolean> = SubscriptionManager.isLoading
-    val subscriptionMessage: StateFlow<String?> = SubscriptionManager.operationMessage
-
-    val activeWorkshopState = activeWorkshop
     val currentUser = MutableStateFlow<FirebaseUserDto?>(null)
-    val customUsername = MutableStateFlow("")
-    val autoSyncStatusMessage = MutableStateFlow<String?>(null)
+    val customUsername = MutableStateFlow<String>("")
+    val isDrawerOpen = MutableStateFlow(false)
     val isAutoSyncing = MutableStateFlow(false)
-    val manuallyDeletedModelNames = MutableStateFlow<Set<String>>(emptySet())
-    val editingOrder = MutableStateFlow<FurnitureOrder?>(null)
-    val editingPayment = MutableStateFlow<PaymentRecord?>(null)
-    val selectedInvoiceOrder = MutableStateFlow<FurnitureOrder?>(null)
-    val cardShareOrder = MutableStateFlow<FurnitureOrder?>(null)
-    val cardSharePayment = MutableStateFlow<PaymentRecord?>(null)
-    val deleteTarget = MutableStateFlow<DeleteTarget?>(null)
+    val autoSyncStatusMessage = MutableStateFlow<String?>(null)
 
-    fun hasPremiumAccess(): Boolean = SubscriptionManager.hasPremiumAccess()
+    fun hasPremiumAccess(): Boolean {
+        return SubscriptionManager.hasPremiumAccess()
+    }
 
-    fun openSubscriptionDialog() { isSubscriptionDialogOpen.value = true }
+    init {
+        viewModelScope.launch {
+            val savedUser = repository.getCustomUsername()
+            if (savedUser.isNotBlank()) {
+                customUsername.value = savedUser
+            }
 
-    fun purchaseSubscription(activity: androidx.activity.ComponentActivity, plan: com.example.model.SubscriptionPlan) {
-        SubscriptionManager.purchaseSubscription(activity, plan) { result ->
-            if (result.isSuccess) isSubscriptionDialogOpen.value = false
+            val defWsId = repository.ensureDefaultWorkshop()
+            val savedWsId = repository.getSavedActiveWorkshopId()
+            val allWorkshops = repository.getAllWorkshopsSync()
+            if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) {
+                activeWorkshopId.value = savedWsId
+            } else {
+                activeWorkshopId.value = defWsId
+                repository.saveActiveWorkshopId(defWsId)
+            }
+            repository.deduplicatePresets()
+            repository.deduplicateOrders()
+            repository.deduplicatePayments()
+            repository.insertDefaultUnitRulesIfEmpty()
+
+            val user = FirebaseService.getCurrentUser()
+            currentUser.value = user
+            SubscriptionManager.syncSubscriptionWithFirebase()
+            if (user != null) {
+                if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
+                    customUsername.value = user.displayName
+                    repository.saveCustomUsername(user.displayName)
+                }
+                val localOrders = repository.getAllOrdersSync()
+                val localPayments = repository.getAllPaymentsSync()
+                // If local data already exists, DO NOT restore duplicates from cloud!
+                if (localOrders.isEmpty() && localPayments.isEmpty()) {
+                    performAutoSync(user, shouldDownload = true)
+                } else {
+                    performAutoSync(user, shouldDownload = false)
+                }
+            }
         }
     }
 
-    fun refreshSubscription() {
-        SubscriptionManager.syncSubscriptionWithFirebase()
+    fun updateCustomUsername(name: String) {
+        val trimmed = name.trim()
+        customUsername.value = trimmed
+        repository.saveCustomUsername(trimmed)
     }
 
-    fun clearSubscriptionMessage() { SubscriptionManager.clearMessage() }
+    // Filtered orders stream
+    private data class FilterParams(
+        val query: String,
+        val customer: String?,
+        val model: String?,
+        val date: String?,
+        val invoice: String?
+    )
 
-    fun getNextOrderNumber(): Int = (orders.value.maxOfOrNull { it.orderNumber } ?: 0) + 1
-    fun getNextPaymentNumber(): Int = (payments.value.maxOfOrNull { it.paymentNumber } ?: 0) + 1
+    private val filterParams = combine(
+        searchQuery,
+        selectedCustomerFilter,
+        selectedModelFilter,
+        selectedDateFilter,
+        selectedInvoiceFilter
+    ) { query, customer, model, date, invoice ->
+        FilterParams(query, customer, model, date, invoice)
+    }
 
-    fun openNewOrder() { editingOrder.value = null; isOrderDialogOpen.value = true }
-    fun openEditOrder(order: FurnitureOrder) { editingOrder.value = order; isOrderDialogOpen.value = true }
-    fun openNewPayment() { editingPayment.value = null; isPaymentDialogOpen.value = true }
-    fun openEditPayment(payment: PaymentRecord) { editingPayment.value = payment; isPaymentDialogOpen.value = true }
-    fun openInvoice(order: FurnitureOrder?) { selectedInvoiceOrder.value = order; isInvoiceDialogOpen.value = true }
-    fun openCardShareOrder(order: FurnitureOrder) { cardShareOrder.value = order; cardSharePayment.value = null; isCardShareDialogOpen.value = true }
-    fun openCardSharePayment(payment: PaymentRecord) { cardSharePayment.value = payment; cardShareOrder.value = null; isCardShareDialogOpen.value = true }
+    val filteredOrders: StateFlow<List<FurnitureOrder>> = combine(
+        orders,
+        filterParams,
+        cardSortOrder
+    ) { orderList, filters, sortOrder ->
+        val q = PersianUtils.toEnglishDigits(filters.query.trim()).lowercase()
+        val invFilterEng = filters.invoice?.let { PersianUtils.toEnglishDigits(it.trim()) }
 
-    fun saveOrder(order: FurnitureOrder, addToPresets: Boolean) {
+        val filtered = orderList.filter { order ->
+            val matchCustomer = filters.customer.isNullOrBlank() || order.customerName.trim() == filters.customer.trim()
+            val matchModel = filters.model.isNullOrBlank() || order.modelName.trim() == filters.model.trim()
+            val matchDate = filters.date.isNullOrBlank() || order.dateJalali.trim() == filters.date.trim()
+            val matchInvoice = invFilterEng.isNullOrBlank() ||
+                    PersianUtils.toEnglishDigits(order.invoiceNumber).contains(invFilterEng) ||
+                    order.orderNumber.toString().contains(invFilterEng)
+
+            val matchQuery = if (q.isBlank()) {
+                true
+            } else {
+                val invNum = PersianUtils.toEnglishDigits(order.invoiceNumber)
+                val ordNum = order.orderNumber.toString()
+                val workshopInv = PersianUtils.toEnglishDigits(order.workshopInvoiceNumber).lowercase()
+                val model = order.modelName.lowercase()
+                val customer = order.customerName.lowercase()
+                val fabric = order.fabricName.lowercase()
+                val notes = order.notes.lowercase()
+                val dateJ = PersianUtils.toEnglishDigits(order.dateJalali)
+
+                invNum.contains(q) || ordNum.contains(q) || workshopInv.contains(q) || model.contains(q) ||
+                        customer.contains(q) || fabric.contains(q) || notes.contains(q) || dateJ.contains(q)
+            }
+
+            matchCustomer && matchModel && matchDate && matchInvoice && matchQuery
+        }
+
+        if (sortOrder == CardSortOrder.NEWEST_BOTTOM) {
+            filtered.sortedBy { it.createdAt }
+        } else {
+            filtered.sortedByDescending { it.createdAt }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val filteredPayments: StateFlow<List<PaymentRecord>> = combine(
+        payments,
+        filterParams,
+        cardSortOrder
+    ) { paymentList, filters, sortOrder ->
+        val q = PersianUtils.toEnglishDigits(filters.query.trim()).lowercase()
+
+        val filtered = paymentList.filter { pay ->
+            val matchCustomer = filters.customer.isNullOrBlank() || pay.customerName.trim() == filters.customer.trim()
+            val matchDate = filters.date.isNullOrBlank() || pay.dateJalali.trim() == filters.date.trim()
+            val matchQuery = if (q.isBlank()) {
+                true
+            } else {
+                val cust = pay.customerName.lowercase()
+                val desc = pay.description.lowercase()
+                val ref = pay.referenceNo.lowercase()
+                val dateJ = PersianUtils.toEnglishDigits(pay.dateJalali)
+                val amt = pay.amount.toString()
+                cust.contains(q) || desc.contains(q) || ref.contains(q) || dateJ.contains(q) || amt.contains(q)
+            }
+            matchCustomer && matchDate && matchQuery
+        }
+
+        if (sortOrder == CardSortOrder.NEWEST_BOTTOM) {
+            filtered.sortedBy { it.createdAt }
+        } else {
+            filtered.sortedByDescending { it.createdAt }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Combined stream of feed items for unified feed display
+    val feedItems: StateFlow<List<FeedItem>> = combine(
+        filteredOrders,
+        filteredPayments,
+        cardDisplayMode,
+        cardSortOrder
+    ) { ords, pays, mode, sortOrder ->
+        if (mode == CardDisplayMode.UNIFIED) {
+            val list = mutableListOf<FeedItem>()
+            ords.forEachIndexed { i, o -> list.add(FeedItem.OrderItem(o, (i + 1).toLong())) }
+            pays.forEachIndexed { i, p -> list.add(FeedItem.PaymentItem(p, (i + 1).toLong())) }
+            if (sortOrder == CardSortOrder.NEWEST_BOTTOM) {
+                list.sortedBy { it.timestamp }
+            } else {
+                list.sortedByDescending { it.timestamp }
+            }
+        } else {
+            val list = mutableListOf<FeedItem>()
+            ords.forEachIndexed { i, o -> list.add(FeedItem.OrderItem(o, (i + 1).toLong())) }
+            pays.forEachIndexed { i, p -> list.add(FeedItem.PaymentItem(p, (i + 1).toLong())) }
+            list
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Unique customers list for autocomplete & filters
+    val uniqueCustomers: StateFlow<List<String>> = combine(orders, payments) { ords, pays ->
+        val set = linkedSetOf<String>()
+        ords.forEach { if (it.customerName.isNotBlank()) set.add(it.customerName) }
+        pays.forEach { if (it.customerName.isNotBlank()) set.add(it.customerName) }
+        set.toList()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Financial totals based on current filters
+    val totalWork: StateFlow<Long> = filteredOrders.map { list ->
+        list.sumOf { it.calculatedTotal }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    val totalReceived: StateFlow<Long> = combine(payments, selectedCustomerFilter) { payList, custFilter ->
+        if (custFilter.isNullOrBlank()) {
+            payList.sumOf { it.amount }
+        } else {
+            payList.filter { it.customerName == custFilter }.sumOf { it.amount }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    val remainingBalance: StateFlow<Long> = combine(totalWork, totalReceived) { work, received ->
+        work - received
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    fun getNextOrderNumber(): Long {
+        val current = orders.value
+        return if (current.isEmpty()) 1L else (current.maxOf { it.orderNumber } + 1)
+    }
+
+    fun getNextPaymentNumber(): Long {
+        val current = payments.value
+        return if (current.isEmpty()) 1L else (current.maxOf { it.paymentNumber } + 1)
+    }
+
+    // Actions
+    fun openNewOrder() {
+        editingOrder.value = null
+        isOrderDialogOpen.value = true
+    }
+
+    fun openEditOrder(order: FurnitureOrder) {
+        editingOrder.value = order
+        isOrderDialogOpen.value = true
+    }
+
+    fun openNewPayment() {
+        editingPayment.value = null
+        isPaymentDialogOpen.value = true
+    }
+
+    fun openEditPayment(payment: PaymentRecord) {
+        editingPayment.value = payment
+        isPaymentDialogOpen.value = true
+    }
+
+    fun openInvoice(order: FurnitureOrder?) {
+        if (order != null) {
+            openCardShareOrder(order)
+        } else {
+            selectedInvoiceOrder.value = null
+            isInvoiceDialogOpen.value = true
+        }
+    }
+
+    fun openCardShareOrder(order: FurnitureOrder) {
+        cardShareOrder.value = order
+        cardSharePayment.value = null
+        isCardShareDialogOpen.value = true
+    }
+
+    fun openCardSharePayment(payment: PaymentRecord) {
+        cardShareOrder.value = null
+        cardSharePayment.value = payment
+        isCardShareDialogOpen.value = true
+    }
+
+    fun requestDeleteOrder(order: FurnitureOrder) {
+        deleteTarget.value = DeleteTarget(
+            type = "order",
+            id = order.id,
+            title = "فاکتور #${PersianUtils.toPersianDigits(order.invoiceNumber)}",
+            message = "آیا از حذف کامل این فاکتور کارکرد مطمئن هستید؟ این عملیات قابل بازگشت نیست.",
+            details = listOf(
+                "مدل مبل" to order.modelName,
+                "مشتری" to order.customerName.ifBlank { "عمومی" },
+                "مبلغ کل" to PersianUtils.formatCurrency(order.calculatedTotal, currencyUnit.value),
+                "تاریخ ثبت" to PersianUtils.toPersianDigits(order.dateJalali)
+            )
+        )
+    }
+
+    fun requestDeletePayment(payment: PaymentRecord) {
+        deleteTarget.value = DeleteTarget(
+            type = "payment",
+            id = payment.id,
+            title = "سند دریافتی #${PersianUtils.toPersianDigits(payment.paymentNumber)}",
+            message = "آیا از حذف این رکورد پرداخت اطمینان دارید؟",
+            details = listOf(
+                "مبلغ واریزی" to PersianUtils.formatCurrency(payment.amount, currencyUnit.value),
+                "مشتری" to payment.customerName,
+                "تاریخ" to PersianUtils.toPersianDigits(payment.dateJalali),
+                "شرح" to payment.description.ifBlank { "واریزی وجه" }
+            )
+        )
+    }
+
+    fun confirmDelete() {
+        val target = deleteTarget.value ?: return
         viewModelScope.launch {
-            repository.saveOrder(order.copy(workshopId = activeWorkshopId.value))
-            if (addToPresets) repository.savePreset(ModelPreset(name = order.modelName, workshopId = activeWorkshopId.value))
-            triggerAutoUpload()
-            isOrderDialogOpen.value = false
+            if (target.type == "order") {
+                repository.deleteOrderById(target.id)
+            } else if (target.type == "payment") {
+                repository.deletePaymentById(target.id)
+            }
+            deleteTarget.value = null
         }
     }
 
     fun duplicateOrder(order: FurnitureOrder) {
         viewModelScope.launch {
-            repository.saveOrder(order.copy(id = 0L, orderNumber = getNextOrderNumber(), createdAt = System.currentTimeMillis()))
+            val newNum = getNextOrderNumber()
+            val duplicated = order.copy(
+                id = 0L,
+                workshopId = activeWorkshopId.value,
+                orderNumber = newNum,
+                invoiceNumber = newNum.toString(),
+                dateJalali = todayDate.value,
+                dateGregorian = PersianUtils.getTodayGregorianString(),
+                createdAt = System.currentTimeMillis()
+            )
+            repository.saveOrder(duplicated)
+        }
+    }
+
+    fun saveOrder(order: FurnitureOrder, addToPresets: Boolean) {
+        viewModelScope.launch {
+            val wsId = activeWorkshopId.value
+            val orderToSave = if (order.workshopId <= 0L) order.copy(workshopId = wsId) else order
+            repository.saveOrder(orderToSave)
+            if (orderToSave.modelName.isNotBlank()) {
+                val trimmedName = orderToSave.modelName.trim()
+                if (orderToSave.colorCode.isNotBlank()) {
+                    repository.updateOrdersColorForModel(trimmedName, orderToSave.colorCode, wsId)
+                }
+                val existingPreset = modelPresets.value.find { it.name.trim().equals(trimmedName, ignoreCase = true) }
+                if (existingPreset != null) {
+                    repository.savePreset(
+                        existingPreset.copy(
+                            workshopId = wsId,
+                            defaultPricePerSet = orderToSave.pricePerSet,
+                            defaultUnitsPerSet = orderToSave.unitsPerSet,
+                            colorCode = orderToSave.colorCode.ifBlank { existingPreset.colorCode }
+                        )
+                    )
+                } else {
+                    repository.savePreset(
+                        ModelPreset(
+                            workshopId = wsId,
+                            name = trimmedName,
+                            defaultPricePerSet = orderToSave.pricePerSet,
+                            defaultUnitsPerSet = orderToSave.unitsPerSet,
+                            colorCode = orderToSave.colorCode,
+                            description = if (orderToSave.fabricName.isNotBlank()) "پارچه ${orderToSave.fabricName}" else ""
+                        )
+                    )
+                }
+            }
+            isOrderDialogOpen.value = false
+            editingOrder.value = null
+            triggerAutoUpload()
+        }
+    }
+
+    fun updateModelColor(modelName: String, newColor: String) {
+        viewModelScope.launch {
+            val wsId = activeWorkshopId.value
+            repository.updateOrdersColorForModel(modelName, newColor, wsId)
             triggerAutoUpload()
         }
     }
 
     fun savePayment(payment: PaymentRecord) {
         viewModelScope.launch {
-            repository.savePayment(payment.copy(workshopId = activeWorkshopId.value))
-            triggerAutoUpload()
+            val wsId = activeWorkshopId.value
+            val paymentToSave = if (payment.workshopId <= 0L) payment.copy(workshopId = wsId) else payment
+            repository.savePayment(paymentToSave)
             isPaymentDialogOpen.value = false
+            editingPayment.value = null
+            triggerAutoUpload()
         }
     }
 
-    fun requestDeleteOrder(order: FurnitureOrder) { deleteTarget.value = DeleteTarget.Order(order) }
-    fun requestDeletePayment(payment: PaymentRecord) { deleteTarget.value = DeleteTarget.Payment(payment) }
+    val manuallyDeletedModelNames = MutableStateFlow<Set<String>>(emptySet())
 
-    fun deleteTarget() {
+    fun savePreset(preset: ModelPreset) {
         viewModelScope.launch {
-            when (val target = deleteTarget.value) {
-                is DeleteTarget.Order -> repository.deleteOrder(target.order)
-                is DeleteTarget.Payment -> repository.deletePayment(target.payment)
-                null -> return@launch
+            val wsId = activeWorkshopId.value
+            val presetToSave = if (preset.workshopId <= 0L) preset.copy(workshopId = wsId) else preset
+            repository.savePreset(presetToSave)
+            manuallyDeletedModelNames.value = manuallyDeletedModelNames.value - preset.name.trim().lowercase()
+            // When updating a preset's color, also update existing orders for this model in this workshop
+            if (preset.name.isNotBlank() && preset.colorCode.isNotBlank()) {
+                repository.updateOrdersColorForModel(preset.name.trim(), preset.colorCode, wsId)
             }
-            deleteTarget.value = null
             triggerAutoUpload()
+        }
+    }
+
+    fun deletePreset(preset: ModelPreset) {
+        viewModelScope.launch {
+            repository.deletePreset(preset)
+            manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + preset.name.trim().lowercase()
         }
     }
 
     fun deletePresetByName(name: String) {
-        manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + name
-        viewModelScope.launch { repository.deletePresetByName(name); triggerAutoUpload() }
+        viewModelScope.launch {
+            val wsId = activeWorkshopId.value
+            repository.deletePresetByNameAndWorkshop(name, wsId)
+            manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + name.trim().lowercase()
+        }
     }
 
-    fun updateModelColor(modelName: String, newColor: Long) {
-        viewModelScope.launch { repository.updateModelColor(modelName, newColor); triggerAutoUpload() }
+    fun selectWorkshop(id: Long) {
+        activeWorkshopId.value = id
+        repository.saveActiveWorkshopId(id)
+        clearFilters()
     }
 
-    fun savePreset(preset: ModelPreset) { viewModelScope.launch { repository.savePreset(preset.copy(workshopId = activeWorkshopId.value)); triggerAutoUpload() } }
-    fun deletePreset(preset: ModelPreset) { viewModelScope.launch { repository.deletePreset(preset); triggerAutoUpload() } }
+    fun createWorkshop(name: String) {
+        viewModelScope.launch {
+            val newId = repository.saveWorkshop(com.example.model.Workshop(name = name))
+            activeWorkshopId.value = newId
+            repository.saveActiveWorkshopId(newId)
+            clearFilters()
+            triggerAutoUpload()
+        }
+    }
 
-    fun saveUnitRule(rule: com.example.model.UnitConversionRule) { viewModelScope.launch { repository.saveUnitRule(rule) } }
-    fun deleteUnitRule(rule: com.example.model.UnitConversionRule) { viewModelScope.launch { repository.deleteUnitRule(rule) } }
-    fun restoreDefaultUnitRules() { viewModelScope.launch { repository.restoreDefaultUnitRules() } }
-    fun changeCurrency(newUnit: String) { if (newUnit != currencyUnit.value) currencyUnit.value = newUnit }
+    fun renameWorkshop(id: Long, newName: String) {
+        viewModelScope.launch {
+            val existing = repository.getWorkshopById(id) ?: return@launch
+            repository.saveWorkshop(existing.copy(name = newName))
+            triggerAutoUpload()
+        }
+    }
+
+    fun deleteWorkshop(workshop: com.example.model.Workshop) {
+        viewModelScope.launch {
+            val all = repository.getAllWorkshopsSync()
+            if (all.size <= 1) return@launch
+            repository.deleteWorkshopAndAllData(workshop.id)
+            val remaining = repository.getAllWorkshopsSync()
+            val nextActive = remaining.firstOrNull()?.id ?: 1L
+            activeWorkshopId.value = nextActive
+            repository.saveActiveWorkshopId(nextActive)
+            clearFilters()
+            triggerAutoUpload()
+        }
+    }
+
+    fun saveUnitRule(rule: com.example.model.UnitConversionRule) {
+        viewModelScope.launch {
+            repository.saveUnitRule(rule)
+        }
+    }
+
+    fun deleteUnitRule(rule: com.example.model.UnitConversionRule) {
+        viewModelScope.launch {
+            repository.deleteUnitRule(rule)
+        }
+    }
+
+    fun restoreDefaultUnitRules() {
+        viewModelScope.launch {
+            repository.restoreDefaultUnitRules()
+        }
+    }
+
+    fun changeCurrency(newUnit: String) {
+        if (newUnit == currencyUnit.value) return
+        currencyUnit.value = newUnit
+    }
 
     fun clearFilters() {
         searchQuery.value = ""
@@ -239,21 +551,34 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         selectedInvoiceFilter.value = null
     }
 
+    /**
+     * Automatic sync and restore when a user enters email/signs in or registers.
+     * Restores existing cloud data if available, then syncs local state to Firebase.
+     */
     fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
         currentUser.value = user
         SubscriptionManager.syncSubscriptionWithFirebase()
         val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
             ?: customUsername.value.takeIf { it.isNotBlank() }
             ?: user.displayName?.takeIf { it.isNotBlank() }
-        if (!chosenName.isNullOrBlank()) updateCustomUsername(chosenName)
+        if (!chosenName.isNullOrBlank()) {
+            updateCustomUsername(chosenName)
+        }
+
         viewModelScope.launch {
             if (!workshopName.isNullOrBlank()) {
                 val currentWs = activeWorkshop.value
-                if (currentWs != null) renameWorkshop(currentWs.id, workshopName.trim()) else createWorkshop(workshopName.trim())
+                if (currentWs != null) {
+                    renameWorkshop(currentWs.id, workshopName.trim())
+                } else {
+                    createWorkshop(workshopName.trim())
+                }
             }
+
             val localOrders = repository.getAllOrdersSync()
             val localPayments = repository.getAllPaymentsSync()
-            performAutoSync(user, shouldDownload = localOrders.isEmpty() && localPayments.isEmpty())
+            val shouldDownload = localOrders.isEmpty() && localPayments.isEmpty()
+            performAutoSync(user, shouldDownload = shouldDownload)
         }
     }
 
@@ -266,21 +591,30 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     private suspend fun performAutoSync(user: FirebaseUserDto, shouldDownload: Boolean = false) {
         isAutoSyncing.value = true
         try {
-            if (shouldDownload) FirebaseService.downloadFromCloud(repository)
+            if (shouldDownload) {
+                val downloadRes = FirebaseService.downloadFromCloud(repository)
+                if (downloadRes.isSuccess) {
+                    autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
+                }
+            }
+
             val currentOrders = repository.getAllOrdersSync()
             val currentPayments = repository.getAllPaymentsSync()
             val currentPresets = repository.getAllPresetsSync()
+            val currentUnitRules = unitRules.value
+            val currentWorkshops = repository.getAllWorkshopsSync()
+
             if (currentOrders.isNotEmpty() || currentPayments.isNotEmpty() || currentPresets.isNotEmpty()) {
                 FirebaseService.uploadAllToCloud(
                     orders = currentOrders,
                     payments = currentPayments,
                     presets = currentPresets,
-                    unitRules = unitRules.value,
-                    workshops = repository.getAllWorkshopsSync()
+                    unitRules = currentUnitRules,
+                    workshops = currentWorkshops
                 )
             }
             autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             autoSyncStatusMessage.value = "همگام‌سازی ابری در دسترس نیست."
         } finally {
             isAutoSyncing.value = false
@@ -288,7 +622,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun triggerAutoUpload() {
-        if (currentUser.value == null) return
+        val user = currentUser.value ?: return
         viewModelScope.launch {
             try {
                 FirebaseService.uploadAllToCloud(
@@ -301,10 +635,6 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             } catch (_: Exception) {}
         }
     }
-
-    fun updateCustomUsername(value: String) { customUsername.value = value }
-    fun renameWorkshop(id: Long, newName: String) { viewModelScope.launch { repository.getWorkshopById(id)?.let { repository.saveWorkshop(it.copy(name = newName)); triggerAutoUpload() } } }
-    fun createWorkshop(name: String) { viewModelScope.launch { repository.saveWorkshop(com.example.model.Workshop(name = name)); triggerAutoUpload() } }
 }
 
 class KhayyatonViewModelFactory(private val repository: WorkshopRepository) : ViewModelProvider.Factory {
@@ -316,3 +646,6 @@ class KhayyatonViewModelFactory(private val repository: WorkshopRepository) : Vi
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
+
+typealias SheetOnViewModel = KhayyatonViewModel
+typealias SheetOnViewModelFactory = KhayyatonViewModelFactory
