@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Release validation workflow.
 jobs:
   build:
     runs-on: ubuntu-latest
