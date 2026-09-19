@@ -1,0 +1,43 @@
+name: One-time cleanup debug releases
+
+on:
+  push:
+    paths:
+      - '.github/workflows/cleanup-debug-releases.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep latest 3 debug releases and renumber them
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          REPO="${{ github.repository }}"
+
+          # Latest three debug releases, newest first:
+          # 30 -> 1, 29 -> 2, 28 -> 3
+          gh api "repos/$REPO/releases/389121271"             -X PATCH             -f name='Debug APK Build #1'             -f tag_name='debug-apk-build-1-1'
+
+          gh api "repos/$REPO/releases/388997061"             -X PATCH             -f name='Debug APK Build #2'             -f tag_name='debug-apk-build-2-1'
+
+          gh api "repos/$REPO/releases/388996127"             -X PATCH             -f name='Debug APK Build #3'             -f tag_name='debug-apk-build-3-1'
+
+          # Delete every other Debug APK release.
+          gh api --paginate "repos/$REPO/releases?per_page=100"             --jq '.[] | select(.name | startswith("Debug APK Build #")) | select(.id != 389121271 and .id != 388997061 and .id != 388996127) | .id' |
+          while read -r RELEASE_ID; do
+            [ -z "$RELEASE_ID" ] || gh api -X DELETE "repos/$REPO/releases/$RELEASE_ID"
+          done
+
+      - name: Remove this one-time workflow
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA=$(gh api "repos/${{ github.repository }}/contents/.github/workflows/cleanup-debug-releases.yml" --jq '.sha')
+          gh api --method DELETE "repos/${{ github.repository }}/contents/.github/workflows/cleanup-debug-releases.yml"             -f message='ci: remove one-time debug release cleanup workflow'             -f sha="$SHA"             -f branch='main'
