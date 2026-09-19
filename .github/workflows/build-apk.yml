@@ -235,3 +235,69 @@ jobs:
           GitHub Release publication encountered an issue or was skipped. You can download the build artifact directly from the **Artifacts** section of this GitHub Actions workflow run.
           EOF
           fi
+
+  release-aab:
+    name: Build signed Khayyaton Release AAB
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Restore Khayyaton release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KHAYYATON_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "Missing KHAYYATON_KEYSTORE_BASE64"; exit 1; }
+          test -n "$STORE_PASSWORD" || { echo "Missing KHAYYATON_STORE_PASSWORD"; exit 1; }
+          echo "$KEYSTORE_BASE64" | base64 --decode > khayyaton.jks
+          test -s khayyaton.jks
+          keytool -list -keystore khayyaton.jks -storepass "$STORE_PASSWORD" -alias khayyaton >/dev/null
+
+      - name: Build signed Release AAB
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/khayyaton.jks
+          STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEY_PASSWORD" || { echo "Missing KHAYYATON_KEY_PASSWORD"; exit 1; }
+          gradle :app:bundleRelease --stacktrace --no-daemon
+
+      - name: Verify signed Release AAB
+        run: |
+          set -euo pipefail
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB"
+          jarsigner -verify -verbose -certs "$AAB" >/tmp/jarsigner.txt 2>&1
+          grep -q "jar verified" /tmp/jarsigner.txt
+          echo "Signed Release AAB verified successfully."
+
+      - name: Upload Release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: khayyaton-release-aab
+          path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove release keystore
+        if: always()
+        run: rm -f khayyaton.jks
+

@@ -18,30 +18,9 @@ data class SubscriptionPlan(
 ) {
     companion object {
         val PLANS = listOf(
-            SubscriptionPlan(
-                productId = "khayyaton_3_month",
-                titleFa = "اشتراک ۳ ماهه",
-                durationDays = 90,
-                priceTomans = 50_000L,
-                priceFormatted = "۵۰,۰۰۰ تومان",
-                tagFa = null
-            ),
-            SubscriptionPlan(
-                productId = "khayyaton_6_month",
-                titleFa = "اشتراک ۶ ماهه",
-                durationDays = 180,
-                priceTomans = 90_000L,
-                priceFormatted = "۹۰,۰۰۰ تومان",
-                tagFa = "محبوب‌ترین (۱۰٪ تخفیف)"
-            ),
-            SubscriptionPlan(
-                productId = "khayyaton_1_year",
-                titleFa = "اشتراک ۱ ساله",
-                durationDays = 365,
-                priceTomans = 150_000L,
-                priceFormatted = "۱۵۰,۰۰۰ تومان",
-                tagFa = "بیشترین صرفه (۲۵٪ تخفیف)"
-            )
+            SubscriptionPlan("khayyaton_3_month", "اشتراک ۳ ماهه", 90, 50_000L, "۵۰,۰۰۰ تومان"),
+            SubscriptionPlan("khayyaton_6_month", "اشتراک ۶ ماهه", 180, 90_000L, "۹۰,۰۰۰ تومان", "محبوب‌ترین (۱۰٪ تخفیف)"),
+            SubscriptionPlan("khayyaton_1_year", "اشتراک ۱ ساله", 365, 150_000L, "۱۵۰,۰۰۰ تومان", "بیشترین صرفه (۲۵٪ تخفیف)")
         )
     }
 }
@@ -62,35 +41,33 @@ data class UserSubscription(
         get() {
             val now = System.currentTimeMillis()
             return when (status) {
-                SubscriptionStatus.SUBSCRIBED -> expiresAt == null || expiresAt > now
+                SubscriptionStatus.SUBSCRIBED -> expiresAt != null && expiresAt > now
                 SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt > now
                 SubscriptionStatus.TRIAL_EXPIRED,
-                SubscriptionStatus.EXPIRED -> false
-                SubscriptionStatus.UNKNOWN -> true // Graceful access while fetching
+                SubscriptionStatus.EXPIRED,
+                SubscriptionStatus.UNKNOWN -> false
             }
         }
 
     val remainingDays: Long
         get() {
-            val now = System.currentTimeMillis()
             val target = when (status) {
                 SubscriptionStatus.SUBSCRIBED -> expiresAt ?: 0L
                 SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt
                 else -> 0L
             }
-            val diff = target - now
-            return if (diff > 0) (diff / (24 * 60 * 60 * 1000L)) else 0L
+            val diff = target - System.currentTimeMillis()
+            return if (diff > 0) diff / 86_400_000L else 0L
         }
 
     val remainingHours: Long
         get() {
-            val now = System.currentTimeMillis()
             val target = when (status) {
                 SubscriptionStatus.SUBSCRIBED -> expiresAt ?: 0L
                 SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt
                 else -> 0L
             }
-            val diff = target - now
-            return if (diff > 0) ((diff % (24 * 60 * 60 * 1000L)) / (60 * 60 * 1000L)) else 0L
+            val diff = target - System.currentTimeMillis()
+            return if (diff > 0) (diff % 86_400_000L) / 3_600_000L else 0L
         }
 }

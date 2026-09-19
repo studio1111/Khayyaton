@@ -1,6 +1,9 @@
 name: Build Release AAB and APK
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-release.yml'
 
 jobs:
   build:
@@ -18,7 +21,7 @@ jobs:
         run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
       - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > my-upload-key.jks
+        run: echo "${{ secrets.KHAYYATON_KEYSTORE_BASE64 }}" | base64 -d > khayyaton.jks
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -33,8 +36,8 @@ jobs:
       - name: Build AAB
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
         run: ./gradlew bundleRelease
 
       - name: Build APK
