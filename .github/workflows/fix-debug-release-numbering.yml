@@ -1,0 +1,38 @@
+name: Fix debug release numbering
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-debug-release-numbering.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Swap numbering to chronological order
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+
+          # Move current tags to temporary names first to avoid collisions.
+          gh api -X PATCH "repos/$REPO/releases/388996127" -f name='Debug APK Build #28' -f tag_name='debug-apk-build-temp-28'
+          gh api -X PATCH "repos/$REPO/releases/388997061" -f name='Debug APK Build #29' -f tag_name='debug-apk-build-temp-29'
+          gh api -X PATCH "repos/$REPO/releases/389121271" -f name='Debug APK Build #30' -f tag_name='debug-apk-build-temp-30'
+
+          # Chronological order: 28 -> 1, 29 -> 2, 30 -> 3.
+          gh api -X PATCH "repos/$REPO/releases/388996127" -f name='Debug APK Build #1' -f tag_name='debug-apk-build-1-1'
+          gh api -X PATCH "repos/$REPO/releases/388997061" -f name='Debug APK Build #2' -f tag_name='debug-apk-build-2-1'
+          gh api -X PATCH "repos/$REPO/releases/389121271" -f name='Debug APK Build #3' -f tag_name='debug-apk-build-3-1'
+
+      - name: Remove this one-time workflow
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA=$(gh api "repos/${{ github.repository }}/contents/.github/workflows/fix-debug-release-numbering.yml" --jq '.sha')
+          gh api --method DELETE "repos/${{ github.repository }}/contents/.github/workflows/fix-debug-release-numbering.yml" -f message='ci: remove one-time debug release numbering workflow' -f sha="$SHA" -f branch='main'
