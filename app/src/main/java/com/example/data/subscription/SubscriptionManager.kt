@@ -36,7 +36,7 @@ object SubscriptionManager {
     private const val TAG = "SubscriptionManager"
 
     // TODO: کلید RSA اختصاصی برنامه در پیشخوان کافه‌بازار را در اینجا قرار دهید
-    const val BAZAAR_RSA_PUBLIC_KEY = "YOUR_BAZAAR_RSA_PUBLIC_KEY"
+    const val BAZAAR_RSA_PUBLIC_KEY = "MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwCabwVc2p7UqBqZFyMleXiuGT8fHE/obwon3f859+kYRWU5kWqGadTCqEH5JOWALZ7XP0SzynhJ2We24MITaQy0ai6QPEihSgfjYgk5rtpce7ZuB3bwP+4iZcpNKo/HMS+CPRNOPGO87XbZZcDk4DQHgb8vL/PySfLkvu2T7GtPqc6Yicfk/ym2qzb/57ANFP76WiGQHTl/znFKhFj+BSc9wqnldfXMM3SwrNh+YSECAwEAAQ=="
 
     private const val PREFS_NAME = "khayyaton_prefs"
     private const val KEY_TRIAL_STARTED_AT = "sub_trial_started_at"
