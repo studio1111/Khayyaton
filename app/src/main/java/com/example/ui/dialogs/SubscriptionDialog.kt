@@ -47,6 +47,7 @@ fun SubscriptionDialog(
     val subscription by SubscriptionManager.subscriptionState.collectAsStateWithLifecycle()
     val isLoading by SubscriptionManager.isLoading.collectAsStateWithLifecycle()
     val operationMessage by SubscriptionManager.operationMessage.collectAsStateWithLifecycle()
+    val bazaarPrices by SubscriptionManager.skuDetails.collectAsStateWithLifecycle()
 
     LaunchedEffect(operationMessage) {
         operationMessage?.let { msg ->
@@ -133,7 +134,7 @@ fun SubscriptionDialog(
 
                     // Description text
                     Text(
-                        text = "طرح‌های اشتراک کافه‌بازار (پرداخت امن درون‌برنامه‌ای):",
+                        text = "اشتراک‌های فعال کافه‌بازار:",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -145,6 +146,7 @@ fun SubscriptionDialog(
                             plan = plan,
                             isCurrentPlan = subscription.activeProductId == plan.productId && subscription.status == SubscriptionStatus.SUBSCRIBED,
                             isLoading = isLoading,
+                            bazaarPrice = bazaarPrices[plan.productId]?.price,
                             onPurchase = {
                                 if (activity != null) {
                                     SubscriptionManager.purchaseSubscription(activity, plan) { result ->
@@ -316,6 +318,7 @@ private fun PlanCard(
     plan: SubscriptionPlan,
     isCurrentPlan: Boolean,
     isLoading: Boolean,
+    bazaarPrice: String?,
     onPurchase: () -> Unit
 ) {
     val isHighlighted = plan.tagFa != null
@@ -373,7 +376,7 @@ private fun PlanCard(
                 }
 
                 Text(
-                    text = PersianUtils.toPersianDigits(plan.priceFormatted),
+                    text = PersianUtils.toPersianDigits(bazaarPrice ?: plan.priceFormatted),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.primary
@@ -412,7 +415,7 @@ private fun PlanCard(
                         modifier = Modifier.height(36.dp)
                     ) {
                         Text(
-                            text = "خرید و فعال‌سازی",
+                            text = "پرداخت و فعال‌سازی",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
