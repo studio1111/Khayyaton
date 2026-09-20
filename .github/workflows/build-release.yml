@@ -35,7 +35,7 @@ jobs:
 
       - name: Build AAB
         env:
-          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          KEYSTORE_PATH: ${{ github.workspace }}/khayyaton.jks
           STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
         run: ./gradlew bundleRelease
@@ -43,9 +43,12 @@ jobs:
       - name: Build APK
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
+
+      - name: Verify AAB signature
+        run: jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
