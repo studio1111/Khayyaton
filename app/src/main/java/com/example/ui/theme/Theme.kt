@@ -118,10 +118,3 @@ fun KhayyatonTheme(
     )
 }
 
-@Composable
-fun SheetOnTheme(
-    themeMode: AppThemeMode = AppThemeMode.NEON_GLASS,
-    content: @Composable () -> Unit
-) {
-    KhayyatonTheme(themeMode = themeMode, content = content)
-}
