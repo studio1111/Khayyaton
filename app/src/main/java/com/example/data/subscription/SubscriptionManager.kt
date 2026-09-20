@@ -269,10 +269,7 @@ object SubscriptionManager {
                     // بررسی انقضا
                     var needUpdateFirestore = currentStatus == SubscriptionStatus.TRIAL_EXPIRED &&
                         statusStr == SubscriptionStatus.TRIAL_ACTIVE.name
-                    if (currentStatus == SubscriptionStatus.TRIAL_ACTIVE && now > trialEndsAt) {
-                        currentStatus = SubscriptionStatus.TRIAL_EXPIRED
-                        needUpdateFirestore = true
-                    } else if (currentStatus == SubscriptionStatus.SUBSCRIBED && expiresAt != null && now > expiresAt) {
+                    if (currentStatus == SubscriptionStatus.SUBSCRIBED && expiresAt != null && now > expiresAt) {
                         currentStatus = SubscriptionStatus.EXPIRED
                         needUpdateFirestore = true
                     }
@@ -427,7 +424,9 @@ object SubscriptionManager {
 
                 if (existingToken == purchaseInfo.purchaseToken || existingOrderId == purchaseInfo.orderId) {
                     syncSubscriptionWithFirebase { result ->
-                        withContext(Dispatchers.Main) { onResult(result.map { Unit }) }
+                        scope.launch(Dispatchers.Main) {
+                            onResult(result.map { Unit })
+                        }
                     }
                     _isLoading.value = false
                     return@launch
