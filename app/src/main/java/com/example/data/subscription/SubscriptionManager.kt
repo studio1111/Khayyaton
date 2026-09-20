@@ -17,6 +17,7 @@ import ir.cafebazaar.poolakey.config.PaymentConfiguration
 import ir.cafebazaar.poolakey.config.SecurityCheck
 import ir.cafebazaar.poolakey.entity.PurchaseInfo
 import ir.cafebazaar.poolakey.entity.PurchaseState
+import ir.cafebazaar.poolakey.entity.SkuDetails
 import ir.cafebazaar.poolakey.request.PurchaseRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +57,9 @@ object SubscriptionManager {
     private val _operationMessage = MutableStateFlow<String?>(null)
     val operationMessage: StateFlow<String?> = _operationMessage.asStateFlow()
 
+    private val _skuDetails = MutableStateFlow<Map<String, SkuDetails>>(emptyMap())
+    val skuDetails: StateFlow<Map<String, SkuDetails>> = _skuDetails.asStateFlow()
+
     private var payment: Payment? = null
     private var paymentConnection: Connection? = null
     private var prefs: SharedPreferences? = null
@@ -89,11 +93,33 @@ object SubscriptionManager {
         syncSubscriptionWithFirebase()
     }
 
+    private fun loadSubscriptionProducts() {
+        val p = payment ?: return
+        try {
+            p.getSubscriptionSkuDetails(SubscriptionPlan.PLANS.map { it.productId }) {
+                getSkuDetailsSucceed { details: List<SkuDetails> ->
+                    _skuDetails.value = details.associateBy { it.sku }
+                    Log.d(TAG, "Loaded " + details.size + " Bazaar subscription products")
+                }
+                getSkuDetailsFailed { throwable ->
+                    Log.w(TAG, "Could not load Bazaar subscription details: " + throwable.message)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error loading Bazaar subscription details: " + e.message)
+        }
+    }
+
+    fun getBazaarPrice(productId: String): String? = _skuDetails.value[productId]?.price
+
+    fun getBazaarTitle(productId: String): String? = _skuDetails.value[productId]?.title
+
     private fun connectPaymentService() {
         try {
             paymentConnection = payment?.connect {
                 connectionSucceed {
                     Log.d(TAG, "Poolakey connected successfully to Cafe Bazaar")
+                    loadSubscriptionProducts()
                 }
                 connectionFailed { throwable ->
                     Log.w(TAG, "Poolakey connection failed: ${throwable.message}")
@@ -193,29 +219,23 @@ object SubscriptionManager {
                 val now = System.currentTimeMillis()
 
                 if (!snapshot.exists()) {
-                    // کاربر جدید: فعال‌سازی دوره آزمایشی ۳ روزه متصل به UID کاربر
-                    val trialDays = 3
-                    val trialEnds = now + (trialDays * 24 * 60 * 60 * 1000L)
-
+                    // دسترسی فقط با entitlement معتبر کافه‌بازار فعال می‌شود.
                     val newSub = UserSubscription(
-                        status = SubscriptionStatus.TRIAL_ACTIVE,
-                        trialStartedAt = now,
-                        trialEndsAt = trialEnds,
-                        trialUsed = true,
+                        status = SubscriptionStatus.UNKNOWN,
+                        trialStartedAt = 0L,
+                        trialEndsAt = 0L,
+                        trialUsed = false,
                         activeProductId = null,
-                        startedAt = now,
-                        expiresAt = trialEnds,
+                        startedAt = null,
+                        expiresAt = null,
                         updatedAt = now
                     )
 
                     val data = hashMapOf(
-                        "trialStartedAt" to now,
-                        "trialEndsAt" to trialEnds,
-                        "trialUsed" to true,
-                        "subscriptionStatus" to SubscriptionStatus.TRIAL_ACTIVE.name,
+                        "subscriptionStatus" to SubscriptionStatus.UNKNOWN.name,
                         "activeProductId" to null,
-                        "startedAt" to now,
-                        "expiresAt" to trialEnds,
+                        "startedAt" to null,
+                        "expiresAt" to null,
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
 
@@ -241,8 +261,14 @@ object SubscriptionManager {
                         SubscriptionStatus.UNKNOWN
                     }
 
+                    // دوره آزمایشی محلی نسخه‌های قبلی دیگر entitlement معتبر نیست.
+                    if (currentStatus == SubscriptionStatus.TRIAL_ACTIVE) {
+                        currentStatus = SubscriptionStatus.TRIAL_EXPIRED
+                    }
+
                     // بررسی انقضا
-                    var needUpdateFirestore = false
+                    var needUpdateFirestore = currentStatus == SubscriptionStatus.TRIAL_EXPIRED &&
+                        statusStr == SubscriptionStatus.TRIAL_ACTIVE.name
                     if (currentStatus == SubscriptionStatus.TRIAL_ACTIVE && now > trialEndsAt) {
                         currentStatus = SubscriptionStatus.TRIAL_EXPIRED
                         needUpdateFirestore = true
@@ -386,9 +412,25 @@ object SubscriptionManager {
 
                 if (purchaseInfo.packageName != APP_PACKAGE_NAME ||
                     purchaseInfo.productId != plan.productId ||
-                    purchaseInfo.purchaseState != PurchaseState.PURCHASED
+                    purchaseInfo.purchaseState != PurchaseState.PURCHASED ||
+                    purchaseInfo.payload != "user_" + user.uid
                 ) {
                     throw IllegalStateException("اطلاعات خرید کافه‌بازار معتبر نیست.")
+                }
+
+                val db = FirebaseFirestore.getInstance()
+                val subDocRef = db.collection("users").document(user.uid)
+                    .collection("subscription").document("info")
+                val existing = subDocRef.get().await()
+                val existingToken = existing.getString("purchaseToken")
+                val existingOrderId = existing.getString("orderId")
+
+                if (existingToken == purchaseInfo.purchaseToken || existingOrderId == purchaseInfo.orderId) {
+                    syncSubscriptionWithFirebase { result ->
+                        withContext(Dispatchers.Main) { onResult(result.map { Unit }) }
+                    }
+                    _isLoading.value = false
+                    return@launch
                 }
 
                 val currentExpiry = _subscriptionState.value.expiresAt ?: 0L
@@ -411,9 +453,7 @@ object SubscriptionManager {
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
 
-                val db = FirebaseFirestore.getInstance()
-                db.collection("users").document(user.uid)
-                    .collection("subscription").document("info")
+                subDocRef
                     .set(subData, SetOptions.merge())
                     .await()
 
@@ -449,6 +489,14 @@ object SubscriptionManager {
      * بازیابی خریدهای فعال از کافه‌بازار (Restore Purchases)
      */
     fun restorePurchases(onResult: (Result<Int>) -> Unit) {
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null) {
+            val msg = "لطفاً ابتدا وارد حساب کاربری خود شوید."
+            _operationMessage.value = msg
+            onResult(Result.failure(Exception(msg)))
+            return
+        }
+
         val p = payment
         if (p == null) {
             val msg = "سرویس کافه‌بازار در دسترس نیست."
@@ -472,6 +520,7 @@ object SubscriptionManager {
                         val validPurchases = purchases
                             .filter { it.packageName == APP_PACKAGE_NAME }
                             .filter { it.purchaseState == PurchaseState.PURCHASED }
+                            .filter { it.payload == "user_" + user.uid }
                             .mapNotNull { purchase ->
                                 SubscriptionPlan.PLANS
                                     .find { it.productId == purchase.productId }
