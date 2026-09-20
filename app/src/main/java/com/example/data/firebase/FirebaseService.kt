@@ -496,31 +496,31 @@ object FirebaseService {
         // must never be shown as a VPN problem when the actual issue is the login data.
         if (e is FirebaseAuthException) {
             return when (e.errorCode.lowercase()) {
-                "errorinvalidemail", "invalid-email" ->
+                "errorinvalidemail", "error_invalid_email", "invalid-email" ->
                     "فرمت آدرس ایمیل وارد شده صحیح نیست."
 
-                "errorwrongpassword", "wrong-password", "invalid-credential", "invalid-credentials" ->
+                "errorwrongpassword", "error_wrong_password", "errorinvalidcredential", "error_invalid_credential", "wrong-password", "invalid-credential", "invalid-credentials" ->
                     "ایمیل یا کلمه عبور اشتباه است."
 
-                "errorusernotfound", "user-not-found" ->
+                "errorusernotfound", "error_user_not_found", "user-not-found" ->
                     "حسابی با این ایمیل یافت نشد."
 
-                "erroruserdisabled", "user-disabled" ->
+                "erroruserdisabled", "error_user_disabled", "user-disabled" ->
                     "این حساب کاربری غیرفعال شده است. با پشتیبانی تماس بگیرید."
 
-                "erroremailalreadyinuse", "email-already-in-use" ->
+                "erroremailalreadyinuse", "error_email_already_in_use", "email-already-in-use" ->
                     "این ایمیل قبلاً ثبت‌نام شده است."
 
-                "errorweakpassword", "weak-password" ->
+                "errorweakpassword", "error_weak_password", "weak-password" ->
                     "کلمه عبور انتخابی ضعیف است. حداقل ۶ کاراکتر وارد کنید."
 
-                "errortoomanyrequests", "too-many-requests" ->
+                "errortoomanyrequests", "error_too_many_requests", "too-many-requests" ->
                     "تعداد تلاش‌های ناموفق زیاد است. لطفاً چند دقیقه بعد دوباره تلاش کنید."
 
-                "erroroperationnotallowed", "operation-not-allowed" ->
+                "erroroperationnotallowed", "error_operation_not_allowed", "operation-not-allowed" ->
                     "ورود با ایمیل و کلمه عبور در سرویس احراز هویت فعال نیست."
 
-                "errornetworkrequestfailed", "network-request-failed" ->
+                "errornetworkrequestfailed", "error_network_request_failed", "network-request-failed" ->
                     "ارتباط با سرویس احراز هویت برقرار نشد. اینترنت را بررسی کنید و دوباره تلاش کنید."
 
                 else -> {
