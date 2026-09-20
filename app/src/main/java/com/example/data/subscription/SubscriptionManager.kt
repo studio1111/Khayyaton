@@ -16,6 +16,7 @@ import ir.cafebazaar.poolakey.Payment
 import ir.cafebazaar.poolakey.config.PaymentConfiguration
 import ir.cafebazaar.poolakey.config.SecurityCheck
 import ir.cafebazaar.poolakey.entity.PurchaseInfo
+import ir.cafebazaar.poolakey.entity.PurchaseState
 import ir.cafebazaar.poolakey.request.PurchaseRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,13 +30,13 @@ import kotlinx.coroutines.withContext
 /**
  * مدیریت اشتراک‌های کافه‌بازار و دوره آزمایشی ۳ روزه خیاطان
  *
- * کلید عمومی RSA بازار:
- * TODO: مقدار YOUR_BAZAAR_RSA_PUBLIC_KEY را با کلید RSA دریافت شده از پیشخوان توسعه‌دهندگان کافه‌بازار جایگزین کنید.
+ * کلید عمومی RSA اختصاصی برنامه از پیشخوان توسعه‌دهندگان کافه‌بازار.
  */
 object SubscriptionManager {
     private const val TAG = "SubscriptionManager"
+    private const val APP_PACKAGE_NAME = "com.farsinnov.khayyaton"
 
-    // TODO: کلید RSA اختصاصی برنامه در پیشخوان کافه‌بازار را در اینجا قرار دهید
+    // کلید RSA اختصاصی برنامه در پیشخوان کافه‌بازار
     const val BAZAAR_RSA_PUBLIC_KEY = "MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwCabwVc2p7UqBqZFyMleXiuGT8fHE/obwon3f859+kYRWU5kWqGadTCqEH5JOWALZ7XP0SzynhJ2We24MITaQy0ai6QPEihSgfjYgk5rtpce7ZuB3bwP+4iZcpNKo/HMS+CPRNOPGO87XbZZcDk4DQHgb8vL/PySfLkvu2T7GtPqc6Yicfk/ym2qzb/57ANFP76WiGQHTl/znFKhFj+BSc9wqnldfXMM3SwrNh+YSECAwEAAQ=="
 
     private const val PREFS_NAME = "khayyaton_prefs"
@@ -371,20 +372,38 @@ object SubscriptionManager {
         onResult: (Result<Unit>) -> Unit
     ) {
         scope.launch {
-            val user = FirebaseAuth.getInstance().currentUser ?: return@launch
+            val user = FirebaseAuth.getInstance().currentUser
+            if (user == null) {
+                withContext(Dispatchers.Main) {
+                    onResult(Result.failure(Exception("لطفاً ابتدا وارد حساب کاربری خود شوید.")))
+                }
+                _isLoading.value = false
+                return@launch
+            }
             try {
                 val now = System.currentTimeMillis()
-                val currentExpiry = _subscriptionState.value.expiresAt ?: now
-                val baseTime = if (currentExpiry > now) currentExpiry else now
-                val newExpiry = baseTime + (plan.durationDays.toLong() * 24 * 60 * 60 * 1000L)
+
+                if (purchaseInfo.packageName != APP_PACKAGE_NAME ||
+                    purchaseInfo.productId != plan.productId ||
+                    purchaseInfo.purchaseState != PurchaseState.PURCHASED
+                ) {
+                    throw IllegalStateException("اطلاعات خرید کافه‌بازار معتبر نیست.")
+                }
+
+                val currentExpiry = _subscriptionState.value.expiresAt ?: 0L
+                val purchaseTime = purchaseInfo.purchaseTime.takeIf { it > 0L } ?: now
+                val durationMillis = plan.durationDays.toLong() * 24 * 60 * 60 * 1000L
+                val baseTime = if (currentExpiry > now) currentExpiry else purchaseTime
+                val newExpiry = baseTime + durationMillis
 
                 val subData = hashMapOf(
                     "subscriptionStatus" to SubscriptionStatus.SUBSCRIBED.name,
                     "activeProductId" to plan.productId,
-                    "startedAt" to now,
+                    "startedAt" to purchaseTime,
                     "expiresAt" to newExpiry,
                     "purchaseToken" to purchaseInfo.purchaseToken,
                     "orderId" to purchaseInfo.orderId,
+                    "purchaseTime" to purchaseInfo.purchaseTime,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
 
@@ -397,7 +416,7 @@ object SubscriptionManager {
                 val newSub = _subscriptionState.value.copy(
                     status = SubscriptionStatus.SUBSCRIBED,
                     activeProductId = plan.productId,
-                    startedAt = now,
+                    startedAt = purchaseTime,
                     expiresAt = newExpiry,
                     purchaseToken = purchaseInfo.purchaseToken,
                     orderId = purchaseInfo.orderId,
@@ -446,15 +465,31 @@ object SubscriptionManager {
                         _operationMessage.value = msg
                         onResult(Result.success(0))
                     } else {
-                        // یافتن آخرین یا معتبرترین اشتراک
-                        val latestPurchase = purchases.last()
-                        val matchedPlan = SubscriptionPlan.PLANS.find { it.productId == latestPurchase.productId }
-                            ?: SubscriptionPlan.PLANS.first()
+                        val validPurchases = purchases
+                            .filter { it.packageName == APP_PACKAGE_NAME }
+                            .filter { it.purchaseState == PurchaseState.PURCHASED }
+                            .mapNotNull { purchase ->
+                                SubscriptionPlan.PLANS
+                                    .find { it.productId == purchase.productId }
+                                    ?.let { plan -> plan to purchase }
+                            }
 
-                        handleSuccessfulSubscription(matchedPlan, latestPurchase) { result ->
+                        if (validPurchases.isEmpty()) {
+                            _isLoading.value = false
+                            val msg = "هیچ اشتراک فعال و معتبر کافه‌بازار برای این برنامه یافت نشد."
+                            _operationMessage.value = msg
+                            onResult(Result.success(0))
+                            return@querySucceed
+                        }
+
+                        // بر اساس زمان خرید انتخاب می‌کنیم، نه ترتیب لیست برگشتی بازار.
+                        val (matchedPlan, latestPurchase) = validPurchases.maxByOrNull { it.second.purchaseTime }!!
+
+                        // Restore نباید هر بار اشتراک را دوباره تمدید کند.
+                        handleSuccessfulSubscription(matchedPlan, latestPurchase, extendExisting = false) { result ->
                             if (result.isSuccess) {
                                 _operationMessage.value = "اشتراک قبلی شما با موفقیت بازیابی شد."
-                                onResult(Result.success(purchases.size))
+                                onResult(Result.success(validPurchases.size))
                             } else {
                                 onResult(Result.failure(result.exceptionOrNull() ?: Exception("خطا در بازیابی اشتراک")))
                             }
