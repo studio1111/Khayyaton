@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - '.github/workflows/build-release.yml'
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
