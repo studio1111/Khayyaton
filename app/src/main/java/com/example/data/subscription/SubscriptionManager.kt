@@ -36,7 +36,7 @@ object SubscriptionManager {
     private const val TAG = "SubscriptionManager"
 
     // TODO: کلید RSA اختصاصی برنامه در پیشخوان کافه‌بازار را در اینجا قرار دهید
-    const val BAZAAR_RSA_PUBLIC_KEY = "YOUR_BAZAAR_RSA_PUBLIC_KEY"
+    const val BAZAAR_RSA_PUBLIC_KEY = "MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwCabwVc2p7UqBqZFyMleXiuGT8fHE/obwon3f859+kYRWU5kWqGadTCqEH5JOWALZ7XP0SzynhJ2We24MITaQy0ai6QPEihSgfjYgk5rtpce7ZuB3bwP+4iZcpNKo/HMS+CPRNOPGO87XbZZcDk4DQHgb8vL/PySfLkvu2T7GtPqc6Yicfk/ym2qzb/57ANFP76WiGQHTl/znFKhFj+BSc9wqnldfXMM3SwrNh+YSECAwEAAQ=="
 
     private const val PREFS_NAME = "khayyaton_prefs"
     private const val KEY_TRIAL_STARTED_AT = "sub_trial_started_at"
@@ -54,6 +54,12 @@ object SubscriptionManager {
 
     private val _operationMessage = MutableStateFlow<String?>(null)
     val operationMessage: StateFlow<String?> = _operationMessage.asStateFlow()
+
+    private val _trialAvailable = MutableStateFlow(false)
+    val trialAvailable: StateFlow<Boolean> = _trialAvailable.asStateFlow()
+
+    private val _trialPeriodDays = MutableStateFlow(0)
+    val trialPeriodDays: StateFlow<Int> = _trialPeriodDays.asStateFlow()
 
     private var payment: Payment? = null
     private var paymentConnection: Connection? = null
@@ -93,6 +99,8 @@ object SubscriptionManager {
             paymentConnection = payment?.connect {
                 connectionSucceed {
                     Log.d(TAG, "Poolakey connected successfully to Cafe Bazaar")
+                    checkBazaarTrialAvailability()
+                    refreshSubscriptionFromBazaar()
                 }
                 connectionFailed { throwable ->
                     Log.w(TAG, "Poolakey connection failed: ${throwable.message}")
@@ -192,29 +200,20 @@ object SubscriptionManager {
                 val now = System.currentTimeMillis()
 
                 if (!snapshot.exists()) {
-                    // کاربر جدید: فعال‌سازی دوره آزمایشی ۳ روزه متصل به UID کاربر
-                    val trialDays = 3
-                    val trialEnds = now + (trialDays * 24 * 60 * 60 * 1000L)
-
+                    // Trial واقعی توسط کافه‌بازار مدیریت می‌شود و Firebase آن را جعل نمی‌کند.
                     val newSub = UserSubscription(
-                        status = SubscriptionStatus.TRIAL_ACTIVE,
-                        trialStartedAt = now,
-                        trialEndsAt = trialEnds,
-                        trialUsed = true,
+                        status = SubscriptionStatus.UNKNOWN,
+                        trialUsed = false,
                         activeProductId = null,
-                        startedAt = now,
-                        expiresAt = trialEnds,
+                        startedAt = null,
+                        expiresAt = null,
                         updatedAt = now
                     )
 
                     val data = hashMapOf(
-                        "trialStartedAt" to now,
-                        "trialEndsAt" to trialEnds,
-                        "trialUsed" to true,
-                        "subscriptionStatus" to SubscriptionStatus.TRIAL_ACTIVE.name,
+                        "trialUsed" to false,
+                        "subscriptionStatus" to SubscriptionStatus.UNKNOWN.name,
                         "activeProductId" to null,
-                        "startedAt" to now,
-                        "expiresAt" to trialEnds,
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
 
@@ -368,15 +367,22 @@ object SubscriptionManager {
     private fun handleSuccessfulSubscription(
         plan: SubscriptionPlan,
         purchaseInfo: PurchaseInfo,
-        onResult: (Result<Unit>) -> Unit
+        onResult: (Result<Unit>) -> Unit,
+        extendExisting: Boolean = true
     ) {
         scope.launch {
             val user = FirebaseAuth.getInstance().currentUser ?: return@launch
             try {
                 val now = System.currentTimeMillis()
-                val currentExpiry = _subscriptionState.value.expiresAt ?: now
+                val purchaseExpiry = purchaseInfo.purchaseTime +
+                    (plan.durationDays.toLong() * 24 * 60 * 60 * 1000L)
+                val currentExpiry = _subscriptionState.value.expiresAt ?: 0L
                 val baseTime = if (currentExpiry > now) currentExpiry else now
-                val newExpiry = baseTime + (plan.durationDays.toLong() * 24 * 60 * 60 * 1000L)
+                val newExpiry = if (extendExisting) {
+                    baseTime + (plan.durationDays.toLong() * 24 * 60 * 60 * 1000L)
+                } else {
+                    maxOf(currentExpiry, purchaseExpiry)
+                }
 
                 val subData = hashMapOf(
                     "subscriptionStatus" to SubscriptionStatus.SUBSCRIBED.name,
@@ -423,6 +429,76 @@ object SubscriptionManager {
     }
 
     /**
+     * بررسی واجدشرایط بودن کاربر برای Trial واقعی کافه‌بازار.
+     */
+    fun checkBazaarTrialAvailability() {
+        val p = payment ?: return
+        try {
+            p.checkTrialSubscription {
+                checkTrialSubscriptionSucceed { info ->
+                    _trialAvailable.value = info.isAvailable
+                    _trialPeriodDays.value = info.trialPeriodDays
+                }
+                checkTrialSubscriptionFailed {
+                    _trialAvailable.value = false
+                    _trialPeriodDays.value = 0
+                }
+            }
+        } catch (e: Exception) {
+            _trialAvailable.value = false
+            _trialPeriodDays.value = 0
+            Log.w(TAG, "Error checking Bazaar trial: " + e.message)
+        }
+    }
+
+    /**
+     * وضعیت اشتراک از خود کافه‌بازار دوباره خوانده می‌شود.
+     */
+    private fun refreshSubscriptionFromBazaar() {
+        val p = payment ?: return
+        try {
+            p.getSubscribedProducts {
+                querySucceed { purchases ->
+                    val activePurchase = purchases
+                        .filter { purchase -> SubscriptionPlan.PLANS.any { it.productId == purchase.productId } }
+                        .maxByOrNull { it.purchaseTime }
+
+                    if (activePurchase == null) {
+                        if (_subscriptionState.value.status == SubscriptionStatus.SUBSCRIBED) {
+                            val expired = _subscriptionState.value.copy(
+                                status = SubscriptionStatus.EXPIRED,
+                                activeProductId = null,
+                                expiresAt = null,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            _subscriptionState.value = expired
+                            cacheSubscription(expired)
+                        }
+                        return@querySucceed
+                    }
+
+                    val plan = SubscriptionPlan.PLANS.first { it.productId == activePurchase.productId }
+                    handleSuccessfulSubscription(
+                        plan = plan,
+                        purchaseInfo = activePurchase,
+                        onResult = { result ->
+                            if (result.isFailure) {
+                                Log.w(TAG, "Could not persist Bazaar subscription")
+                            }
+                        },
+                        extendExisting = false
+                    )
+                }
+                queryFailed { throwable ->
+                    Log.w(TAG, "Bazaar subscription refresh failed: " + throwable.message)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error refreshing Bazaar subscription: " + e.message)
+        }
+    }
+
+    /**
      * بازیابی خریدهای فعال از کافه‌بازار (Restore Purchases)
      */
     fun restorePurchases(onResult: (Result<Int>) -> Unit) {
@@ -451,7 +527,7 @@ object SubscriptionManager {
                         val matchedPlan = SubscriptionPlan.PLANS.find { it.productId == latestPurchase.productId }
                             ?: SubscriptionPlan.PLANS.first()
 
-                        handleSuccessfulSubscription(matchedPlan, latestPurchase) { result ->
+                        handleSuccessfulSubscription(matchedPlan, latestPurchase, extendExisting = false) { result ->
                             if (result.isSuccess) {
                                 _operationMessage.value = "اشتراک قبلی شما با موفقیت بازیابی شد."
                                 onResult(Result.success(purchases.size))
