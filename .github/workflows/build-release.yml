@@ -44,7 +44,7 @@ jobs:
 
       - name: Build APK
         env:
-          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          KEYSTORE_PATH: ${{ github.workspace }}/khayyaton.jks
           STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
