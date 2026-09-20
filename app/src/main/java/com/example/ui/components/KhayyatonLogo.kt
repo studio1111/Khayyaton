@@ -40,11 +40,3 @@ fun KhayyatonLogo(
     )
 }
 
-@Composable
-fun SheetOnLogo(
-    modifier: Modifier = Modifier,
-    fontSize: TextUnit = 24.sp
-) {
-    KhayyatonLogo(modifier = modifier, fontSize = fontSize)
-}
-
