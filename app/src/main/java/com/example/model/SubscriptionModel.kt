@@ -18,7 +18,7 @@ data class SubscriptionPlan(
 ) {
     companion object {
         val PLANS = listOf(
-            SubscriptionPlan("khayyaton_3_month", "اشتراک ۳ ماهه", 90, 50_000L, "۵۰,۰۰۰ تومان"),
+            SubscriptionPlan("khayyaton_3_month", "اشتراک ۳ ماهه", 90, 55_000L, "۵۵,۰۰۰ تومان"),
             SubscriptionPlan("khayyaton_6_month", "اشتراک ۶ ماهه", 180, 90_000L, "۹۰,۰۰۰ تومان", "محبوب‌ترین (۱۰٪ تخفیف)"),
             SubscriptionPlan("khayyaton_1_year", "اشتراک ۱ ساله", 365, 150_000L, "۱۵۰,۰۰۰ تومان", "بیشترین صرفه (۲۵٪ تخفیف)")
         )
