@@ -369,7 +369,8 @@ object SubscriptionManager {
     private fun handleSuccessfulSubscription(
         plan: SubscriptionPlan,
         purchaseInfo: PurchaseInfo,
-        onResult: (Result<Unit>) -> Unit
+        onResult: (Result<Unit>) -> Unit,
+        extendExisting: Boolean = true
     ) {
         scope.launch {
             val user = FirebaseAuth.getInstance().currentUser
@@ -393,8 +394,11 @@ object SubscriptionManager {
                 val currentExpiry = _subscriptionState.value.expiresAt ?: 0L
                 val purchaseTime = purchaseInfo.purchaseTime.takeIf { it > 0L } ?: now
                 val durationMillis = plan.durationDays.toLong() * 24 * 60 * 60 * 1000L
-                val baseTime = if (currentExpiry > now) currentExpiry else purchaseTime
-                val newExpiry = baseTime + durationMillis
+                val newExpiry = if (extendExisting && currentExpiry > now) {
+                    currentExpiry + durationMillis
+                } else {
+                    maxOf(currentExpiry, purchaseTime + durationMillis)
+                }
 
                 val subData = hashMapOf(
                     "subscriptionStatus" to SubscriptionStatus.SUBSCRIBED.name,
