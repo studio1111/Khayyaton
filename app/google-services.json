@@ -1,0 +1,15 @@
+{
+  "project_info": {
+    "project_number": "15543905804",
+    "project_id": "khayyaton-26abc",
+    "storage_bucket": "khayyaton-26abc.firebasestorage.app"
+  },
+  "client": [{
+    "client_info": {
+      "mobilesdk_app_id": "1:15543905804:android:8fc6393c86598be4310829",
+      "android_client_info": {"package_name": "com.farsinnov.khayyaton"}
+    },
+    "api_key": [{"current_key": "AIzaSyAmLQ7SPiYxhMvquyV01xYD8MZZjezknoY"}]
+  }],
+  "configuration_version": "1"
+}
