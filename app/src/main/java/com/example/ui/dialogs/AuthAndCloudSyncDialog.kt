@@ -632,7 +632,7 @@ fun AuthAndCloudSyncDialog(
                                 isLoading = true
                                 coroutineScope.launch {
                                     val res = if (mode == AuthScreenMode.SIGN_IN) {
-                                        FirebaseService.signInWithEmail(email, password)
+                                        FirebaseService.signInWithEmail(email, password, username)
                                     } else {
                                         FirebaseService.registerWithEmail(email, password)
                                     }
