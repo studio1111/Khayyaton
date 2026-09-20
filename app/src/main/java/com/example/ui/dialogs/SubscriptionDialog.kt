@@ -47,6 +47,8 @@ fun SubscriptionDialog(
     val subscription by SubscriptionManager.subscriptionState.collectAsStateWithLifecycle()
     val isLoading by SubscriptionManager.isLoading.collectAsStateWithLifecycle()
     val operationMessage by SubscriptionManager.operationMessage.collectAsStateWithLifecycle()
+    val trialAvailable by SubscriptionManager.trialAvailable.collectAsStateWithLifecycle()
+    val trialPeriodDays by SubscriptionManager.trialPeriodDays.collectAsStateWithLifecycle()
 
     LaunchedEffect(operationMessage) {
         operationMessage?.let { msg ->
@@ -130,6 +132,35 @@ fun SubscriptionDialog(
                 ) {
                     // Status Card
                     SubscriptionStatusBanner(subscription = subscription)
+
+                    // Trial status from Cafe Bazaar, not a locally fabricated trial.
+                    if (trialAvailable && trialPeriodDays > 0) {
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Amber600.copy(alpha = 0.10f)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                Amber600.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(Icons.Outlined.Timer, contentDescription = null, tint = Amber600)
+                                Text(
+                                    text = "شما واجد شرایط ${PersianUtils.toPersianDigits(trialPeriodDays)} روز دوره آزمایشی کافه‌بازار هستید. در صورت تأیید بازار هنگام خرید، دوره آزمایشی روی همان اشتراک اعمال می‌شود.",
+                                    fontSize = 11.sp,
+                                    lineHeight = 18.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
 
                     // Description text
                     Text(
@@ -241,7 +272,7 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Amber600.copy(alpha = 0.12f),
                 Amber600.copy(alpha = 0.45f),
                 Icons.Outlined.Timer,
-                "نسخه آزمایشی ۳ روزه فعال است",
+                "نسخه آزمایشی کافه‌بازار فعال است",
                 "${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت از دوره رایگان باقی مانده است"
             )
         }
@@ -250,7 +281,7 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Rose600.copy(alpha = 0.12f),
                 Rose600.copy(alpha = 0.45f),
                 Icons.Outlined.Warning,
-                "دوره آزمایشی ۳ روزه به پایان رسیده است",
+                "دوره آزمایشی کافه‌بازار به پایان رسیده است",
                 "برای ثبت فاکتور و ادامه استفاده از برنامه، لطفاً یکی از بسته‌های اشتراک را فعال کنید."
             )
         }
