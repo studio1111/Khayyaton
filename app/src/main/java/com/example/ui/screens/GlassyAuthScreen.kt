@@ -526,7 +526,7 @@ fun GlassyAuthScreen(
                             isLoading = true
                             coroutineScope.launch {
                                 val res = if (activeTab == GlassAuthTab.SIGN_IN) {
-                                    FirebaseService.signInWithEmail(email, password)
+                                    FirebaseService.signInWithEmail(email, password, username)
                                 } else {
                                     FirebaseService.registerWithEmail(email, password)
                                 }
