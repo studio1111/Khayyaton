@@ -528,7 +528,7 @@ fun GlassyAuthScreen(
                                 val res = if (activeTab == GlassAuthTab.SIGN_IN) {
                                     FirebaseService.signInWithEmail(email, password, username)
                                 } else {
-                                    FirebaseService.registerWithEmail(email, password)
+                                    FirebaseService.registerWithEmailAndUsername(username, email, password)
                                 }
                                 isLoading = false
                                 if (res.isSuccess) {
