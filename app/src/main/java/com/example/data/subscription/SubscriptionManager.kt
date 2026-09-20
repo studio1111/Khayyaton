@@ -527,14 +527,14 @@ object SubscriptionManager {
                         val matchedPlan = SubscriptionPlan.PLANS.find { it.productId == latestPurchase.productId }
                             ?: SubscriptionPlan.PLANS.first()
 
-                        handleSuccessfulSubscription(matchedPlan, latestPurchase, extendExisting = false) { result ->
+                        handleSuccessfulSubscription(matchedPlan, latestPurchase, onResult = { result ->
                             if (result.isSuccess) {
                                 _operationMessage.value = "اشتراک قبلی شما با موفقیت بازیابی شد."
                                 onResult(Result.success(purchases.size))
                             } else {
                                 onResult(Result.failure(result.exceptionOrNull() ?: Exception("خطا در بازیابی اشتراک")))
                             }
-                        }
+                        }, extendExisting = false)
                     }
                 }
                 queryFailed { throwable ->
