@@ -30,7 +30,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.subscription.SubscriptionManager
 import com.example.model.SubscriptionPlan
 import com.example.model.SubscriptionStatus
-import com.example.ui.theme.Amber600
 import com.example.ui.theme.Emerald600
 import com.example.ui.theme.Rose600
 import com.example.util.PersianUtils
@@ -238,22 +237,14 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 "دسترسی کامل به برنامه فعال است (${PersianUtils.toPersianDigits(subscription.remainingDays)} روز باقی مانده)"
             )
         }
-        SubscriptionStatus.TRIAL_ACTIVE -> {
-            Tuple5(
-                Amber600.copy(alpha = 0.12f),
-                Amber600.copy(alpha = 0.45f),
-                Icons.Outlined.Timer,
-                "نسخه آزمایشی ۳ روزه فعال است",
-                "${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت از دوره رایگان باقی مانده است"
-            )
-        }
+        SubscriptionStatus.TRIAL_ACTIVE,
         SubscriptionStatus.TRIAL_EXPIRED -> {
             Tuple5(
                 Rose600.copy(alpha = 0.12f),
                 Rose600.copy(alpha = 0.45f),
                 Icons.Outlined.Warning,
-                "دوره آزمایشی ۳ روزه به پایان رسیده است",
-                "برای ثبت فاکتور و ادامه استفاده از برنامه، لطفاً یکی از بسته‌های اشتراک را فعال کنید."
+                "اشتراک فعال نیست",
+                "برای ثبت فاکتور و ادامه استفاده از برنامه، لطفاً یکی از اشتراک‌های کافه‌بازار را فعال کنید."
             )
         }
         SubscriptionStatus.EXPIRED -> {
@@ -291,7 +282,7 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (subscription.status == SubscriptionStatus.SUBSCRIBED) Emerald600 else if (subscription.status == SubscriptionStatus.TRIAL_ACTIVE) Amber600 else Rose600,
+                tint = if (subscription.status == SubscriptionStatus.SUBSCRIBED) Emerald600 else Rose600,
                 modifier = Modifier.size(28.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
