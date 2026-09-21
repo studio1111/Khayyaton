@@ -544,14 +544,19 @@ object SubscriptionManager {
                         val (matchedPlan, latestPurchase) = validPurchases.maxByOrNull { it.second.purchaseTime }!!
 
                         // Restore نباید هر بار اشتراک را دوباره تمدید کند.
-                        handleSuccessfulSubscription(matchedPlan, latestPurchase, extendExisting = false) { result ->
-                            if (result.isSuccess) {
-                                _operationMessage.value = "اشتراک قبلی شما با موفقیت بازیابی شد."
-                                onResult(Result.success(validPurchases.size))
-                            } else {
-                                onResult(Result.failure(result.exceptionOrNull() ?: Exception("خطا در بازیابی اشتراک")))
-                            }
-                        }
+                        handleSuccessfulSubscription(
+                            plan = matchedPlan,
+                            purchaseInfo = latestPurchase,
+                            onResult = { result ->
+                                if (result.isSuccess) {
+                                    _operationMessage.value = "اشتراک قبلی شما با موفقیت بازیابی شد."
+                                    onResult(Result.success(validPurchases.size))
+                                } else {
+                                    onResult(Result.failure(result.exceptionOrNull() ?: Exception("خطا در بازیابی اشتراک")))
+                                }
+                            },
+                            extendExisting = false
+                        )
                     }
                 }
                 queryFailed { throwable ->
