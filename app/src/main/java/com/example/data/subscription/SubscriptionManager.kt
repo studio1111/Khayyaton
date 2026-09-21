@@ -29,7 +29,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 /**
- * مدیریت اشتراک‌های کافه‌بازار و دوره آزمایشی ۳ روزه خیاطان
+ * مدیریت اشتراک‌های کافه‌بازار خیاطان
  *
  * کلید عمومی RSA اختصاصی برنامه از پیشخوان توسعه‌دهندگان کافه‌بازار.
  */
@@ -147,7 +147,7 @@ object SubscriptionManager {
     }
 
     /**
-     * بررسی دسترسی پرمیوم کاربر (اشتراک فعال یا نسخه آزمایشی فعال)
+     * بررسی دسترسی پرمیوم کاربر. فقط اشتراک معتبر بازار دسترسی می‌دهد.
      */
     fun hasPremiumAccess(): Boolean {
         return _subscriptionState.value.hasAccess
@@ -159,10 +159,16 @@ object SubscriptionManager {
     private fun loadCachedSubscription() {
         val sp = prefs ?: return
         val statusStr = sp.getString(KEY_SUB_STATUS, SubscriptionStatus.UNKNOWN.name)
-        val status = try {
+        val loadedStatus = try {
             SubscriptionStatus.valueOf(statusStr ?: SubscriptionStatus.UNKNOWN.name)
         } catch (_: Exception) {
             SubscriptionStatus.UNKNOWN
+        }
+        // Trial محلی نسخه‌های قدیمی دیگر entitlement معتبر نیست.
+        val status = if (loadedStatus == SubscriptionStatus.TRIAL_ACTIVE) {
+            SubscriptionStatus.TRIAL_EXPIRED
+        } else {
+            loadedStatus
         }
 
         val trialStartedAt = sp.getLong(KEY_TRIAL_STARTED_AT, 0L)
@@ -198,7 +204,7 @@ object SubscriptionManager {
     }
 
     /**
-     * همگام‌سازی اطلاعات اشتراک و نسخه آزمایشی با فایربیس
+     * همگام‌سازی وضعیت اشتراک با فایربیس
      */
     fun syncSubscriptionWithFirebase(onComplete: ((Result<UserSubscription>) -> Unit)? = null) {
         scope.launch {
@@ -244,7 +250,7 @@ object SubscriptionManager {
                     cacheSubscription(newSub)
                     onComplete?.invoke(Result.success(newSub))
                 } else {
-                    // اشتراک یا آزمایشی قبلاً ثبت شده است
+                    // اشتراک قبلاً ثبت شده است
                     val trialStartedAt = snapshot.getLong("trialStartedAt") ?: 0L
                     val trialEndsAt = snapshot.getLong("trialEndsAt") ?: 0L
                     val trialUsed = snapshot.getBoolean("trialUsed") ?: false
