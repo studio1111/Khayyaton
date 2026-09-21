@@ -42,7 +42,7 @@ data class UserSubscription(
             val now = System.currentTimeMillis()
             return when (status) {
                 SubscriptionStatus.SUBSCRIBED -> expiresAt != null && expiresAt > now
-                SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt > now
+                SubscriptionStatus.TRIAL_ACTIVE,
                 SubscriptionStatus.TRIAL_EXPIRED,
                 SubscriptionStatus.EXPIRED,
                 SubscriptionStatus.UNKNOWN -> false
@@ -53,7 +53,8 @@ data class UserSubscription(
         get() {
             val target = when (status) {
                 SubscriptionStatus.SUBSCRIBED -> expiresAt ?: 0L
-                SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt
+                SubscriptionStatus.TRIAL_ACTIVE,
+                SubscriptionStatus.TRIAL_EXPIRED -> 0L
                 else -> 0L
             }
             val diff = target - System.currentTimeMillis()
