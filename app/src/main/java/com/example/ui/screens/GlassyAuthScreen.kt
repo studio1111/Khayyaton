@@ -162,7 +162,7 @@ fun GlassyAuthScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.sheeton_logo_icon),
+                        painter = painterResource(id = R.drawable.khayyaton_logo_icon),
                         contentDescription = "لوگوی خیاطان",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
