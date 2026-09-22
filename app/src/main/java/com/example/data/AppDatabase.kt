@@ -91,6 +91,19 @@ class WorkshopRepository(
         prefs?.edit()?.putString("custom_username", username.trim())?.apply()
     }
 
+    fun getCloudSyncInitialized(): Boolean =
+        prefs?.getBoolean("cloud_sync_initialized", false) ?: false
+
+    fun saveCloudSyncInitialized(value: Boolean) {
+        prefs?.edit()?.putBoolean("cloud_sync_initialized", value)?.apply()
+    }
+
+    fun getSavedThemeMode(): String? = prefs?.getString("theme_mode", null)
+
+    fun saveThemeMode(mode: String) {
+        prefs?.edit()?.putString("theme_mode", mode)?.apply()
+    }
+
     val orders: Flow<List<FurnitureOrder>> = orderDao.getAllOrders()
     val payments: Flow<List<PaymentRecord>> = paymentDao.getAllPayments()
     val modelPresets: Flow<List<ModelPreset>> = modelPresetDao.getAllPresets()
@@ -112,16 +125,8 @@ class WorkshopRepository(
     suspend fun getWorkshopById(id: Long): Workshop? =
         workshopDao.getWorkshopById(id)
 
-    suspend fun ensureDefaultWorkshop(): Long {
-        val existing = workshopDao.getAllWorkshopsSync()
-        return if (existing.isEmpty()) {
-            val defaultWorkshop = Workshop(id = 1L, name = "کارگاه اصلی")
-            workshopDao.insertWorkshop(defaultWorkshop)
-            1L
-        } else {
-            existing.first().id
-        }
-    }
+    suspend fun ensureDefaultWorkshop(): Long =
+        workshopDao.getAllWorkshopsSync().firstOrNull()?.id ?: 0L
 
     suspend fun saveWorkshop(workshop: Workshop): Long {
         val trimmed = workshop.name.trim()
