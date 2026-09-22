@@ -310,7 +310,7 @@ fun WorkshopsDialog(
                                             )
                                         }
 
-                                        if (workshops.size > 1) {
+                                        if (true) {
                                             IconButton(
                                                 onClick = { workshopWarningTarget = ws },
                                                 modifier = Modifier.size(34.dp)
@@ -432,14 +432,14 @@ fun WorkshopsDialog(
                     text = "هشدار حذف کارگاه «${targetWs.name}»",
                     fontSize = 14.5.sp,
                     fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.error,
+                    color = Color(0xFF8B0000),
                     textAlign = TextAlign.Center
                 )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "توجه: با حذف کارگاه «${targetWs.name}»، کلیه فاکتورهای کارکرد، دریافتی‌ها، تراز مالی و مدل‌های ثبت‌شده در آن برای همیشه حذف خواهند شد و دیگر قابل بازگرداندن نیست.",
+                        text = if (workshops.size == 1) "این تنها کارگاه موجود در برنامه است. حذف آن باعث می‌شود هیچ اطلاعاتی در برنامه باقی نماند و این عملیات قابل بازگشت نیست." else "توجه: با حذف کارگاه «${targetWs.name}»، کلیه فاکتورها، دریافتی‌ها، تراز مالی و مدل‌های ثبت‌شده برای همیشه حذف خواهند شد.",
                         fontSize = 12.sp,
                         lineHeight = 18.sp,
                         color = MaterialTheme.colorScheme.onSurface
