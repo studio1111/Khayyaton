@@ -1,0 +1,262 @@
+name: Apply Khayyaton fixes
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch source
+        shell: python
+        run: |
+          from pathlib import Path
+          def patch(path, replacements):
+              p=Path(path); s=p.read_text(encoding="utf-8")
+              for name, old, new in replacements:
+                  if old not in s: raise SystemExit(f"PATCH FAILED: {path}: {name}")
+                  s=s.replace(old,new,1)
+              p.write_text(s,encoding="utf-8")
+
+          patch("app/src/main/java/com/example/data/AppDatabase.kt", [
+            ("prefs", """    fun saveCustomUsername(username: String) {
+        prefs?.edit()?.putString("custom_username", username.trim())?.apply()
+    }""", """    fun saveCustomUsername(username: String) {
+        prefs?.edit()?.putString("custom_username", username.trim())?.apply()
+    }
+
+    fun getCloudSyncInitialized(): Boolean = prefs?.getBoolean("cloud_sync_initialized", false) ?: false
+    fun saveCloudSyncInitialized(value: Boolean) { prefs?.edit()?.putBoolean("cloud_sync_initialized", value)?.apply() }
+    fun getSavedThemeMode(): String? = prefs?.getString("theme_mode", null)
+    fun saveThemeMode(mode: String) { prefs?.edit()?.putString("theme_mode", mode)?.apply() }"""),
+            ("default workshop", """    suspend fun ensureDefaultWorkshop(): Long {
+        val existing = workshopDao.getAllWorkshopsSync()
+        return if (existing.isEmpty()) {
+            val defaultWorkshop = Workshop(id = 1L, name = "کارگاه اصلی")
+            workshopDao.insertWorkshop(defaultWorkshop)
+            1L
+        } else {
+            existing.first().id
+        }
+    }""", """    suspend fun ensureDefaultWorkshop(): Long =
+        workshopDao.getAllWorkshopsSync().firstOrNull()?.id ?: 0L""")
+          ])
+
+          patch("app/src/main/java/com/example/ui/KhayyatonViewModel.kt", [
+            ("startup workshop", """            val defWsId = repository.ensureDefaultWorkshop()
+            val savedWsId = repository.getSavedActiveWorkshopId()
+            val allWorkshops = repository.getAllWorkshopsSync()
+            if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) {
+                activeWorkshopId.value = savedWsId
+            } else {
+                activeWorkshopId.value = defWsId
+                repository.saveActiveWorkshopId(defWsId)
+            }
+            repository.deduplicatePresets()
+            repository.deduplicateOrders()
+            repository.deduplicatePayments()
+            repository.insertDefaultUnitRulesIfEmpty()""", """            val savedWsId = repository.getSavedActiveWorkshopId()
+            val allWorkshops = repository.getAllWorkshopsSync()
+            activeWorkshopId.value = if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) savedWsId else allWorkshops.firstOrNull()?.id ?: 0L
+            if (activeWorkshopId.value > 0L) repository.saveActiveWorkshopId(activeWorkshopId.value)
+            repository.deduplicatePresets()
+            repository.deduplicateOrders()
+            repository.deduplicatePayments()"""),
+            ("preset resurrection", """            if (orderToSave.modelName.isNotBlank()) {""", """            if (addToPresets && orderToSave.modelName.isNotBlank()) {"""),
+            ("last workshop", """            val all = repository.getAllWorkshopsSync()
+            if (all.size <= 1) return
+            repository.deleteWorkshopAndAllData(workshop.id)
+            val remaining = repository.getAllWorkshopsSync()
+            val nextActive = remaining.firstOrNull()?.id ?: 1L
+            activeWorkshopId.value = nextActive
+            repository.saveActiveWorkshopId(nextActive)""", """            repository.deleteWorkshopAndAllData(workshop.id)
+            val remaining = repository.getAllWorkshopsSync()
+            val nextActive = remaining.firstOrNull()?.id ?: 0L
+            activeWorkshopId.value = nextActive
+            repository.saveActiveWorkshopId(nextActive)"""),
+            ("login workshop", """            if (!workshopName.isNullOrBlank()) {
+                val currentWs = activeWorkshop.value
+                if (currentWs != null) {
+                    renameWorkshop(currentWs.id, workshopName.trim())
+                } else {
+                    createWorkshop(workshopName.trim())
+                }
+            }
+
+            val localOrders = repository.getAllOrdersSync()
+            val localPayments = repository.getAllPaymentsSync()
+            val shouldDownload = localOrders.isEmpty() && localPayments.isEmpty()
+            performAutoSync(user, shouldDownload = shouldDownload)""", """            val shouldDownload = !repository.getCloudSyncInitialized()
+            performAutoSync(user, shouldDownload = shouldDownload)"""),
+            ("delete order sync", """            deleteTarget.value = null
+        }
+    }
+
+    fun duplicateOrder""", """            deleteTarget.value = null
+            triggerAutoUpload()
+        }
+    }
+
+    fun duplicateOrder"""),
+            ("delete preset sync", """            manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + preset.name.trim().lowercase()
+        }
+    }
+
+    fun deletePresetByName""", """            manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + preset.name.trim().lowercase()
+            triggerAutoUpload()
+        }
+    }
+
+    fun deletePresetByName"""),
+            ("delete preset name sync", """            manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + name.trim().lowercase()
+        }
+    }
+
+    fun selectWorkshop""", """            manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + name.trim().lowercase()
+            triggerAutoUpload()
+        }
+    }
+
+    fun selectWorkshop"""),
+            ("delete rule sync", """            repository.deleteUnitRule(rule)
+        }
+    }
+
+    fun restoreDefaultUnitRules""", """            repository.deleteUnitRule(rule)
+            triggerAutoUpload()
+        }
+    }
+
+    fun restoreDefaultUnitRules"""),
+            ("cloud marker", """            autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
+        } catch""", """            repository.saveCloudSyncInitialized(true)
+            autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
+        } catch"""),
+            ("theme load", """            val savedUser = repository.getCustomUsername()
+            if (savedUser.isNotBlank()) {""", """            repository.getSavedThemeMode()?.let { saved ->
+                runCatching { AppThemeMode.valueOf(saved) }.getOrNull()?.let { themeMode.value = it }
+            }
+            val savedUser = repository.getCustomUsername()
+            if (savedUser.isNotBlank()) {""")
+          ])
+
+          patch("app/src/main/java/com/example/model/SubscriptionModel.kt", [
+            ("trial access", """                SubscriptionStatus.SUBSCRIBED -> expiresAt != null && expiresAt > now
+                SubscriptionStatus.TRIAL_ACTIVE,
+                SubscriptionStatus.TRIAL_EXPIRED,
+                SubscriptionStatus.EXPIRED,
+                SubscriptionStatus.UNKNOWN -> false""", """                SubscriptionStatus.SUBSCRIBED -> expiresAt != null && expiresAt > now
+                SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt > now
+                SubscriptionStatus.TRIAL_EXPIRED,
+                SubscriptionStatus.EXPIRED,
+                SubscriptionStatus.UNKNOWN -> false""")
+          ])
+
+          patch("app/src/main/java/com/example/data/subscription/SubscriptionManager.kt", [
+            ("cached trial", """        val status = if (loadedStatus == SubscriptionStatus.TRIAL_ACTIVE) {
+            SubscriptionStatus.TRIAL_EXPIRED
+        } else {
+            loadedStatus
+        }""", """        val status = loadedStatus"""),
+            ("new trial", """                if (!snapshot.exists()) {
+                    // دسترسی فقط با entitlement معتبر کافه‌بازار فعال می‌شود.
+                    val newSub = UserSubscription(
+                        status = SubscriptionStatus.UNKNOWN,
+                        trialStartedAt = 0L,
+                        trialEndsAt = 0L,
+                        trialUsed = false,""", """                if (!snapshot.exists()) {
+                    val trialStarted = now
+                    val trialEnds = now + 3L * 86_400_000L
+                    val newSub = UserSubscription(
+                        status = SubscriptionStatus.TRIAL_ACTIVE,
+                        trialStartedAt = trialStarted,
+                        trialEndsAt = trialEnds,
+                        trialUsed = true,"""),
+            ("trial fields", """"subscriptionStatus" to SubscriptionStatus.UNKNOWN.name,
+                        "activeProductId" to null,""", """"subscriptionStatus" to SubscriptionStatus.TRIAL_ACTIVE.name,
+                        "trialStartedAt" to trialStarted,
+                        "trialEndsAt" to trialEnds,
+                        "trialUsed" to true,
+                        "activeProductId" to null,"""),
+            ("trial expiry", """                    // بررسی انقضا
+                    var needUpdateFirestore = currentStatus == SubscriptionStatus.TRIAL_EXPIRED &&""", """                    if (currentStatus == SubscriptionStatus.TRIAL_ACTIVE && trialEndsAt > 0L && now >= trialEndsAt) currentStatus = SubscriptionStatus.TRIAL_EXPIRED
+                    var needUpdateFirestore = currentStatus == SubscriptionStatus.TRIAL_EXPIRED &&""")
+          ])
+
+          patch("app/src/main/java/com/example/ui/KhayyatonApp.kt", [
+            ("theme callback", """onSelectTheme = { viewModel.themeMode.value = it }""", """onSelectTheme = {
+                            viewModel.themeMode.value = it
+                            viewModel.repository.saveThemeMode(it.name)
+                        }"""),
+            ("order actions", """onEdit = { viewModel.openEditOrder(it) },
+                                                    onDuplicate = { viewModel.duplicateOrder(it) },
+                                                    onDelete = { viewModel.requestDeleteOrder(it) },""", """onEdit = { checkAccessAndExecute { viewModel.openEditOrder(it) } },
+                                                    onDuplicate = { checkAccessAndExecute { viewModel.duplicateOrder(it) } },
+                                                    onDelete = { checkAccessAndExecute { viewModel.requestDeleteOrder(it) } },"""),
+            ("order invoice", """onViewInvoice = { viewModel.openCardShareOrder(it) },""", """onViewInvoice = { checkAccessAndExecute { viewModel.openCardShareOrder(it) } },"""),
+            ("payment actions", """onEdit = { viewModel.openEditPayment(item.payment) },
+                                                        onDelete = { viewModel.requestDeletePayment(item.payment) },
+                                                        onShare = { viewModel.openCardSharePayment(item.payment) }""", """onEdit = { checkAccessAndExecute { viewModel.openEditPayment(item.payment) } },
+                                                        onDelete = { checkAccessAndExecute { viewModel.requestDeletePayment(item.payment) } },
+                                                        onShare = { checkAccessAndExecute { viewModel.openCardSharePayment(item.payment) } }"""),
+            ("separated order actions", """onEdit = { viewModel.openEditOrder(it) },
+                                            onDuplicate = { viewModel.duplicateOrder(it) },
+                                            onDelete = { viewModel.requestDeleteOrder(it) },
+                                            onViewInvoice = { viewModel.openCardShareOrder(it) },""", """onEdit = { checkAccessAndExecute { viewModel.openEditOrder(it) } },
+                                            onDuplicate = { checkAccessAndExecute { viewModel.duplicateOrder(it) } },
+                                            onDelete = { checkAccessAndExecute { viewModel.requestDeleteOrder(it) } },
+                                            onViewInvoice = { checkAccessAndExecute { viewModel.openCardShareOrder(it) } },"""),
+            ("recent payment actions", """onOpenNewPayment = { viewModel.openNewPayment() },
+                                        onEditPayment = { viewModel.openEditPayment(it) },
+                                        onDeletePayment = { viewModel.requestDeletePayment(it) },
+                                        onSharePayment = { viewModel.openCardSharePayment(it) }""", """onOpenNewPayment = { checkAccessAndExecute { viewModel.openNewPayment() } },
+                                        onEditPayment = { checkAccessAndExecute { viewModel.openEditPayment(it) } },
+                                        onDeletePayment = { checkAccessAndExecute { viewModel.requestDeletePayment(it) } },
+                                        onSharePayment = { checkAccessAndExecute { viewModel.openCardSharePayment(it) } }""")
+          ])
+
+          p=Path("app/src/main/java/com/example/ui/dialogs/WorkshopsDialog.kt")
+          s=p.read_text(encoding="utf-8")
+          s=s.replace("if (workshops.size > 1) {","if (true) {",1)
+          old_warning="text = \"توجه: با حذف کارگاه «" + "\${targetWs.name}" + "»، کلیه فاکتورهای کارکرد، دریافتی‌ها، تراز مالی و مدل‌های ثبت‌شده در آن برای همیشه حذف خواهند شد و دیگر قابل بازگرداندن نیست.\","
+          new_warning="text = if (workshops.size == 1) \"این تنها کارگاه موجود در برنامه است. حذف آن باعث می‌شود هیچ اطلاعاتی در برنامه باقی نماند و این عملیات قابل بازگشت نیست.\" else \"توجه: با حذف کارگاه «" + "\${targetWs.name}" + "»، کلیه فاکتورها، دریافتی‌ها، تراز مالی و مدل‌های ثبت‌شده برای همیشه حذف خواهند شد.\","
+          if old_warning not in s: raise SystemExit("PATCH FAILED: workshop warning")
+          s=s.replace(old_warning,new_warning,1)
+          s=s.replace("color = MaterialTheme.colorScheme.error,","color = Color(0xFF8B0000),")
+          p.write_text(s,encoding="utf-8")
+
+          p=Path("app/src/main/java/com/example/data/firebase/FirebaseService.kt")
+          s=p.read_text(encoding="utf-8")
+          marker="""            // Update user metadata
+            userDoc.set("""
+          block="""            suspend fun deleteStale(collectionName: String, keepIds: Set<String>) {
+                val snapshot = userDoc.collection(collectionName).get().await()
+                for (doc in snapshot.documents) if (doc.id !in keepIds) doc.reference.delete().await()
+            }
+            deleteStale("workshops", workshops.map { "wrk_" + it.id }.toSet())
+            deleteStale("orders", orders.map { "ord_" + it.id }.toSet())
+            deleteStale("payments", payments.map { "pay_" + it.id }.toSet())
+            deleteStale("presets", presets.map { "pre_" + it.id }.toSet())
+            deleteStale("unitRules", unitRules.map { "rule_" + it.id }.toSet())
+
+            // Update user metadata
+            userDoc.set("""
+          if marker not in s: raise SystemExit("PATCH FAILED: firebase cleanup")
+          p.write_text(s.replace(marker,block,1),encoding="utf-8")
+
+          print("PATCHED")
+
+      - name: Commit source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java
+          if git diff --cached --quiet; then echo "No changes"; else git commit -m "Fix persistence, workshops, theme and subscription"; git push; fi
+
+      - name: Build release
+        run: chmod +x ./gradlew && ./gradlew bundleRelease
