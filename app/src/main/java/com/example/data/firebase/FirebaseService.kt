@@ -304,6 +304,18 @@ object FirebaseService {
                 rulesCol.document("rule_${rule.id}").set(ruleMap, SetOptions.merge()).await()
             }
 
+            suspend fun deleteStale(collectionName: String, keepIds: Set<String>) {
+                val snapshot = userDoc.collection(collectionName).get().await()
+                for (doc in snapshot.documents) {
+                    if (doc.id !in keepIds) doc.reference.delete().await()
+                }
+            }
+            deleteStale("workshops", workshops.map { "wrk_" + it.id }.toSet())
+            deleteStale("orders", orders.map { "ord_" + it.id }.toSet())
+            deleteStale("payments", payments.map { "pay_" + it.id }.toSet())
+            deleteStale("presets", presets.map { "pre_" + it.id }.toSet())
+            deleteStale("unitRules", unitRules.map { "rule_" + it.id }.toSet())
+
             // Update user metadata
             userDoc.set(
                 mapOf(
