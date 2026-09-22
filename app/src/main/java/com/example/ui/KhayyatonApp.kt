@@ -120,7 +120,10 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                 drawerContent = {
                     SidebarDrawer(
                         currentTheme = themeMode,
-                        onSelectTheme = { viewModel.themeMode.value = it },
+                        onSelectTheme = {
+                            viewModel.themeMode.value = it
+                            viewModel.repository.saveThemeMode(it.name)
+                        },
                         currencyUnit = currencyUnit,
                         onSelectCurrency = { viewModel.changeCurrency(it) },
                         cardDisplayMode = cardDisplayMode,
@@ -227,10 +230,10 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                                                 OrderCard(
                                                     order = item.order,
                                                     currencyUnit = currencyUnit,
-                                                    onEdit = { viewModel.openEditOrder(it) },
-                                                    onDuplicate = { viewModel.duplicateOrder(it) },
-                                                    onDelete = { viewModel.requestDeleteOrder(it) },
-                                                    onViewInvoice = { viewModel.openCardShareOrder(it) },
+                                                    onEdit = { checkAccessAndExecute { viewModel.openEditOrder(it) } },
+                                                    onDuplicate = { checkAccessAndExecute { viewModel.duplicateOrder(it) } },
+                                                    onDelete = { checkAccessAndExecute { viewModel.requestDeleteOrder(it) } },
+                                                    onViewInvoice = { checkAccessAndExecute { viewModel.openCardShareOrder(it) } },
                                                     onCustomerClick = { viewModel.selectedCustomerFilter.value = it },
                                                     onModelClick = { viewModel.selectedModelFilter.value = it }
                                                 )
@@ -241,9 +244,9 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                                                         index = item.displayIndex.toInt(),
                                                         payment = item.payment,
                                                         currencyUnit = currencyUnit,
-                                                        onEdit = { viewModel.openEditPayment(item.payment) },
-                                                        onDelete = { viewModel.requestDeletePayment(item.payment) },
-                                                        onShare = { viewModel.openCardSharePayment(item.payment) }
+                                                        onEdit = { checkAccessAndExecute { viewModel.openEditPayment(item.payment) } },
+                                                        onDelete = { checkAccessAndExecute { viewModel.requestDeletePayment(item.payment) } },
+                                                        onShare = { checkAccessAndExecute { viewModel.openCardSharePayment(item.payment) } }
                                                     )
                                                 }
                                             }
@@ -264,10 +267,10 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                                         OrderCard(
                                             order = order,
                                             currencyUnit = currencyUnit,
-                                            onEdit = { viewModel.openEditOrder(it) },
-                                            onDuplicate = { viewModel.duplicateOrder(it) },
-                                            onDelete = { viewModel.requestDeleteOrder(it) },
-                                            onViewInvoice = { viewModel.openCardShareOrder(it) },
+                                            onEdit = { checkAccessAndExecute { viewModel.openEditOrder(it) } },
+                                            onDuplicate = { checkAccessAndExecute { viewModel.duplicateOrder(it) } },
+                                            onDelete = { checkAccessAndExecute { viewModel.requestDeleteOrder(it) } },
+                                            onViewInvoice = { checkAccessAndExecute { viewModel.openCardShareOrder(it) } },
                                             onCustomerClick = { viewModel.selectedCustomerFilter.value = it },
                                             onModelClick = { viewModel.selectedModelFilter.value = it }
                                         )
@@ -279,10 +282,10 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                                     RecentPayments(
                                         payments = filteredPayments,
                                         currencyUnit = currencyUnit,
-                                        onOpenNewPayment = { viewModel.openNewPayment() },
-                                        onEditPayment = { viewModel.openEditPayment(it) },
-                                        onDeletePayment = { viewModel.requestDeletePayment(it) },
-                                        onSharePayment = { viewModel.openCardSharePayment(it) }
+                                        onOpenNewPayment = { checkAccessAndExecute { viewModel.openNewPayment() } },
+                                        onEditPayment = { checkAccessAndExecute { viewModel.openEditPayment(it) } },
+                                        onDeletePayment = { checkAccessAndExecute { viewModel.requestDeletePayment(it) } },
+                                        onSharePayment = { checkAccessAndExecute { viewModel.openCardSharePayment(it) } }
                                     )
                                 }
                             }
