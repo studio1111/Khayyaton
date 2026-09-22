@@ -165,11 +165,7 @@ object SubscriptionManager {
             SubscriptionStatus.UNKNOWN
         }
         // Trial محلی نسخه‌های قدیمی دیگر entitlement معتبر نیست.
-        val status = if (loadedStatus == SubscriptionStatus.TRIAL_ACTIVE) {
-            SubscriptionStatus.TRIAL_EXPIRED
-        } else {
-            loadedStatus
-        }
+        val status = loadedStatus
 
         val trialStartedAt = sp.getLong(KEY_TRIAL_STARTED_AT, 0L)
         val trialEndsAt = sp.getLong(KEY_TRIAL_ENDS_AT, 0L)
@@ -225,12 +221,13 @@ object SubscriptionManager {
                 val now = System.currentTimeMillis()
 
                 if (!snapshot.exists()) {
-                    // دسترسی فقط با entitlement معتبر کافه‌بازار فعال می‌شود.
+                    val trialStarted = now
+                    val trialEnds = now + 3L * 86_400_000L
                     val newSub = UserSubscription(
-                        status = SubscriptionStatus.UNKNOWN,
-                        trialStartedAt = 0L,
-                        trialEndsAt = 0L,
-                        trialUsed = false,
+                        status = SubscriptionStatus.TRIAL_ACTIVE,
+                        trialStartedAt = trialStarted,
+                        trialEndsAt = trialEnds,
+                        trialUsed = true,
                         activeProductId = null,
                         startedAt = null,
                         expiresAt = null,
@@ -238,7 +235,10 @@ object SubscriptionManager {
                     )
 
                     val data = hashMapOf(
-                        "subscriptionStatus" to SubscriptionStatus.UNKNOWN.name,
+                        "subscriptionStatus" to SubscriptionStatus.TRIAL_ACTIVE.name,
+                        "trialStartedAt" to trialStarted,
+                        "trialEndsAt" to trialEnds,
+                        "trialUsed" to true,
                         "activeProductId" to null,
                         "startedAt" to null,
                         "expiresAt" to null,
@@ -272,7 +272,9 @@ object SubscriptionManager {
                         currentStatus = SubscriptionStatus.TRIAL_EXPIRED
                     }
 
-                    // بررسی انقضا
+                    if (currentStatus == SubscriptionStatus.TRIAL_ACTIVE && trialEndsAt > 0L && now >= trialEndsAt) {
+                        currentStatus = SubscriptionStatus.TRIAL_EXPIRED
+                    }
                     var needUpdateFirestore = currentStatus == SubscriptionStatus.TRIAL_EXPIRED &&
                         statusStr == SubscriptionStatus.TRIAL_ACTIVE.name
                     if (currentStatus == SubscriptionStatus.SUBSCRIBED && expiresAt != null && now > expiresAt) {
