@@ -250,16 +250,6 @@ object SubscriptionManager {
                 }
                 resetSubscriptionForUser(user.uid)
 
-                // مالک مانند همه کاربران با حساب عادی وارد می‌شود.
-                // تشخیص مالک فقط در سمت سرور و بر اساس ایمیل Firebase انجام می‌شود.
-                try {
-                    val ownerCallable = FirebaseFunctions.getInstance("europe-west1")
-                        .getHttpsCallable("ensureOwnerAccess")
-                    ownerCallable.call(emptyMap<String, Any>()).await()
-                } catch (ownerError: Exception) {
-                    Log.w(TAG, "Owner access sync skipped: " + ownerError.message)
-                }
-
                 val subscriptionRef = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("subscription").document("info")
                 var snapshot = subscriptionRef.get().await()
                 if (!snapshot.exists()) {
