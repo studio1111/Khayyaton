@@ -157,7 +157,14 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
             if (changed) {
                 val restored = FirebaseService.downloadFromCloud(repository)
-                if (restored.isSuccess) repository.saveCloudSyncInitialized(true)
+                if (restored.isSuccess) {
+                    val restoredWorkshops = restored.getOrNull()?.workshopsCount ?: 0
+                    if (restoredWorkshops > 0) {
+                        repository.saveCloudSyncInitialized(true)
+                    } else if (SubscriptionManager.hasPremiumAccess()) {
+                        performAutoSync(user, shouldDownload = false)
+                    }
+                }
             } else if (!repository.getCloudSyncInitialized()) {
                 performAutoSync(user, shouldDownload = repository.getAllWorkshopsSync().isEmpty())
             }
