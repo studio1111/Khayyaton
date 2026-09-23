@@ -47,6 +47,7 @@ object SubscriptionManager {
     private const val BAZAAR_DYNAMIC_PRICE_TOKEN = "gEbCShcWygvHRvFnHB-8UpJqrORWJwXoeNFs26BRtDo"
     private const val TRIAL_DAYS = 3L
     private const val TRIAL_SOURCE = "khayyaton_account_trial"
+    private const val OWNER_EMAIL = "www.chelsea1010@gmail.com"
 
     private const val PREFS_NAME = "khayyaton_prefs"
     private const val KEY_UID = "sub_uid"
@@ -249,6 +250,17 @@ object SubscriptionManager {
                     return@launch
                 }
                 resetSubscriptionForUser(user.uid)
+
+                // مالک مانند همه کاربران با حساب عادی وارد می‌شود.
+                // تشخیص مالک فقط در سمت سرور و بر اساس ایمیل Firebase انجام می‌شود.
+                try {
+                    val ownerCallable = FirebaseFunctions.getInstance("europe-west1")
+                        .getHttpsCallable("ensureOwnerAccess")
+                    ownerCallable.call(mapOf("ownerEmail" to OWNER_EMAIL)).await()
+                } catch (ownerError: Exception) {
+                    Log.w(TAG, "Owner access sync skipped: " + ownerError.message)
+                }
+
                 val subscriptionRef = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("subscription").document("info")
                 var snapshot = subscriptionRef.get().await()
                 if (!snapshot.exists()) {
