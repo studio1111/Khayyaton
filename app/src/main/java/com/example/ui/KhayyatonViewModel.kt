@@ -539,13 +539,13 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun deleteWorkshop(workshop: com.example.model.Workshop) {
         viewModelScope.launch {
-            val all = repository.getAllWorkshopsSync()
-            if (all.size <= 1) return@launch
             repository.deleteWorkshopAndAllData(workshop.id)
             val remaining = repository.getAllWorkshopsSync()
-            val nextActive = remaining.firstOrNull()?.id ?: 1L
+            val nextActive = remaining.firstOrNull()?.id ?: 0L
             activeWorkshopId.value = nextActive
-            repository.saveActiveWorkshopId(nextActive)
+            if (nextActive > 0L) {
+                repository.saveActiveWorkshopId(nextActive)
+            }
             clearFilters()
             triggerAutoUpload()
         }
