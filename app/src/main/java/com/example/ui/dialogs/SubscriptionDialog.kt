@@ -228,6 +228,15 @@ fun SubscriptionDialog(
 @Composable
 private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscription) {
     val (bgColor, borderColor, icon, title, subtitle) = when (subscription.status) {
+        SubscriptionStatus.ADMIN_GRANTED -> {
+            Tuple5(
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                Icons.Default.Verified,
+                "دسترسی مالک فعال است",
+                "حساب مالک دارای دسترسی کامل و بدون نیاز به اشتراک است."
+            )
+        }
         SubscriptionStatus.SUBSCRIBED -> {
             Tuple5(
                 Emerald600.copy(alpha = 0.12f),
