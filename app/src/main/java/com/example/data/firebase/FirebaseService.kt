@@ -147,7 +147,7 @@ object FirebaseService {
             // Step 3: Reserve the username, linked to this user's uid (best-effort)
             try {
                 db.collection("usernames").document(normalizedUsername)
-                    .set(mapOf("uid" to user.uid, "email" to (user.email ?: email)))
+                    .set(mapOf("uid" to user.uid))
                     .await()
 
                 db.collection("users").document(user.uid)
