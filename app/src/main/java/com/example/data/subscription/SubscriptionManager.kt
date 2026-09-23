@@ -221,11 +221,12 @@ object SubscriptionManager {
 
         private suspend fun tryCreateTrial(uid: String): Boolean {
         val ref = FirebaseFirestore.getInstance().collection("users").document(uid).collection("subscription").document("info")
-        val expiresAt = Timestamp(Date(System.currentTimeMillis() + TRIAL_DAYS * 24L * 60L * 60L * 1000L))
+        val trialStartedAt = Timestamp.now()
+        val expiresAt = Timestamp(Date(trialStartedAt.toDate().time + TRIAL_DAYS * 24L * 60L * 60L * 1000L))
         return try {
             ref.set(mapOf(
                 "subscriptionStatus" to SubscriptionStatus.TRIAL_ACTIVE.name,
-                "trialStartedAt" to FieldValue.serverTimestamp(),
+                "trialStartedAt" to trialStartedAt,
                 "expiresAt" to expiresAt,
                 "source" to TRIAL_SOURCE
             )).await()
