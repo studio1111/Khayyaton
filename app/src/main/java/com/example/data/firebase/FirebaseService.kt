@@ -358,7 +358,7 @@ object FirebaseService {
             for (doc in workshopsSnapshot.documents) {
                 val data = doc.data ?: continue
                 val workshop = Workshop(
-                    id = 0L,
+                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("wrk_").toLongOrNull() ?: 0L,
                     name = data["name"] as? String ?: "",
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
@@ -372,7 +372,7 @@ object FirebaseService {
             for (doc in ordersSnapshot.documents) {
                 val data = doc.data ?: continue
                 val order = FurnitureOrder(
-                    id = 0L, // fresh auto-generated id or merge
+                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("ord_").toLongOrNull() ?: 0L,
                     workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
                     orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
                     invoiceNumber = data["invoiceNumber"] as? String ?: "",
@@ -402,7 +402,7 @@ object FirebaseService {
             for (doc in paymentsSnapshot.documents) {
                 val data = doc.data ?: continue
                 val payment = PaymentRecord(
-                    id = 0L,
+                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("pay_").toLongOrNull() ?: 0L,
                     workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
                     paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
                     amount = (data["amount"] as? Number)?.toLong() ?: 0L,
@@ -428,7 +428,7 @@ object FirebaseService {
                 val data = doc.data ?: continue
                 val name = data["name"] as? String ?: continue
                 val preset = ModelPreset(
-                    id = 0L,
+                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("pre_").toLongOrNull() ?: 0L,
                     workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
                     name = name,
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
@@ -447,7 +447,7 @@ object FirebaseService {
                 val data = doc.data ?: continue
                 val pieceKey = data["pieceKey"] as? String ?: ""
                 val rule = UnitConversionRule(
-                    id = 0L,
+                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("rule_").toLongOrNull() ?: 0L,
                     pieceKey = pieceKey,
                     pieceCount = (data["pieceCount"] as? Number)?.toDouble() ?: 0.0,
                     calculatedUnits = (data["calculatedUnits"] as? Number)?.toDouble() ?: 0.0,
