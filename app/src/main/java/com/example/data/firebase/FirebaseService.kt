@@ -338,8 +338,11 @@ object FirebaseService {
             var workshopCount = 0
             for (doc in workshopsSnapshot.documents) {
                 val data = doc.data ?: continue
+                val cloudWorkshopId = (data["id"] as? Number)?.toLong()
+                    ?: doc.id.removePrefix("wrk_").toLongOrNull()
+                    ?: continue
                 val workshop = Workshop(
-                    id = 0L,
+                    id = cloudWorkshopId,
                     name = data["name"] as? String ?: "",
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
