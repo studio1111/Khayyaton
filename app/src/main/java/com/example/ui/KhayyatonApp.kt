@@ -115,6 +115,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
         return
     }
 
+    // Do not render the main UI until the authenticated user's local/cloud session is ready.
     if (!isSessionReady) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             KhayyatonTheme(themeMode = themeMode) {
@@ -129,6 +130,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
         return
     }
 
+    // Subscription access is required for the main application.
     if (!subscriptionState.hasAccess) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             KhayyatonTheme(themeMode = themeMode) {
@@ -147,11 +149,6 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                modifier = Modifier.size(44.dp)
-                            )
                             Text(
                                 text = "اشتراک فعال نیست",
                                 fontSize = 20.sp,
@@ -181,21 +178,6 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
             isOpen = isSubscriptionDialogOpen,
             onDismiss = { viewModel.isSubscriptionDialogOpen.value = false }
         )
-        return
-    }
-
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            KhayyatonTheme(themeMode = themeMode) {
-                GlassyAuthScreen(
-                    isFirstLaunch = true,
-                    onAuthSuccess = { user, username, workshopName ->
-                        viewModel.onUserLoggedIn(user, username, workshopName)
-                        sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
-                        hasCompletedFirstLaunchAuth = true
-                    }
-                )
-            }
-        }
         return
     }
 
