@@ -1,6 +1,7 @@
 package com.example.model
 
 enum class SubscriptionStatus(val titleFa: String) {
+    ADMIN_GRANTED("دسترسی مالک"),
     SUBSCRIBED("اشتراک ویژه فعال"),
     TRIAL_ACTIVE("دوره آزمایشی ۳ روزه فعال"),
     EXPIRED("اشتراک منقضی شده"),
@@ -36,7 +37,7 @@ data class UserSubscription(
     val autoRenewing: Boolean = false
 ) {
     val hasAccess: Boolean
-        get() = (status == SubscriptionStatus.SUBSCRIBED || status == SubscriptionStatus.TRIAL_ACTIVE) &&
+        get() = status == SubscriptionStatus.ADMIN_GRANTED || (status == SubscriptionStatus.SUBSCRIBED || status == SubscriptionStatus.TRIAL_ACTIVE) &&
             expiresAt != null &&
             expiresAt > System.currentTimeMillis()
 
