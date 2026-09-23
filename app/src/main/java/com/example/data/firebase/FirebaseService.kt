@@ -9,7 +9,6 @@ import com.example.model.PaymentRecord
 import com.example.model.UnitConversionRule
 import com.example.model.Workshop
 import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
@@ -315,8 +314,7 @@ object FirebaseService {
                     ordersCount = orders.size,
                     paymentsCount = payments.size,
                     presetsCount = presets.size,
-                    unitRulesCount = unitRules.size,
-                    workshopsCount = workshops.size
+                    unitRulesCount = unitRules.size
                 )
             )
         } catch (e: Exception) {
@@ -341,7 +339,7 @@ object FirebaseService {
             for (doc in workshopsSnapshot.documents) {
                 val data = doc.data ?: continue
                 val workshop = Workshop(
-                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("wrk_").toLongOrNull() ?: 0L,
+                    id = 0L,
                     name = data["name"] as? String ?: "",
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
@@ -365,7 +363,7 @@ object FirebaseService {
                 val workshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
                 if (workshopId <= 0L || workshopId !in validWorkshopIds) continue
                 val order = FurnitureOrder(
-                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("ord_").toLongOrNull() ?: 0L,
+                    id = 0L, // fresh auto-generated id or merge
                     workshopId = workshopId,
                     orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
                     invoiceNumber = data["invoiceNumber"] as? String ?: "",
@@ -389,3 +387,138 @@ object FirebaseService {
                 ordCount++
             }
 
+            // 2. Download Payments
+            val paymentsSnapshot = userDoc.collection("payments").get().await()
+            var payCount = 0
+            for (doc in paymentsSnapshot.documents) {
+                val data = doc.data ?: continue
+                val workshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
+                if (workshopId <= 0L || workshopId !in validWorkshopIds) continue
+                val payment = PaymentRecord(
+                    id = 0L,
+                    workshopId = workshopId,
+                    paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
+                    amount = (data["amount"] as? Number)?.toLong() ?: 0L,
+                    dateJalali = data["dateJalali"] as? String ?: "",
+                    dateGregorian = data["dateGregorian"] as? String ?: "",
+                    customerName = data["customerName"] as? String ?: "",
+                    description = data["description"] as? String ?: "",
+                    paymentType = data["paymentType"] as? String ?: "transfer",
+                    referenceNo = data["referenceNo"] as? String ?: "",
+                    bankName = data["bankName"] as? String ?: "",
+                    cardNumber = data["cardNumber"] as? String ?: "",
+                    relatedOrderId = (data["relatedOrderId"] as? Number)?.toLong(),
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                )
+                repository.savePayment(payment)
+                payCount++
+            }
+
+            // 3. Download Presets
+            val presetsSnapshot = userDoc.collection("presets").get().await()
+            var preCount = 0
+            for (doc in presetsSnapshot.documents) {
+                val data = doc.data ?: continue
+                val workshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
+                if (workshopId <= 0L || workshopId !in validWorkshopIds) continue
+                val name = data["name"] as? String ?: continue
+                val preset = ModelPreset(
+                    id = 0L,
+                    workshopId = workshopId,
+                    name = name,
+                    defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
+                    defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
+                    colorCode = data["colorCode"] as? String ?: "#2563EB",
+                    description = data["description"] as? String ?: ""
+                )
+                repository.savePreset(preset)
+                preCount++
+            }
+
+            // 4. Download Unit Rules
+            val rulesSnapshot = userDoc.collection("unitRules").get().await()
+            var ruleCount = 0
+            for (doc in rulesSnapshot.documents) {
+                val data = doc.data ?: continue
+                val pieceKey = data["pieceKey"] as? String ?: ""
+                val rule = UnitConversionRule(
+                    id = 0L,
+                    pieceKey = pieceKey,
+                    pieceCount = (data["pieceCount"] as? Number)?.toDouble() ?: 0.0,
+                    calculatedUnits = (data["calculatedUnits"] as? Number)?.toDouble() ?: 0.0,
+                    isEnabled = data["isEnabled"] as? Boolean ?: true
+                )
+                repository.saveUnitRule(rule)
+                ruleCount++
+            }
+
+            Result.success(
+                CloudSyncResult(
+                    success = true,
+                    ordersCount = ordCount,
+                    paymentsCount = payCount,
+                    presetsCount = preCount,
+                    unitRulesCount = ruleCount,
+                    workshopsCount = workshopCount
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error downloading from Firestore", e)
+            Result.failure(Exception(parseCloudError(e)))
+        }
+    }
+
+    /**
+     * Translates any Firebase Auth / Firestore / network exception into a clear
+     * Persian message for the user. Specifically detects the case where Google's
+     * servers return an HTTP 403 (Forbidden) block page instead of JSON — this
+     * happens for users in Iran connecting without (or with a blocked) VPN, since
+     * Google blocks direct access from Iranian IP addresses due to sanctions.
+     */
+    private fun parseCloudError(e: Exception): String {
+        val msg = e.message ?: ""
+        val lowerMsg = msg.lowercase()
+
+        return when {
+            // Google 403 block page (sanctions-related access block) — most common
+            // cause of "JSON conversion failed" / "Error 403 (Forbidden)" errors
+            lowerMsg.contains("403") ||
+                lowerMsg.contains("forbidden") ||
+                lowerMsg.contains("json conversion failed") ||
+                lowerMsg.contains("failed to parse") ->
+                "دسترسی به سرور گوگل برقرار نشد (خطای ۴۰۳). برای استفاده از ذخیره‌سازی و بازیابی خودکار، لطفاً یک فیلترشکن (VPN) معتبر روشن کنید و دوباره تلاش نمایید."
+
+            lowerMsg.contains("api key not valid") || lowerMsg.contains("api key expired") ->
+                "کلید ارتباطی برنامه با سرور نامعتبر است. لطفاً از آخرین نسخه برنامه استفاده کنید یا با پشتیبانی تماس بگیرید."
+
+            lowerMsg.contains("the email address is badly formatted") ->
+                "فرمت آدرس ایمیل وارد شده صحیح نمی‌باشد."
+
+            lowerMsg.contains("the password is invalid") || lowerMsg.contains("password should be at least") ->
+                "رمز عبور باید حداقل ۶ کاراکتر باشد."
+
+            lowerMsg.contains("there is no user record") || lowerMsg.contains("user-not-found") ->
+                "کاربری با این ایمیل یافت نشد."
+
+            lowerMsg.contains("wrong-password") || lowerMsg.contains("invalid_login_credentials") ->
+                "ایمیل یا کلمه عبور اشتباه است."
+
+            lowerMsg.contains("email-already-in-use") ->
+                "حسابی با این ایمیل قبلاً ثبت‌نام شده است."
+
+            lowerMsg.contains("too-many-requests") ->
+                "تعداد تلاش‌های شما زیاد بوده است. لطفاً چند دقیقه دیگر دوباره تلاش کنید."
+
+            lowerMsg.contains("network-request-failed") ||
+                lowerMsg.contains("unable to resolve host") ||
+                lowerMsg.contains("timeout") ||
+                lowerMsg.contains("failed to connect") ->
+                "خطای اتصال به اینترنت. لطفاً اتصال اینترنت خود را بررسی کنید و در صورت نیاز فیلترشکن (VPN) را روشن نمایید."
+
+            lowerMsg.contains("permission_denied") || lowerMsg.contains("permission denied") ->
+                "دسترسی لازم برای این عملیات وجود ندارد. لطفاً دوباره وارد حساب کاربری خود شوید."
+
+            else -> "خطایی در ارتباط با سرور فایربیس رخ داد. لطفاً از روشن بودن اینترنت و فیلترشکن (VPN) خود اطمینان حاصل کرده و دوباره تلاش کنید."
+        }
+    }
+}
