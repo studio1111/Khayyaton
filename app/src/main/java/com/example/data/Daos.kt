@@ -30,6 +30,9 @@ interface WorkshopDao {
     @Query("DELETE FROM workshops WHERE id = :id")
     suspend fun deleteWorkshopById(id: Long)
 
+    @Query("DELETE FROM workshops")
+    suspend fun deleteAllWorkshops()
+
     @Query("DELETE FROM furniture_orders WHERE workshopId = :workshopId")
     suspend fun deleteOrdersByWorkshop(workshopId: Long)
 
