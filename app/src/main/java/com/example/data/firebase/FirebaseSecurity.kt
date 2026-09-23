@@ -8,14 +8,21 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
 
 object FirebaseSecurity {
     fun initialize(context: Context) {
-        val appCheck = FirebaseAppCheck.getInstance()
-        if (BuildConfig.DEBUG) {
-            appCheck.installAppCheckProviderFactory(
-                DebugAppCheckProviderFactory.getInstance()
-            )
-        } else {
-            appCheck.installAppCheckProviderFactory(
-                PlayIntegrityAppCheckProviderFactory.getInstance()
+        try {
+            val appCheck = FirebaseAppCheck.getInstance()
+            if (BuildConfig.DEBUG) {
+                appCheck.installAppCheckProviderFactory(
+                    DebugAppCheckProviderFactory.getInstance()
+                )
+            } else {
+                appCheck.installAppCheckProviderFactory(
+                    PlayIntegrityAppCheckProviderFactory.getInstance()
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "FirebaseSecurity",
+                "Firebase App Check unavailable because Firebase is not configured yet: ${e.message}"
             )
         }
     }
