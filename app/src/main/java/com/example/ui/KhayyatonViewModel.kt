@@ -716,3 +716,5 @@ class KhayyatonViewModelFactory(private val repository: WorkshopRepository) : Vi
 
 typealias SheetOnViewModel = KhayyatonViewModel
 typealias SheetOnViewModelFactory = KhayyatonViewModelFactory
+
+// Release build verification marker: release workflow is intentionally kept separate from app logic.
