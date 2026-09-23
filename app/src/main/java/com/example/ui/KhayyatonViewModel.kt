@@ -159,6 +159,19 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 val restored = FirebaseService.downloadFromCloud(repository)
                 if (restored.isSuccess) {
                     val restoredWorkshops = restored.getOrNull()?.workshopsCount ?: 0
+                    val restoredAllWorkshops = repository.getAllWorkshopsSync()
+                    val restoredSavedId = repository.getSavedActiveWorkshopId()
+                    val restoredActiveId = if (
+                        restoredSavedId > 0L && restoredAllWorkshops.any { it.id == restoredSavedId }
+                    ) {
+                        restoredSavedId
+                    } else {
+                        restoredAllWorkshops.firstOrNull()?.id ?: 0L
+                    }
+                    activeWorkshopId.value = restoredActiveId
+                    if (restoredActiveId > 0L) {
+                        repository.saveActiveWorkshopId(restoredActiveId)
+                    }
                     if (restoredWorkshops > 0) {
                         repository.saveCloudSyncInitialized(true)
                     } else if (SubscriptionManager.hasPremiumAccess()) {
@@ -629,7 +642,13 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             val currentUnitRules = unitRules.value
             val currentWorkshops = repository.getAllWorkshopsSync()
 
-            if (currentOrders.isNotEmpty() || currentPayments.isNotEmpty() || currentPresets.isNotEmpty()) {
+            if (
+                currentWorkshops.isNotEmpty() ||
+                currentOrders.isNotEmpty() ||
+                currentPayments.isNotEmpty() ||
+                currentPresets.isNotEmpty() ||
+                currentUnitRules.isNotEmpty()
+            ) {
                 FirebaseService.uploadAllToCloud(
                     orders = currentOrders,
                     payments = currentPayments,
