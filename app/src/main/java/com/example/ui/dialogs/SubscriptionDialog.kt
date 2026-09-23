@@ -237,14 +237,13 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 "دسترسی کامل به برنامه فعال است (${PersianUtils.toPersianDigits(subscription.remainingDays)} روز باقی مانده)"
             )
         }
-        SubscriptionStatus.TRIAL_ACTIVE,
-        SubscriptionStatus.TRIAL_EXPIRED -> {
+        SubscriptionStatus.UNKNOWN -> {
             Tuple5(
                 Rose600.copy(alpha = 0.12f),
                 Rose600.copy(alpha = 0.45f),
                 Icons.Outlined.Warning,
                 "اشتراک فعال نیست",
-                "برای ثبت فاکتور و ادامه استفاده از برنامه، لطفاً یکی از اشتراک‌های کافه‌بازار را فعال کنید."
+                "برای استفاده از امکانات برنامه، یکی از اشتراک‌های کافه‌بازار را فعال کنید."
             )
         }
         SubscriptionStatus.EXPIRED -> {
