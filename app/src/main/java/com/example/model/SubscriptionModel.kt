@@ -2,7 +2,9 @@ package com.example.model
 
 enum class SubscriptionStatus(val titleFa: String) {
     SUBSCRIBED("اشتراک ویژه فعال"),
+    TRIAL_ACTIVE("دوره آزمایشی ۳ روزه فعال"),
     EXPIRED("اشتراک منقضی شده"),
+    TRIAL_EXPIRED("دوره آزمایشی ۳ روزه تمام شده"),
     UNKNOWN("اشتراک فعال نیست")
 }
 
@@ -27,13 +29,14 @@ data class UserSubscription(
     val status: SubscriptionStatus = SubscriptionStatus.UNKNOWN,
     val activeProductId: String? = null,
     val startedAt: Long? = null,
+    val trialStartedAt: Long? = null,
     val expiresAt: Long? = null,
     val orderId: String? = null,
     val updatedAt: Long = 0L,
     val autoRenewing: Boolean = false
 ) {
     val hasAccess: Boolean
-        get() = status == SubscriptionStatus.SUBSCRIBED &&
+        get() = (status == SubscriptionStatus.SUBSCRIBED || status == SubscriptionStatus.TRIAL_ACTIVE) &&
             expiresAt != null &&
             expiresAt > System.currentTimeMillis()
 
