@@ -46,6 +46,9 @@ object SubscriptionManager {
     private const val KEY_SUB_STATUS = "sub_status"
     private const val KEY_ACTIVE_PRODUCT_ID = "sub_active_product_id"
     private const val KEY_EXPIRES_AT = "sub_expires_at"
+    private const val KEY_STARTED_AT = "sub_started_at"
+    private const val KEY_ORDER_ID = "sub_order_id"
+    private const val KEY_AUTO_RENEWING = "sub_auto_renewing"
 
     private val _subscriptionState = MutableStateFlow(UserSubscription())
     val subscriptionState: StateFlow<UserSubscription> = _subscriptionState.asStateFlow()
