@@ -11,6 +11,8 @@ const BAZAAR_CLIENT_ID = defineSecret("BAZAAR_CLIENT_ID");
 const BAZAAR_CLIENT_SECRET = defineSecret("BAZAAR_CLIENT_SECRET");
 const BAZAAR_REFRESH_TOKEN = defineSecret("BAZAAR_REFRESH_TOKEN");
 
+const OWNER_EMAIL = "www.chelsea1010@gmail.com";
+
 const PACKAGE_NAME = "com.farsinnov.khayyaton";
 const PRODUCTS = new Set([
   "khayyaton_3_month",
@@ -75,6 +77,37 @@ async function validateBazaarSubscription(productId: string, purchaseToken: stri
     autoRenewing?: boolean;
   };
 }
+
+export const ensureOwnerAccess = onCall(
+  {
+    region: "europe-west1",
+    timeoutSeconds: 15,
+    enforceAppCheck: true,
+    consumeAppCheckToken: true,
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "ورود به حساب الزامی است.");
+    }
+
+    const email = String(request.auth.token.email ?? "").trim().toLowerCase();
+    if (email !== OWNER_EMAIL.toLowerCase()) {
+      return { granted: false };
+    }
+
+    const uid = request.auth.uid;
+    const subRef = db.collection("users").doc(uid).collection("subscription").doc("info");
+
+    await subRef.set({
+      subscriptionStatus: "ADMIN_GRANTED",
+      source: "owner_account",
+      ownerEmail: OWNER_EMAIL,
+      grantedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    return { granted: true, subscriptionStatus: "ADMIN_GRANTED" };
+  }
+);
 
 export const verifyBazaarSubscription = onCall(
   {
