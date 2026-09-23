@@ -20,6 +20,8 @@ import com.example.model.UserSubscription
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
@@ -93,6 +95,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val autoSyncStatusMessage = MutableStateFlow<String?>(null)
     val isSessionReady = MutableStateFlow(false)
     private var sessionJob: kotlinx.coroutines.Job? = null
+    private val sessionTransitionMutex = Mutex()
 
     fun hasPremiumAccess(): Boolean {
         return SubscriptionManager.hasPremiumAccess()
@@ -128,8 +131,9 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     private fun switchUserSession(user: FirebaseUserDto, preferredUsername: String?, workshopName: String?) {
         sessionJob?.cancel()
         sessionJob = viewModelScope.launch {
-            isSessionReady.value = false
-            val changed = repository.getSessionUid() != user.uid
+            sessionTransitionMutex.withLock {
+                isSessionReady.value = false
+                val changed = repository.getSessionUid() != user.uid
             if (changed) {
                 repository.resetAllData()
                 repository.setSessionUid(user.uid)
@@ -187,7 +191,8 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             } else if (!repository.getCloudSyncInitialized() && SubscriptionManager.hasPremiumAccess()) {
                 performAutoSync(user, shouldDownload = repository.getAllWorkshopsSync().isEmpty())
             }
-            isSessionReady.value = true
+                isSessionReady.value = true
+            }
         }
     }
 
@@ -619,17 +624,19 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun onUserLoggedOut() {
         sessionJob?.cancel()
-        isSessionReady.value = false
-        FirebaseService.signOut()
-        SubscriptionManager.clearForSignedOutUser()
-        viewModelScope.launch {
-            repository.resetAllData()
-            repository.setSessionUid(null)
+        sessionJob = viewModelScope.launch {
+            sessionTransitionMutex.withLock {
+                isSessionReady.value = false
+                FirebaseService.signOut()
+                SubscriptionManager.clearForSignedOutUser()
+                repository.resetAllData()
+                repository.setSessionUid(null)
+                currentUser.value = null
+                activeWorkshopId.value = 0L
+                customUsername.value = ""
+                autoSyncStatusMessage.value = null
+            }
         }
-        currentUser.value = null
-        activeWorkshopId.value = 0L
-        customUsername.value = ""
-        autoSyncStatusMessage.value = null
     }
 
     private suspend fun performAutoSync(user: FirebaseUserDto, shouldDownload: Boolean = false) {
