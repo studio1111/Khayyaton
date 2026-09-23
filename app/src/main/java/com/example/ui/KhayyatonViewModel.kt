@@ -139,7 +139,12 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 repository.setSessionUid(user.uid)
             }
             currentUser.value = user
-            SubscriptionManager.syncSubscriptionWithFirebase()
+            // Wait for subscription state before reading protected cloud collections.
+            runCatching {
+                SubscriptionManager.syncSubscriptionWithFirebaseNow()
+            }.onFailure {
+                autoSyncStatusMessage.value = "وضعیت اشتراک از حساب ابری دریافت نشد."
+            }
             val chosen = preferredUsername?.takeIf { it.isNotBlank() }
                 ?: repository.getCustomUsername().takeIf { it.isNotBlank() }
                 ?: user.displayName?.takeIf { it.isNotBlank() }
