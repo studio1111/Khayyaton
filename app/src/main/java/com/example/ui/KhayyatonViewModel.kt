@@ -113,6 +113,15 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             } else {
                 switchUserSession(user, null, null)
             }
+
+            launch {
+                SubscriptionManager.subscriptionState.collect { sub ->
+                    val userNow = currentUser.value
+                    if (sub.hasAccess && userNow != null && isSessionReady.value && !repository.getCloudSyncInitialized()) {
+                        performAutoSync(userNow, shouldDownload = true)
+                    }
+                }
+            }
         }
     }
 
