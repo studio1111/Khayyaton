@@ -673,10 +673,15 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun triggerAutoUpload() {
-        if (!isSessionReady.value || !hasPremiumAccess()) return
-        val user = currentUser.value ?: return
+        if (!hasPremiumAccess()) return
+        if (currentUser.value == null && FirebaseService.getCurrentUser() == null) return
+
         viewModelScope.launch {
             try {
+                if (!isSessionReady.value) {
+                    kotlinx.coroutines.delay(250)
+                    if (!isSessionReady.value) return@launch
+                }
                 FirebaseService.uploadAllToCloud(
                     orders = repository.getAllOrdersSync(),
                     payments = repository.getAllPaymentsSync(),
@@ -684,7 +689,10 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                     unitRules = unitRules.value,
                     workshops = repository.getAllWorkshopsSync()
                 )
-            } catch (_: Exception) {}
+                repository.saveCloudSyncInitialized(true)
+            } catch (_: Exception) {
+                autoSyncStatusMessage.value = "ذخیره ابری انجام نشد؛ اتصال اینترنت و دسترسی حساب را بررسی کنید."
+            }
         }
     }
 }
