@@ -139,6 +139,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 repository.setSessionUid(user.uid)
             }
             currentUser.value = user
+            FirebaseService.ensureUserProfile(user)
             // Wait for subscription state before reading protected cloud collections.
             runCatching {
                 SubscriptionManager.syncSubscriptionWithFirebaseNow()
