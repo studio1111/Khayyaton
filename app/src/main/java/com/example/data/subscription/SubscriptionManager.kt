@@ -13,7 +13,7 @@ import com.google.firebase.functions.HttpsCallableOptions
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.firestore.Timestamp
+import com.google.firebase.Timestamp
 import ir.cafebazaar.poolakey.Connection
 import ir.cafebazaar.poolakey.Payment
 import ir.cafebazaar.poolakey.config.PaymentConfiguration
@@ -223,7 +223,7 @@ object SubscriptionManager {
         val ref = FirebaseFirestore.getInstance().collection("users").document(uid).collection("subscription").document("info")
         val expiresAt = Timestamp(Date(System.currentTimeMillis() + TRIAL_DAYS * 24L * 60L * 60L * 1000L))
         return try {
-            ref.create(mapOf(
+            ref.set(mapOf(
                 "subscriptionStatus" to SubscriptionStatus.TRIAL_ACTIVE.name,
                 "trialStartedAt" to FieldValue.serverTimestamp(),
                 "expiresAt" to expiresAt,
