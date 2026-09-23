@@ -10,8 +10,10 @@ import com.example.model.UserSubscription
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.HttpsCallableOptions
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Timestamp
 import ir.cafebazaar.poolakey.Connection
 import ir.cafebazaar.poolakey.Payment
 import ir.cafebazaar.poolakey.config.PaymentConfiguration
@@ -40,6 +42,10 @@ object SubscriptionManager {
 
     // کلید RSA اختصاصی برنامه در پیشخوان کافه‌بازار
     const val BAZAAR_RSA_PUBLIC_KEY = "MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwCabwVc2p7UqBqZFyMleXiuGT8fHE/obwon3f859+kYRWU5kWqGadTCqEH5JOWALZ7XP0SzynhJ2We24MITaQy0ai6QPEihSgfjYgk5rtpce7ZuB3bwP+4iZcpNKo/HMS+CPRNOPGO87XbZZcDk4DQHgb8vL/PySfLkvu2T7GtPqc6Yicfk/ym2qzb/57ANFP76WiGQHTl/znFKhFj+BSc9wqnldfXMM3SwrNh+YSECAwEAAQ=="
+
+    private const val BAZAAR_DYNAMIC_PRICE_TOKEN = "gEbCShcWygvHRvFnHB-8UpJqrORWJwXoeNFs26BRtDo"
+    private const val TRIAL_DAYS = 3L
+    private const val TRIAL_SOURCE = "khayyaton_account_trial"
 
     private const val PREFS_NAME = "khayyaton_prefs"
     private const val KEY_UID = "sub_uid"
@@ -175,12 +181,17 @@ object SubscriptionManager {
             )
         }.getOrDefault(SubscriptionStatus.UNKNOWN)
         val expiresAt = if (sp.contains(KEY_EXPIRES_AT)) sp.getLong(KEY_EXPIRES_AT, 0L) else null
-        val safeStatus = if (status == SubscriptionStatus.SUBSCRIBED && (expiresAt == null || expiresAt <= System.currentTimeMillis()))
-            SubscriptionStatus.EXPIRED else status
+        val now = System.currentTimeMillis()
+        val safeStatus = when {
+            status == SubscriptionStatus.SUBSCRIBED && (expiresAt == null || expiresAt <= now) -> SubscriptionStatus.EXPIRED
+            status == SubscriptionStatus.TRIAL_ACTIVE && (expiresAt == null || expiresAt <= now) -> SubscriptionStatus.TRIAL_EXPIRED
+            else -> status
+        }
         _subscriptionState.value = UserSubscription(
             status = safeStatus,
             activeProductId = sp.getString(KEY_ACTIVE_PRODUCT_ID, null),
             startedAt = sp.getLong(KEY_STARTED_AT, 0L).takeIf { it > 0 },
+            trialStartedAt = sp.getLong(KEY_STARTED_AT, 0L).takeIf { status == SubscriptionStatus.TRIAL_ACTIVE && it > 0 },
             expiresAt = expiresAt,
             orderId = sp.getString(KEY_ORDER_ID, null),
             updatedAt = System.currentTimeMillis(),
@@ -207,7 +218,23 @@ object SubscriptionManager {
         prefs?.edit()?.clear()?.apply()
     }
 
-        /**
+        private suspend fun tryCreateTrial(uid: String): Boolean {
+        val ref = FirebaseFirestore.getInstance().collection("users").document(uid).collection("subscription").document("info")
+        val expiresAt = Timestamp(Date(System.currentTimeMillis() + TRIAL_DAYS * 24L * 60L * 60L * 1000L))
+        return try {
+            ref.create(mapOf(
+                "subscriptionStatus" to SubscriptionStatus.TRIAL_ACTIVE.name,
+                "trialStartedAt" to FieldValue.serverTimestamp(),
+                "expiresAt" to expiresAt,
+                "source" to TRIAL_SOURCE
+            )).await()
+            true
+        } catch (_: Exception) {
+            ref.get().await().exists()
+        }
+    }
+
+    /**
      * همگام‌سازی وضعیت اشتراک با فایربیس
      */
     fun syncSubscriptionWithFirebase(onComplete: ((Result<UserSubscription>) -> Unit)? = null) {
@@ -221,10 +248,12 @@ object SubscriptionManager {
                     return@launch
                 }
                 resetSubscriptionForUser(user.uid)
-                val snapshot = FirebaseFirestore.getInstance()
-                    .collection("users").document(user.uid)
-                    .collection("subscription").document("info")
-                    .get().await()
+                val subscriptionRef = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("subscription").document("info")
+                var snapshot = subscriptionRef.get().await()
+                if (!snapshot.exists()) {
+                    tryCreateTrial(user.uid)
+                    snapshot = subscriptionRef.get().await()
+                }
 
                 if (!snapshot.exists()) {
                     val empty = UserSubscription()
@@ -238,19 +267,25 @@ object SubscriptionManager {
                     ?: snapshot.getLong("expiresAt")
                 val startedAt = snapshot.getTimestamp("startedAt")?.toDate()?.time
                     ?: snapshot.getLong("startedAt")
+                val trialStartedAt = snapshot.getTimestamp("trialStartedAt")?.toDate()?.time
+                    ?: snapshot.getLong("trialStartedAt")
                 val statusFromServer = runCatching {
                     SubscriptionStatus.valueOf(
                         snapshot.getString("subscriptionStatus") ?: SubscriptionStatus.UNKNOWN.name
                     )
                 }.getOrDefault(SubscriptionStatus.UNKNOWN)
-                val status = if (statusFromServer == SubscriptionStatus.SUBSCRIBED &&
-                    (expiresAt == null || expiresAt <= System.currentTimeMillis())
-                ) SubscriptionStatus.EXPIRED else statusFromServer
+                val now = System.currentTimeMillis()
+                val status = when {
+                    statusFromServer == SubscriptionStatus.SUBSCRIBED && (expiresAt == null || expiresAt <= now) -> SubscriptionStatus.EXPIRED
+                    statusFromServer == SubscriptionStatus.TRIAL_ACTIVE && (expiresAt == null || expiresAt <= now) -> SubscriptionStatus.TRIAL_EXPIRED
+                    else -> statusFromServer
+                }
 
                 val sub = UserSubscription(
                     status = status,
                     activeProductId = snapshot.getString("activeProductId"),
                     startedAt = startedAt,
+                    trialStartedAt = trialStartedAt,
                     expiresAt = expiresAt,
                     orderId = snapshot.getString("orderId"),
                     updatedAt = System.currentTimeMillis(),
@@ -295,7 +330,8 @@ object SubscriptionManager {
         try {
             val request = PurchaseRequest(
                 productId = plan.productId,
-                payload = "user_${user.uid}"
+                payload = "user_${user.uid}",
+                dynamicPriceToken = BAZAAR_DYNAMIC_PRICE_TOKEN
             )
 
             p.subscribeProduct(
@@ -390,6 +426,7 @@ object SubscriptionManager {
                     status = status,
                     activeProductId = data["activeProductId"]?.toString(),
                     startedAt = startedAt,
+                    trialStartedAt = null,
                     expiresAt = expiresAt,
                     orderId = data["orderId"]?.toString(),
                     updatedAt = System.currentTimeMillis(),
