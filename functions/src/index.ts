@@ -81,6 +81,7 @@ export const verifyBazaarSubscription = onCall(
     region: "europe-west1",
     timeoutSeconds: 30,
     enforceAppCheck: true,
+    consumeAppCheckToken: true,
     secrets: [BAZAAR_CLIENT_ID, BAZAAR_CLIENT_SECRET, BAZAAR_REFRESH_TOKEN],
   },
   async (request) => {
