@@ -25,37 +25,19 @@ object FirebaseService {
             if (apps.isEmpty()) {
                 val initialized = FirebaseApp.initializeApp(context)
                 if (initialized == null) {
-                    // Fallback to explicit options from google-services.json
-                    val options = FirebaseOptions.Builder()
-                        .setApplicationId("1:15543905804:android:8fc6393c86598be4310829")
-                        .setApiKey("AIzaSyAmLQ7SPiYxhMvquyV01xYD8MZZjezknoY")
-                        .setProjectId("khayyaton-26abc")
-                        .setStorageBucket("khayyaton-26abc.firebasestorage.app")
-                        .setGcmSenderId("15543905804")
-                        .build()
-                    FirebaseApp.initializeApp(context, options)
-                    Log.d(TAG, "Firebase initialized with explicit options")
+                    Log.e(
+                        TAG,
+                        "Firebase default configuration is missing. " +
+                            "Provide app/google-services.json for local/release builds."
+                    )
                 } else {
-                    Log.d(TAG, "Firebase initialized with default app")
+                    Log.d(TAG, "Firebase initialized with default configuration")
                 }
             } else {
-                Log.d(TAG, "Firebase already initialized with ${apps.size} apps")
+                Log.d(TAG, "Firebase already initialized with ${apps.size} app(s)")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error initializing Firebase: ${e.message}", e)
-            try {
-                val options = FirebaseOptions.Builder()
-                    .setApplicationId("1:15543905804:android:8fc6393c86598be4310829")
-                    .setApiKey("AIzaSyAmLQ7SPiYxhMvquyV01xYD8MZZjezknoY")
-                    .setProjectId("khayyaton-26abc")
-                    .setStorageBucket("khayyaton-26abc.firebasestorage.app")
-                    .setGcmSenderId("15543905804")
-                    .build()
-                FirebaseApp.initializeApp(context, options)
-                Log.d(TAG, "Firebase recovered with explicit options")
-            } catch (ex: Exception) {
-                Log.e(TAG, "Firebase fallback initialization failed: ${ex.message}", ex)
-            }
+            Log.e(TAG, "Firebase initialization failed: ${e.message}", e)
         }
     }
 
@@ -366,14 +348,24 @@ object FirebaseService {
                 workshopCount++
             }
 
+            val validWorkshopIds = workshopsSnapshot.documents
+                .mapNotNull { doc ->
+                    val data = doc.data ?: return@mapNotNull null
+                    (data["id"] as? Number)?.toLong()
+                        ?: doc.id.removePrefix("wrk_").toLongOrNull()
+                }
+                .toSet()
+
             // 1. Download Orders
             val ordersSnapshot = userDoc.collection("orders").get().await()
             var ordCount = 0
             for (doc in ordersSnapshot.documents) {
                 val data = doc.data ?: continue
+                val workshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
+                if (workshopId <= 0L || workshopId !in validWorkshopIds) continue
                 val order = FurnitureOrder(
                     id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("ord_").toLongOrNull() ?: 0L,
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
+                    workshopId = workshopId,
                     orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
                     invoiceNumber = data["invoiceNumber"] as? String ?: "",
                     modelName = data["modelName"] as? String ?: "",
@@ -396,133 +388,3 @@ object FirebaseService {
                 ordCount++
             }
 
-            // 2. Download Payments
-            val paymentsSnapshot = userDoc.collection("payments").get().await()
-            var payCount = 0
-            for (doc in paymentsSnapshot.documents) {
-                val data = doc.data ?: continue
-                val payment = PaymentRecord(
-                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("pay_").toLongOrNull() ?: 0L,
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
-                    paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
-                    amount = (data["amount"] as? Number)?.toLong() ?: 0L,
-                    dateJalali = data["dateJalali"] as? String ?: "",
-                    dateGregorian = data["dateGregorian"] as? String ?: "",
-                    customerName = data["customerName"] as? String ?: "",
-                    description = data["description"] as? String ?: "",
-                    paymentType = data["paymentType"] as? String ?: "transfer",
-                    referenceNo = data["referenceNo"] as? String ?: "",
-                    bankName = data["bankName"] as? String ?: "",
-                    cardNumber = data["cardNumber"] as? String ?: "",
-                    relatedOrderId = (data["relatedOrderId"] as? Number)?.toLong(),
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
-                )
-                repository.savePayment(payment)
-                payCount++
-            }
-
-            // 3. Download Presets
-            val presetsSnapshot = userDoc.collection("presets").get().await()
-            var preCount = 0
-            for (doc in presetsSnapshot.documents) {
-                val data = doc.data ?: continue
-                val name = data["name"] as? String ?: continue
-                val preset = ModelPreset(
-                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("pre_").toLongOrNull() ?: 0L,
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
-                    name = name,
-                    defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
-                    defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
-                    colorCode = data["colorCode"] as? String ?: "#2563EB",
-                    description = data["description"] as? String ?: ""
-                )
-                repository.savePreset(preset)
-                preCount++
-            }
-
-            // 4. Download Unit Rules
-            val rulesSnapshot = userDoc.collection("unitRules").get().await()
-            var ruleCount = 0
-            for (doc in rulesSnapshot.documents) {
-                val data = doc.data ?: continue
-                val pieceKey = data["pieceKey"] as? String ?: ""
-                val rule = UnitConversionRule(
-                    id = (data["id"] as? Number)?.toLong() ?: doc.id.removePrefix("rule_").toLongOrNull() ?: 0L,
-                    pieceKey = pieceKey,
-                    pieceCount = (data["pieceCount"] as? Number)?.toDouble() ?: 0.0,
-                    calculatedUnits = (data["calculatedUnits"] as? Number)?.toDouble() ?: 0.0,
-                    isEnabled = data["isEnabled"] as? Boolean ?: true
-                )
-                repository.saveUnitRule(rule)
-                ruleCount++
-            }
-
-            Result.success(
-                CloudSyncResult(
-                    success = true,
-                    ordersCount = ordCount,
-                    paymentsCount = payCount,
-                    presetsCount = preCount,
-                    unitRulesCount = ruleCount
-                )
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error downloading from Firestore", e)
-            Result.failure(Exception(parseCloudError(e)))
-        }
-    }
-
-    /**
-     * Translates any Firebase Auth / Firestore / network exception into a clear
-     * Persian message for the user. Specifically detects the case where Google's
-     * servers return an HTTP 403 (Forbidden) block page instead of JSON — this
-     * happens for users in Iran connecting without (or with a blocked) VPN, since
-     * Google blocks direct access from Iranian IP addresses due to sanctions.
-     */
-    private fun parseCloudError(e: Exception): String {
-        val msg = e.message ?: ""
-        val lowerMsg = msg.lowercase()
-
-        return when {
-            // Google 403 block page (sanctions-related access block) — most common
-            // cause of "JSON conversion failed" / "Error 403 (Forbidden)" errors
-            lowerMsg.contains("403") ||
-                lowerMsg.contains("forbidden") ||
-                lowerMsg.contains("json conversion failed") ||
-                lowerMsg.contains("failed to parse") ->
-                "دسترسی به سرور گوگل برقرار نشد (خطای ۴۰۳). برای استفاده از ذخیره‌سازی و بازیابی خودکار، لطفاً یک فیلترشکن (VPN) معتبر روشن کنید و دوباره تلاش نمایید."
-
-            lowerMsg.contains("api key not valid") || lowerMsg.contains("api key expired") ->
-                "کلید ارتباطی برنامه با سرور نامعتبر است. لطفاً از آخرین نسخه برنامه استفاده کنید یا با پشتیبانی تماس بگیرید."
-
-            lowerMsg.contains("the email address is badly formatted") ->
-                "فرمت آدرس ایمیل وارد شده صحیح نمی‌باشد."
-
-            lowerMsg.contains("the password is invalid") || lowerMsg.contains("password should be at least") ->
-                "رمز عبور باید حداقل ۶ کاراکتر باشد."
-
-            lowerMsg.contains("there is no user record") || lowerMsg.contains("user-not-found") ->
-                "کاربری با این ایمیل یافت نشد."
-
-            lowerMsg.contains("wrong-password") || lowerMsg.contains("invalid_login_credentials") ->
-                "ایمیل یا کلمه عبور اشتباه است."
-
-            lowerMsg.contains("email-already-in-use") ->
-                "حسابی با این ایمیل قبلاً ثبت‌نام شده است."
-
-            lowerMsg.contains("too-many-requests") ->
-                "تعداد تلاش‌های شما زیاد بوده است. لطفاً چند دقیقه دیگر دوباره تلاش کنید."
-
-            lowerMsg.contains("network-request-failed") ||
-                lowerMsg.contains("unable to resolve host") ||
-                lowerMsg.contains("timeout") ||
-                lowerMsg.contains("failed to connect") ->
-                "خطای اتصال به اینترنت. لطفاً اتصال اینترنت خود را بررسی کنید و در صورت نیاز فیلترشکن (VPN) را روشن نمایید."
-
-            lowerMsg.contains("permission_denied") || lowerMsg.contains("permission denied") ->
-                "دسترسی لازم برای این عملیات وجود ندارد. لطفاً دوباره وارد حساب کاربری خود شوید."
-
-            else -> "خطایی در ارتباط با سرور فایربیس رخ داد. لطفاً از روشن بودن اینترنت و فیلترشکن (VPN) خود اطمینان حاصل کرده و دوباره تلاش کنید."
-        }
-    }
-}
