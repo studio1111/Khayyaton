@@ -238,69 +238,77 @@ object SubscriptionManager {
     /**
      * همگام‌سازی وضعیت اشتراک با فایربیس
      */
+    suspend fun syncSubscriptionWithFirebaseNow(): UserSubscription {
+        _isLoading.value = true
+        try {
+            val user = FirebaseAuth.getInstance().currentUser
+            if (user == null) {
+                val empty = UserSubscription()
+                _subscriptionState.value = empty
+                return empty
+            }
+            resetSubscriptionForUser(user.uid)
+
+            val subscriptionRef = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("subscription").document("info")
+            var snapshot = subscriptionRef.get().await()
+            if (!snapshot.exists()) {
+                tryCreateTrial(user.uid)
+                snapshot = subscriptionRef.get().await()
+            }
+
+            if (!snapshot.exists()) {
+                val empty = UserSubscription()
+                _subscriptionState.value = empty
+                cacheSubscription(empty, user.uid)
+                return empty
+            }
+
+            val expiresAt = snapshot.getTimestamp("expiresAt")?.toDate()?.time
+                ?: snapshot.getLong("expiresAt")
+            val startedAt = snapshot.getTimestamp("startedAt")?.toDate()?.time
+                ?: snapshot.getLong("startedAt")
+            val trialStartedAt = snapshot.getTimestamp("trialStartedAt")?.toDate()?.time
+                ?: snapshot.getLong("trialStartedAt")
+            val statusFromServer = runCatching {
+                SubscriptionStatus.valueOf(
+                    snapshot.getString("subscriptionStatus") ?: SubscriptionStatus.UNKNOWN.name
+                )
+            }.getOrDefault(SubscriptionStatus.UNKNOWN)
+            val now = System.currentTimeMillis()
+            val status = when {
+                statusFromServer == SubscriptionStatus.SUBSCRIBED && (expiresAt == null || expiresAt <= now) -> SubscriptionStatus.EXPIRED
+                statusFromServer == SubscriptionStatus.TRIAL_ACTIVE && (expiresAt == null || expiresAt <= now) -> SubscriptionStatus.TRIAL_EXPIRED
+                else -> statusFromServer
+            }
+
+            val sub = UserSubscription(
+                status = status,
+                activeProductId = snapshot.getString("activeProductId"),
+                startedAt = startedAt,
+                trialStartedAt = trialStartedAt,
+                expiresAt = expiresAt,
+                orderId = snapshot.getString("orderId"),
+                updatedAt = System.currentTimeMillis(),
+                autoRenewing = snapshot.getBoolean("autoRenewing") ?: false
+            )
+            _subscriptionState.value = sub
+            cacheSubscription(sub, user.uid)
+            return sub
+        } catch (e: Exception) {
+            Log.e(TAG, "Subscription sync failed", e)
+            throw e
+        } finally {
+            _isLoading.value = false
+        }
+    }
+
     fun syncSubscriptionWithFirebase(onComplete: ((Result<UserSubscription>) -> Unit)? = null) {
         scope.launch {
-            _isLoading.value = true
             try {
-                val user = FirebaseAuth.getInstance().currentUser
-                if (user == null) {
-                    _subscriptionState.value = UserSubscription()
-                    withContext(Dispatchers.Main) { onComplete?.invoke(Result.success(UserSubscription())) }
-                    return@launch
-                }
-                resetSubscriptionForUser(user.uid)
-
-                val subscriptionRef = FirebaseFirestore.getInstance().collection("users").document(user.uid).collection("subscription").document("info")
-                var snapshot = subscriptionRef.get().await()
-                if (!snapshot.exists()) {
-                    tryCreateTrial(user.uid)
-                    snapshot = subscriptionRef.get().await()
-                }
-
-                if (!snapshot.exists()) {
-                    val empty = UserSubscription()
-                    _subscriptionState.value = empty
-                    cacheSubscription(empty, user.uid)
-                    withContext(Dispatchers.Main) { onComplete?.invoke(Result.success(empty)) }
-                    return@launch
-                }
-
-                val expiresAt = snapshot.getTimestamp("expiresAt")?.toDate()?.time
-                    ?: snapshot.getLong("expiresAt")
-                val startedAt = snapshot.getTimestamp("startedAt")?.toDate()?.time
-                    ?: snapshot.getLong("startedAt")
-                val trialStartedAt = snapshot.getTimestamp("trialStartedAt")?.toDate()?.time
-                    ?: snapshot.getLong("trialStartedAt")
-                val statusFromServer = runCatching {
-                    SubscriptionStatus.valueOf(
-                        snapshot.getString("subscriptionStatus") ?: SubscriptionStatus.UNKNOWN.name
-                    )
-                }.getOrDefault(SubscriptionStatus.UNKNOWN)
-                val now = System.currentTimeMillis()
-                val status = when {
-                    statusFromServer == SubscriptionStatus.SUBSCRIBED && (expiresAt == null || expiresAt <= now) -> SubscriptionStatus.EXPIRED
-                    statusFromServer == SubscriptionStatus.TRIAL_ACTIVE && (expiresAt == null || expiresAt <= now) -> SubscriptionStatus.TRIAL_EXPIRED
-                    else -> statusFromServer
-                }
-
-                val sub = UserSubscription(
-                    status = status,
-                    activeProductId = snapshot.getString("activeProductId"),
-                    startedAt = startedAt,
-                    trialStartedAt = trialStartedAt,
-                    expiresAt = expiresAt,
-                    orderId = snapshot.getString("orderId"),
-                    updatedAt = System.currentTimeMillis(),
-                    autoRenewing = snapshot.getBoolean("autoRenewing") ?: false
-                )
-                _subscriptionState.value = sub
-                cacheSubscription(sub, user.uid)
+                val sub = syncSubscriptionWithFirebaseNow()
                 withContext(Dispatchers.Main) { onComplete?.invoke(Result.success(sub)) }
             } catch (e: Exception) {
-                Log.e(TAG, "Subscription sync failed", e)
                 withContext(Dispatchers.Main) { onComplete?.invoke(Result.failure(e)) }
-            } finally {
-                _isLoading.value = false
             }
         }
     }
@@ -333,7 +341,7 @@ object SubscriptionManager {
             val request = PurchaseRequest(
                 productId = plan.productId,
                 payload = "user_${user.uid}",
-                dynamicPriceToken = BAZAAR_DYNAMIC_PRICE_TOKEN
+                dynamicPriceToken = ""
             )
 
             p.subscribeProduct(
