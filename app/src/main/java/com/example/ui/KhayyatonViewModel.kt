@@ -596,8 +596,10 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         isSessionReady.value = false
         FirebaseService.signOut()
         SubscriptionManager.clearForSignedOutUser()
-        repository.resetAllData()
-        repository.setSessionUid(null)
+        viewModelScope.launch {
+            repository.resetAllData()
+            repository.setSessionUid(null)
+        }
         currentUser.value = null
         activeWorkshopId.value = 0L
         customUsername.value = ""
