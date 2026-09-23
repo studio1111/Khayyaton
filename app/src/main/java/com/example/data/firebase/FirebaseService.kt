@@ -65,6 +65,21 @@ object FirebaseService {
         )
     }
 
+    suspend fun ensureUserProfile(user: FirebaseUserDto) {
+        val db = firestore ?: return
+        try {
+            db.collection("users").document(user.uid).set(
+                mapOf(
+                    "username" to (user.displayName?.takeIf { it.isNotBlank() } ?: "کاربر"),
+                    "email" to user.email
+                ),
+                SetOptions.merge()
+            ).await()
+        } catch (_: Exception) {
+            Log.w(TAG, "Could not ensure user profile")
+        }
+    }
+
     suspend fun signInWithEmail(email: String, pass: String): Result<FirebaseUserDto> {
         val fbAuth = auth ?: return Result.failure(Exception("سرویس فایربیس راه‌اندازی نشده است. فایل google-services.json را بررسی کنید."))
         return try {
