@@ -11,7 +11,7 @@ const BAZAAR_CLIENT_ID = defineSecret("BAZAAR_CLIENT_ID");
 const BAZAAR_CLIENT_SECRET = defineSecret("BAZAAR_CLIENT_SECRET");
 const BAZAAR_REFRESH_TOKEN = defineSecret("BAZAAR_REFRESH_TOKEN");
 
-const OWNER_EMAIL = "www.chelsea1010@gmail.com";
+const OWNER_EMAIL = defineSecret("KHAYYATON_OWNER_EMAIL");
 
 const PACKAGE_NAME = "com.farsinnov.khayyaton";
 const PRODUCTS = new Set([
@@ -84,6 +84,7 @@ export const ensureOwnerAccess = onCall(
     timeoutSeconds: 15,
     enforceAppCheck: true,
     consumeAppCheckToken: true,
+    secrets: [OWNER_EMAIL],
   },
   async (request) => {
     if (!request.auth) {
@@ -91,7 +92,7 @@ export const ensureOwnerAccess = onCall(
     }
 
     const email = String(request.auth.token.email ?? "").trim().toLowerCase();
-    if (email !== OWNER_EMAIL.toLowerCase()) {
+    if (email !== OWNER_EMAIL.value().trim().toLowerCase()) {
       return { granted: false };
     }
 
@@ -101,7 +102,7 @@ export const ensureOwnerAccess = onCall(
     await subRef.set({
       subscriptionStatus: "ADMIN_GRANTED",
       source: "owner_account",
-      ownerEmail: OWNER_EMAIL,
+      ownerEmail: OWNER_EMAIL.value(),
       grantedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 
