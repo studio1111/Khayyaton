@@ -269,7 +269,7 @@ fun SidebarDrawer(
                 DrawerItem(
                     icon = Icons.Outlined.Storefront,
                     title = "مدیریت کارگاه‌ها",
-                    badge = activeWorkshop?.name ?: "کارگاه اصلی",
+                    badge = activeWorkshop?.name ?: "انتخاب نشده",
                     onClick = { onOpenWorkshops(); onClose() }
                 )
                 DrawerItem(
