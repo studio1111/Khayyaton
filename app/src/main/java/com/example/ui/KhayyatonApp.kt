@@ -154,7 +154,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                     } else {
                         android.widget.Toast.makeText(
                             context,
-                            "دوره آزمایشی ۳ روزه شما به پایان رسیده است. لطفاً برای ثبت سفارش و استفاده از امکانات، اشتراک تهیه فرمایید.",
+                            "اشتراک فعال نیست. برای استفاده از امکانات برنامه، اشتراک کافه‌بازار را فعال کنید.",
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                         viewModel.isSubscriptionDialogOpen.value = true
