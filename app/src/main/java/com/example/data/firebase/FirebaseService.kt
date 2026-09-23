@@ -68,13 +68,18 @@ object FirebaseService {
     suspend fun ensureUserProfile(user: FirebaseUserDto) {
         val db = firestore ?: return
         try {
-            db.collection("users").document(user.uid).set(
-                mapOf(
-                    "username" to (user.displayName?.takeIf { it.isNotBlank() } ?: "کاربر"),
-                    "email" to user.email
-                ),
-                SetOptions.merge()
-            ).await()
+            val ref = db.collection("users").document(user.uid)
+            val snapshot = ref.get().await()
+            if (!snapshot.exists()) {
+                ref.set(
+                    mapOf(
+                        "username" to (user.displayName?.takeIf { it.isNotBlank() } ?: "کاربر"),
+                        "email" to user.email
+                    )
+                ).await()
+            } else {
+                ref.set(mapOf("email" to user.email), SetOptions.merge()).await()
+            }
         } catch (_: Exception) {
             Log.w(TAG, "Could not ensure user profile")
         }
