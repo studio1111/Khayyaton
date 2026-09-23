@@ -96,9 +96,95 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
         mutableStateOf(sharedPrefs.getBoolean("has_completed_first_auth", false))
     }
 
-    // If user hasn't completed authentication with email/username and is not logged in, show GlassyAuthScreen (no offline skip)
-    if (!hasCompletedFirstLaunchAuth && currentUser == null) {
+    val isSessionReady by viewModel.isSessionReady.collectAsStateWithLifecycle()
+
+    // Authentication is mandatory on every launch and after every logout.
+    if (currentUser == null) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            KhayyatonTheme(themeMode = themeMode) {
+                GlassyAuthScreen(
+                    isFirstLaunch = !hasCompletedFirstLaunchAuth,
+                    onAuthSuccess = { user, username, workshopName ->
+                        viewModel.onUserLoggedIn(user, username, workshopName)
+                        sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
+                        hasCompletedFirstLaunchAuth = true
+                    }
+                )
+            }
+        }
+        return
+    }
+
+    if (!isSessionReady) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            KhayyatonTheme(themeMode = themeMode) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+        return
+    }
+
+    if (!subscriptionState.hasAccess) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            KhayyatonTheme(themeMode = themeMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Text(
+                                text = "اشتراک فعال نیست",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Text(
+                                text = "برای استفاده از امکانات برنامه، یک اشتراک معتبر کافه‌بازار را فعال کنید.",
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Button(
+                                onClick = { viewModel.isSubscriptionDialogOpen.value = true },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("مشاهده اشتراک‌ها")
+                            }
+                            TextButton(onClick = { viewModel.onUserLoggedOut() }) {
+                                Text("خروج از حساب")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        SubscriptionDialog(
+            isOpen = isSubscriptionDialogOpen,
+            onDismiss = { viewModel.isSubscriptionDialogOpen.value = false }
+        )
+        return
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             KhayyatonTheme(themeMode = themeMode) {
                 GlassyAuthScreen(
                     isFirstLaunch = true,
