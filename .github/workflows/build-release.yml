@@ -10,6 +10,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -55,20 +58,28 @@ jobs:
       - name: Verify AAB signature
         run: jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
 
-      - name: Upload AAB
+      - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: khayyaton-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: khayyaton-release-apk
           path: app/build/outputs/apk/release/app-release.apk
 
+      - name: Create Source ZIP
+        if: github.event_name != 'pull_request'
+        run: git archive --format=zip --output="Khayyaton-Source-${GITHUB_SHA::7}.zip" "${GITHUB_SHA}"
+
+      - name: Publish GitHub Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "release-${GITHUB_RUN_NUMBER}" --target "${GITHUB_SHA}" --title "Khayyaton Release #${GITHUB_RUN_NUMBER}" --notes "Production release built from commit ${GITHUB_SHA}. Includes signed AAB, signed APK, and complete source ZIP." "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB" "app/build/outputs/apk/release/app-release.apk#Khayyaton APK" "Khayyaton-Source-${GITHUB_SHA::7}.zip#Khayyaton Source ZIP"
+
       - name: Remove keystore
         if: always()
         run: rm -f khayyaton.jks
-
-# Release build trigger: latest hardened branch verification
