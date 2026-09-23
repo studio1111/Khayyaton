@@ -340,8 +340,7 @@ object SubscriptionManager {
         try {
             val request = PurchaseRequest(
                 productId = plan.productId,
-                payload = "user_${user.uid}",
-                dynamicPriceToken = ""
+                payload = "user_${user.uid}"
             )
 
             p.subscribeProduct(
