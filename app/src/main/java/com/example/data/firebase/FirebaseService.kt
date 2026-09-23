@@ -315,7 +315,8 @@ object FirebaseService {
                     ordersCount = orders.size,
                     paymentsCount = payments.size,
                     presetsCount = presets.size,
-                    unitRulesCount = unitRules.size
+                    unitRulesCount = unitRules.size,
+                    workshopsCount = workshops.size
                 )
             )
         } catch (e: Exception) {
