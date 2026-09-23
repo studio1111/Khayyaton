@@ -391,8 +391,8 @@ object FirebaseService {
             var payCount = 0
             for (doc in paymentsSnapshot.documents) {
                 val data = doc.data ?: continue
-                val workshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
-                if (workshopId <= 0L || workshopId !in validWorkshopIds) continue
+                val cloudWorkshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
+                val workshopId = workshopIdMap[cloudWorkshopId] ?: continue
                 val payment = PaymentRecord(
                     id = 0L,
                     workshopId = workshopId,
@@ -418,8 +418,8 @@ object FirebaseService {
             var preCount = 0
             for (doc in presetsSnapshot.documents) {
                 val data = doc.data ?: continue
-                val workshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
-                if (workshopId <= 0L || workshopId !in validWorkshopIds) continue
+                val cloudWorkshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
+                val workshopId = workshopIdMap[cloudWorkshopId] ?: continue
                 val name = data["name"] as? String ?: continue
                 val preset = ModelPreset(
                     id = 0L,
