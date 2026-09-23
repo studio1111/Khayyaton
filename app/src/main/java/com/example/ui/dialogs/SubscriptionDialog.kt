@@ -237,6 +237,15 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 "دسترسی کامل به برنامه فعال است (${PersianUtils.toPersianDigits(subscription.remainingDays)} روز باقی مانده)"
             )
         }
+        SubscriptionStatus.TRIAL_ACTIVE -> {
+            Tuple5(
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                Icons.Default.Schedule,
+                "دوره آزمایشی ۳ روزه فعال است",
+                "دسترسی کامل شما فعال است (" + PersianUtils.toPersianDigits(subscription.remainingDays) + " روز باقی مانده)"
+            )
+        }
         SubscriptionStatus.UNKNOWN -> {
             Tuple5(
                 Rose600.copy(alpha = 0.12f),
@@ -244,6 +253,15 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Icons.Outlined.Warning,
                 "اشتراک فعال نیست",
                 "برای استفاده از امکانات برنامه، یکی از اشتراک‌های کافه‌بازار را فعال کنید."
+            )
+        }
+        SubscriptionStatus.TRIAL_EXPIRED -> {
+            Tuple5(
+                Rose600.copy(alpha = 0.12f),
+                Rose600.copy(alpha = 0.45f),
+                Icons.Outlined.ErrorOutline,
+                "دوره آزمایشی تمام شده است",
+                "برای ادامه استفاده، یکی از اشتراک‌های کافه‌بازار را فعال کنید."
             )
         }
         SubscriptionStatus.EXPIRED -> {
