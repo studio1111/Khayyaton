@@ -70,7 +70,8 @@ object SubscriptionManager {
     fun initialize(context: Context) {
         val appContext = context.applicationContext
         prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        resetSubscriptionForUser(FirebaseAuth.getInstance().currentUser?.uid)
+        val currentUid = runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull()
+        resetSubscriptionForUser(currentUid)
 
 
         // راه‌اندازی پل پرداخت پولکی کافه‌بازار
