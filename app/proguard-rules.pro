@@ -19,3 +19,8 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Release hardening
+-keep class ir.cafebazaar.poolakey.** { *; }
+-keep class com.example.model.** { *; }
+-keepclassmembers class com.example.model.** { <fields>; }

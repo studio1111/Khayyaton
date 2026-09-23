@@ -16,3 +16,7 @@
 local.properties
 .env
 debug.keystore
+
+/functions/node_modules/
+/functions/lib/
+/functions/.firebase/

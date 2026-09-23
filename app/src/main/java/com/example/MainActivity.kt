@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         com.example.data.firebase.FirebaseService.initialize(applicationContext)
+        com.example.data.firebase.FirebaseSecurity.initialize(applicationContext)
         com.example.data.subscription.SubscriptionManager.initialize(applicationContext)
 
         val database = AppDatabase.getDatabase(applicationContext)
