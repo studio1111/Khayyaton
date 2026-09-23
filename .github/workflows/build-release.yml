@@ -70,3 +70,5 @@ jobs:
       - name: Remove keystore
         if: always()
         run: rm -f khayyaton.jks
+
+# Release build trigger: latest hardened branch verification
