@@ -257,7 +257,9 @@ fun SidebarDrawer(
                 // Section 1: Primary Action Items
                 val subBadge = when (subscriptionState?.status) {
                     com.example.model.SubscriptionStatus.SUBSCRIBED -> "ویژه"
-                    com.example.model.SubscriptionStatus.EXPIRED -> "تمدید اشتراک"
+                    com.example.model.SubscriptionStatus.TRIAL_ACTIVE -> "آزمایشی"
+                    com.example.model.SubscriptionStatus.EXPIRED,
+                    com.example.model.SubscriptionStatus.TRIAL_EXPIRED -> "تمدید اشتراک"
                     else -> null
                 }
                 DrawerItem(
