@@ -12,5 +12,6 @@ data class CloudSyncResult(
     val paymentsCount: Int = 0,
     val presetsCount: Int = 0,
     val unitRulesCount: Int = 0,
+    val workshopsCount: Int = 0,
     val errorMessage: String? = null
 )
