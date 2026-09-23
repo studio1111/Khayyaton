@@ -9,11 +9,11 @@ import com.example.model.AppThemeMode
 
 private val DarkColorScheme = darkColorScheme(
     primary = Blue500,
-    onPrimary = Color.White,
+    onPrimary = Color.Black,
     primaryContainer = Blue700,
     onPrimaryContainer = Blue100,
     secondary = Emerald500,
-    onSecondary = Color.White,
+    onSecondary = Color.Black,
     secondaryContainer = Emerald600,
     onSecondaryContainer = Emerald100,
     tertiary = Amber500,
@@ -36,7 +36,7 @@ private val LightColorScheme = lightColorScheme(
     secondaryContainer = Color(0xFFD1FAE5),
     onSecondaryContainer = Color(0xFF064E3B), // Deep forest green on emerald container
     tertiary = Color(0xFFB45309), // Amber high contrast
-    onTertiary = Color.White,
+    onTertiary = Color.Black,
     tertiaryContainer = Color(0xFFFEF3C7),
     onTertiaryContainer = Color(0xFF78350F),
     background = Color(0xFFF8FAFC), // Pure clean light slate
@@ -45,6 +45,7 @@ private val LightColorScheme = lightColorScheme(
     onBackground = Color(0xFF000000), // Solid black for guaranteed readability
     onSurface = Color(0xFF000000), // Solid black for guaranteed readability
     onSurfaceVariant = Color(0xFF0F172A), // Deepest dark slate (nearly black) - never semi-transparent or light
+    onError = Color.Black,
     outline = Color(0xFF475569), // Clear dark outline
     outlineVariant = Color(0xFF94A3B8)
 )
