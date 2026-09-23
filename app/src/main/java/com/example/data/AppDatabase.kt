@@ -4,8 +4,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.model.FurnitureOrder
 import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
@@ -13,21 +11,6 @@ import com.example.model.UnitConversionRule
 import com.example.model.Workshop
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
-
-val MIGRATION_4_5 = object : Migration(4, 5) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS workshops (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)")
-        try {
-            db.execSQL("ALTER TABLE furniture_orders ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 0")
-        } catch (_: Exception) {}
-        try {
-            db.execSQL("ALTER TABLE payment_records ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 1")
-        } catch (_: Exception) {}
-        try {
-            db.execSQL("ALTER TABLE model_presets ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 1")
-        } catch (_: Exception) {}
-    }
-}
 
 @Database(
     entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class],
@@ -52,7 +35,6 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "khayyaton_workshop.db"
                 )
-                    .addMigrations(MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
