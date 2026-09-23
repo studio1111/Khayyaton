@@ -75,27 +75,45 @@ class WorkshopRepository(
         context?.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
     }
 
+    fun getSessionUid(): String? = prefs?.getString("session_uid", null)?.takeIf { it.isNotBlank() }
+
+    fun setSessionUid(uid: String?) {
+        prefs?.edit()?.apply {
+            if (uid.isNullOrBlank()) remove("session_uid") else putString("session_uid", uid)
+            apply()
+        }
+    }
+
+    private fun sessionKey(base: String): String? = getSessionUid()?.let { "${base}_$it" }
+
     fun getSavedActiveWorkshopId(): Long {
-        return prefs?.getLong("active_workshop_id", -1L) ?: -1L
+        val key = sessionKey("active_workshop_id") ?: return -1L
+        return prefs?.getLong(key, -1L) ?: -1L
     }
 
     fun saveActiveWorkshopId(id: Long) {
-        prefs?.edit()?.putLong("active_workshop_id", id)?.apply()
+        val key = sessionKey("active_workshop_id") ?: return
+        prefs?.edit()?.putLong(key, id)?.apply()
     }
 
     fun getCustomUsername(): String {
-        return prefs?.getString("custom_username", "") ?: ""
+        val key = sessionKey("custom_username") ?: return ""
+        return prefs?.getString(key, "") ?: ""
     }
 
     fun saveCustomUsername(username: String) {
-        prefs?.edit()?.putString("custom_username", username.trim())?.apply()
+        val key = sessionKey("custom_username") ?: return
+        prefs?.edit()?.putString(key, username.trim())?.apply()
     }
 
-    fun getCloudSyncInitialized(): Boolean =
-        prefs?.getBoolean("cloud_sync_initialized", false) ?: false
+    fun getCloudSyncInitialized(): Boolean {
+        val key = sessionKey("cloud_sync_initialized") ?: return false
+        return prefs?.getBoolean(key, false) ?: false
+    }
 
     fun saveCloudSyncInitialized(value: Boolean) {
-        prefs?.edit()?.putBoolean("cloud_sync_initialized", value)?.apply()
+        val key = sessionKey("cloud_sync_initialized") ?: return
+        prefs?.edit()?.putBoolean(key, value)?.apply()
     }
 
     fun getSavedThemeMode(): String? = prefs?.getString("theme_mode", null)
@@ -152,32 +170,7 @@ class WorkshopRepository(
     }
 
     suspend fun saveOrder(order: FurnitureOrder) {
-        if (order.id == 0L) {
-            val existing = orderDao.getOrdersByWorkshopSync(order.workshopId)
-            val normInv = com.example.util.PersianUtils.toEnglishDigits(order.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
-            val normCust = order.customerName.trim().lowercase(java.util.Locale.ROOT)
-            val normModel = order.modelName.trim().lowercase(java.util.Locale.ROOT)
-            val normDate = com.example.util.PersianUtils.toEnglishDigits(order.dateJalali.trim())
-
-            val match = existing.find { ex ->
-                val exInv = com.example.util.PersianUtils.toEnglishDigits(ex.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
-                val exCust = ex.customerName.trim().lowercase(java.util.Locale.ROOT)
-                val exModel = ex.modelName.trim().lowercase(java.util.Locale.ROOT)
-                val exDate = com.example.util.PersianUtils.toEnglishDigits(ex.dateJalali.trim())
-
-                (normInv.isNotBlank() && normInv != "0" && exInv == normInv) ||
-                (ex.orderNumber == order.orderNumber && (exCust == normCust || ex.createdAt == order.createdAt)) ||
-                (normCust.isNotBlank() && exCust == normCust && exModel == normModel && ex.calculatedTotal == order.calculatedTotal && exDate == normDate)
-            }
-
-            if (match != null) {
-                orderDao.updateOrder(order.copy(id = match.id))
-            } else {
-                orderDao.insertOrder(order)
-            }
-        } else {
-            orderDao.updateOrder(order)
-        }
+        if (order.id == 0L) orderDao.insertOrder(order) else orderDao.updateOrder(order)
     }
 
     suspend fun deleteOrder(order: FurnitureOrder) {
@@ -189,30 +182,7 @@ class WorkshopRepository(
     }
 
     suspend fun savePayment(payment: PaymentRecord) {
-        if (payment.id == 0L) {
-            val existing = paymentDao.getPaymentsByWorkshopSync(payment.workshopId)
-            val normRef = com.example.util.PersianUtils.toEnglishDigits(payment.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
-            val normCust = payment.customerName.trim().lowercase(java.util.Locale.ROOT)
-            val normDate = com.example.util.PersianUtils.toEnglishDigits(payment.dateJalali.trim())
-
-            val match = existing.find { ex ->
-                val exRef = com.example.util.PersianUtils.toEnglishDigits(ex.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
-                val exCust = ex.customerName.trim().lowercase(java.util.Locale.ROOT)
-                val exDate = com.example.util.PersianUtils.toEnglishDigits(ex.dateJalali.trim())
-
-                (normRef.isNotBlank() && exRef == normRef) ||
-                (ex.paymentNumber == payment.paymentNumber && (exCust == normCust || ex.createdAt == payment.createdAt)) ||
-                (normCust.isNotBlank() && exCust == normCust && ex.amount == payment.amount && exDate == normDate)
-            }
-
-            if (match != null) {
-                paymentDao.updatePayment(payment.copy(id = match.id))
-            } else {
-                paymentDao.insertPayment(payment)
-            }
-        } else {
-            paymentDao.updatePayment(payment)
-        }
+        if (payment.id == 0L) paymentDao.insertPayment(payment) else paymentDao.updatePayment(payment)
     }
 
     suspend fun deletePayment(payment: PaymentRecord) {
@@ -455,5 +425,6 @@ class WorkshopRepository(
         paymentDao.clearAll()
         modelPresetDao.clearAll()
         unitRuleDao.clearAll()
+        workshopDao.deleteAllWorkshops()
     }
 }
