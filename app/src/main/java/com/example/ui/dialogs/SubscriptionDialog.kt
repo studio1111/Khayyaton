@@ -255,15 +255,6 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 "جهت تمدید دسترسی، لطفاً یکی از اشتراک‌های زیر را تمدید فرمایید."
             )
         }
-        SubscriptionStatus.UNKNOWN -> {
-            Tuple5(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                Icons.Outlined.Info,
-                "بررسی وضعیت اشتراک",
-                "در حال همگام‌سازی وضعیت اشتراک با سرور..."
-            )
-        }
     }
 
     Box(
