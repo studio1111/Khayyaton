@@ -19,71 +19,79 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.expiresAt > request.time;
     }
 
+    function validUserProfile(data) {
+      return data.keys().hasOnly([
+          "username",
+          "email",
+          "lastSyncAt",
+          "totalOrders",
+          "totalPayments"
+        ])
+        && "username" in data
+        && "email" in data
+        && data.username is string
+        && data.email is string;
+    }
+
     match /users/{uid} {
-      // User profile is private to its owner.
       allow read: if owner(uid);
 
-      // Client may create its own profile, but only with expected fields/types.
       allow create: if owner(uid)
-        && request.resource.data.get("username", "") is string
-        && request.resource.data.get("email", "") is string;
+        && validUserProfile(request.resource.data);
 
-      // Client profile updates are limited to non-authoritative metadata.
-      // Subscription state is stored separately and is server-managed only.
       allow update: if owner(uid)
+        && validUserProfile(request.resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          "username", "email", "lastSyncAt", "totalOrders", "totalPayments"
-        ])
-        && request.resource.data.get("username", "") is string
-        && request.resource.data.get("email", "") is string;
+          "username",
+          "email",
+          "lastSyncAt",
+          "totalOrders",
+          "totalPayments"
+        ]);
 
       allow delete: if owner(uid);
 
-      // Subscription entitlement is readable by the owner but cannot be
-      // created/modified/deleted by the mobile client.
       match /subscription/info {
         allow read: if owner(uid);
         allow write: if false;
       }
 
-      // All business data requires a currently valid, server-approved subscription.
-      match /workshops/{docId} {
+      match /workshops/{workshopId} {
         allow read, write: if activeSubscription(uid);
       }
 
-      match /orders/{docId} {
+      match /orders/{orderId} {
         allow read, write: if activeSubscription(uid);
       }
 
-      match /payments/{docId} {
+      match /payments/{paymentId} {
         allow read, write: if activeSubscription(uid);
       }
 
-      match /presets/{docId} {
+      match /presets/{presetId} {
         allow read, write: if activeSubscription(uid);
       }
 
-      match /unitRules/{docId} {
+      match /unitRules/{ruleId} {
         allow read, write: if activeSubscription(uid);
       }
     }
 
-    // Username reservations are public-readable so availability can be checked.
-    // The UID is the only field exposed here. Reservations are immutable.
     match /usernames/{username} {
       allow read: if true;
+
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(["uid"])
+        && "uid" in request.resource.data
         && request.resource.data.uid == request.auth.uid;
+
       allow update, delete: if false;
     }
 
-    // Purchase tokens are server-only data.
     match /subscriptionPurchases/{tokenHash} {
       allow read, write: if false;
     }
 
-    // Default deny for every undeclared path.
     match /{document=**} {
       allow read, write: if false;
     }
