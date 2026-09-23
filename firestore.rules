@@ -14,11 +14,16 @@ service cloud.firestore {
     function activeSubscription(uid) {
       return owner(uid)
         && exists(/databases/$(database)/documents/users/$(uid)/subscription/info)
-        && get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.expiresAt is timestamp
-        && get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.expiresAt > request.time
         && (
-          get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.subscriptionStatus == "SUBSCRIBED"
-          || get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.subscriptionStatus == "TRIAL_ACTIVE"
+          get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.subscriptionStatus == "ADMIN_GRANTED"
+          || (
+            get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.expiresAt is timestamp
+            && get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.expiresAt > request.time
+            && (
+              get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.subscriptionStatus == "SUBSCRIBED"
+              || get(/databases/$(database)/documents/users/$(uid)/subscription/info).data.subscriptionStatus == "TRIAL_ACTIVE"
+            )
+          )
         );
     }
 
