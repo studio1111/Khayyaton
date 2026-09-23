@@ -336,35 +336,31 @@ object FirebaseService {
             // 0. Download Workshops
             val workshopsSnapshot = userDoc.collection("workshops").get().await()
             var workshopCount = 0
+            val workshopIdMap = mutableMapOf<Long, Long>()
             for (doc in workshopsSnapshot.documents) {
                 val data = doc.data ?: continue
                 val cloudWorkshopId = (data["id"] as? Number)?.toLong()
                     ?: doc.id.removePrefix("wrk_").toLongOrNull()
                     ?: continue
-                val workshop = Workshop(
-                    id = cloudWorkshopId,
-                    name = data["name"] as? String ?: "",
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                val localId = repository.saveWorkshop(
+                    Workshop(
+                        id = 0L,
+                        name = data["name"] as? String ?: "",
+                        createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    )
                 )
-                repository.saveWorkshop(workshop)
+                workshopIdMap[cloudWorkshopId] = localId
                 workshopCount++
             }
 
-            val validWorkshopIds = workshopsSnapshot.documents
-                .mapNotNull { doc ->
-                    val data = doc.data ?: return@mapNotNull null
-                    (data["id"] as? Number)?.toLong()
-                        ?: doc.id.removePrefix("wrk_").toLongOrNull()
-                }
-                .toSet()
-
+            val validWorkshopIds = workshopIdMap.keys
             // 1. Download Orders
             val ordersSnapshot = userDoc.collection("orders").get().await()
             var ordCount = 0
             for (doc in ordersSnapshot.documents) {
                 val data = doc.data ?: continue
-                val workshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
-                if (workshopId <= 0L || workshopId !in validWorkshopIds) continue
+                val cloudWorkshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
+                val workshopId = workshopIdMap[cloudWorkshopId] ?: continue
                 val order = FurnitureOrder(
                     id = 0L, // fresh auto-generated id or merge
                     workshopId = workshopId,
