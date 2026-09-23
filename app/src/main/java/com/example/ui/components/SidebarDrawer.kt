@@ -206,7 +206,7 @@ fun SidebarDrawer(
                             modifier = Modifier.size(13.dp)
                         )
                         Text(
-                            text = "کارگاه: ${activeWorkshop?.name ?: "کارگاه اصلی"}",
+                            text = "کارگاه: ${activeWorkshop?.name ?: "کارگاهی انتخاب نشده"}",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
