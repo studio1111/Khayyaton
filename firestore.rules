@@ -2,6 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function signedIn() {
       return request.auth != null;
     }
@@ -19,19 +20,33 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
+      // User profile is private to its owner.
       allow read: if owner(uid);
-      allow create: if owner(uid);
+
+      // Client may create its own profile, but only with expected fields/types.
+      allow create: if owner(uid)
+        && request.resource.data.get("username", "") is string
+        && request.resource.data.get("email", "") is string;
+
+      // Client profile updates are limited to non-authoritative metadata.
+      // Subscription state is stored separately and is server-managed only.
       allow update: if owner(uid)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "username", "email", "lastSyncAt", "totalOrders", "totalPayments"
-        ]);
+        ])
+        && request.resource.data.get("username", "") is string
+        && request.resource.data.get("email", "") is string;
+
       allow delete: if owner(uid);
 
+      // Subscription entitlement is readable by the owner but cannot be
+      // created/modified/deleted by the mobile client.
       match /subscription/info {
         allow read: if owner(uid);
         allow write: if false;
       }
 
+      // All business data requires a currently valid, server-approved subscription.
       match /workshops/{docId} {
         allow read, write: if activeSubscription(uid);
       }
@@ -53,15 +68,23 @@ service cloud.firestore {
       }
     }
 
+    // Username reservations are public-readable so availability can be checked.
+    // The UID is the only field exposed here. Reservations are immutable.
     match /usernames/{username} {
       allow read: if true;
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if signedIn()
-        && resource.data.uid == request.auth.uid
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(["uid"])
         && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
     }
 
+    // Purchase tokens are server-only data.
     match /subscriptionPurchases/{tokenHash} {
+      allow read, write: if false;
+    }
+
+    // Default deny for every undeclared path.
+    match /{document=**} {
       allow read, write: if false;
     }
   }
