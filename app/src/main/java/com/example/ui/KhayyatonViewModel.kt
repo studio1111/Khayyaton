@@ -26,7 +26,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val workshops: StateFlow<List<com.example.model.Workshop>> = repository.workshops
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val activeWorkshopId = MutableStateFlow(1L)
+    val activeWorkshopId = MutableStateFlow(0L)
 
     val activeWorkshop: StateFlow<com.example.model.Workshop?> = combine(workshops, activeWorkshopId) { list, id ->
         list.find { it.id == id } ?: list.firstOrNull()
@@ -91,6 +91,8 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isDrawerOpen = MutableStateFlow(false)
     val isAutoSyncing = MutableStateFlow(false)
     val autoSyncStatusMessage = MutableStateFlow<String?>(null)
+    val isSessionReady = MutableStateFlow(false)
+    private var sessionJob: kotlinx.coroutines.Job? = null
 
     fun hasPremiumAccess(): Boolean {
         return SubscriptionManager.hasPremiumAccess()
@@ -98,41 +100,59 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            val savedUser = repository.getCustomUsername()
-            if (savedUser.isNotBlank()) {
-                customUsername.value = savedUser
-            }
-
             repository.getSavedThemeMode()?.let { saved ->
                 runCatching { AppThemeMode.valueOf(saved) }.getOrNull()?.let { themeMode.value = it }
             }
-            val savedWsId = repository.getSavedActiveWorkshopId()
-            val allWorkshops = repository.getAllWorkshopsSync()
-            activeWorkshopId.value =
-                if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) savedWsId
-                else allWorkshops.firstOrNull()?.id ?: 0L
-            if (activeWorkshopId.value > 0L) repository.saveActiveWorkshopId(activeWorkshopId.value)
-            repository.deduplicatePresets()
-            repository.deduplicateOrders()
-            repository.deduplicatePayments()
-
             val user = FirebaseService.getCurrentUser()
+            if (user == null) {
+                repository.setSessionUid(null)
+                repository.resetAllData()
+                currentUser.value = null
+                activeWorkshopId.value = 0L
+                isSessionReady.value = false
+            } else {
+                switchUserSession(user, null, null)
+            }
+        }
+    }
+
+    private fun switchUserSession(user: FirebaseUserDto, preferredUsername: String?, workshopName: String?) {
+        sessionJob?.cancel()
+        sessionJob = viewModelScope.launch {
+            isSessionReady.value = false
+            val changed = repository.getSessionUid() != user.uid
+            if (changed) {
+                repository.resetAllData()
+                repository.setSessionUid(user.uid)
+                repository.saveCloudSyncInitialized(false)
+                activeWorkshopId.value = 0L
+            } else {
+                repository.setSessionUid(user.uid)
+            }
             currentUser.value = user
             SubscriptionManager.syncSubscriptionWithFirebase()
-            if (user != null) {
-                if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
-                    customUsername.value = user.displayName
-                    repository.saveCustomUsername(user.displayName)
-                }
-                val localOrders = repository.getAllOrdersSync()
-                val localPayments = repository.getAllPaymentsSync()
-                // If local data already exists, DO NOT restore duplicates from cloud!
-                if (localOrders.isEmpty() && localPayments.isEmpty()) {
-                    performAutoSync(user, shouldDownload = true)
-                } else {
-                    performAutoSync(user, shouldDownload = false)
-                }
+            val chosen = preferredUsername?.takeIf { it.isNotBlank() }
+                ?: repository.getCustomUsername().takeIf { it.isNotBlank() }
+                ?: user.displayName?.takeIf { it.isNotBlank() }
+            if (!chosen.isNullOrBlank()) updateCustomUsername(chosen)
+
+            if (workshopName?.trim()?.isNotBlank() == true && repository.getAllWorkshopsSync().isEmpty()) {
+                val id = repository.saveWorkshop(com.example.model.Workshop(name = workshopName.trim()))
+                activeWorkshopId.value = id
+                repository.saveActiveWorkshopId(id)
+            } else {
+                val saved = repository.getSavedActiveWorkshopId()
+                val all = repository.getAllWorkshopsSync()
+                activeWorkshopId.value = if (saved > 0 && all.any { it.id == saved }) saved else all.firstOrNull()?.id ?: 0L
             }
+
+            if (changed) {
+                val restored = FirebaseService.downloadFromCloud(repository)
+                if (restored.isSuccess) repository.saveCloudSyncInitialized(true)
+            } else if (!repository.getCloudSyncInitialized()) {
+                performAutoSync(user, shouldDownload = repository.getAllWorkshopsSync().isEmpty())
+            }
+            isSessionReady.value = true
         }
     }
 
@@ -559,24 +579,19 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
      * Restores existing cloud data if available, then syncs local state to Firebase.
      */
     fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
-        currentUser.value = user
-        SubscriptionManager.syncSubscriptionWithFirebase()
-        val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
-            ?: customUsername.value.takeIf { it.isNotBlank() }
-            ?: user.displayName?.takeIf { it.isNotBlank() }
-        if (!chosenName.isNullOrBlank()) {
-            updateCustomUsername(chosenName)
-        }
-
-        viewModelScope.launch {
-            val shouldDownload = !repository.getCloudSyncInitialized()
-            performAutoSync(user, shouldDownload = shouldDownload)
-        }
+        switchUserSession(user, preferredUsername, workshopName)
     }
 
     fun onUserLoggedOut() {
+        sessionJob?.cancel()
+        isSessionReady.value = false
         FirebaseService.signOut()
+        SubscriptionManager.clearForSignedOutUser()
+        repository.resetAllData()
+        repository.setSessionUid(null)
         currentUser.value = null
+        activeWorkshopId.value = 0L
+        customUsername.value = ""
         autoSyncStatusMessage.value = null
     }
 
@@ -615,6 +630,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun triggerAutoUpload() {
+        if (!isSessionReady.value || !hasPremiumAccess()) return
         val user = currentUser.value ?: return
         viewModelScope.launch {
             try {
