@@ -18,6 +18,9 @@ interface WorkshopDao {
     @Query("SELECT * FROM workshops WHERE id = :id LIMIT 1")
     suspend fun getWorkshopById(id: Long): Workshop?
 
+    @Query("SELECT * FROM workshops WHERE syncId = :syncId LIMIT 1")
+    suspend fun getWorkshopBySyncId(syncId: String): Workshop?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWorkshop(workshop: Workshop): Long
 
@@ -78,6 +81,9 @@ interface OrderDao {
     @Query("UPDATE furniture_orders SET colorCode = :newColor WHERE LOWER(TRIM(modelName)) = LOWER(TRIM(:modelName)) AND workshopId = :workshopId")
     suspend fun updateModelColor(modelName: String, newColor: String, workshopId: Long)
 
+    @Query("SELECT * FROM furniture_orders WHERE syncId = :syncId LIMIT 1")
+    suspend fun getOrderBySyncId(syncId: String): FurnitureOrder?
+
     @Query("DELETE FROM furniture_orders")
     suspend fun clearAll()
 }
@@ -110,6 +116,9 @@ interface PaymentDao {
 
     @Query("DELETE FROM payment_records WHERE id = :id")
     suspend fun deletePaymentById(id: Long)
+
+    @Query("SELECT * FROM payment_records WHERE syncId = :syncId LIMIT 1")
+    suspend fun getPaymentBySyncId(syncId: String): PaymentRecord?
 
     @Query("DELETE FROM payment_records")
     suspend fun clearAll()
@@ -159,6 +168,9 @@ interface ModelPresetDao {
     @Query("UPDATE model_presets SET colorCode = :newColor WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) AND workshopId = :workshopId")
     suspend fun updatePresetColor(name: String, newColor: String, workshopId: Long)
 
+    @Query("SELECT * FROM model_presets WHERE syncId = :syncId LIMIT 1")
+    suspend fun getPresetBySyncId(syncId: String): ModelPreset?
+
     @Query("DELETE FROM model_presets")
     suspend fun clearAll()
 }
@@ -185,6 +197,9 @@ interface UnitRuleDao {
 
     @Query("DELETE FROM unit_conversion_rules WHERE id = :id")
     suspend fun deleteRuleById(id: Long)
+
+    @Query("SELECT * FROM unit_conversion_rules WHERE syncId = :syncId LIMIT 1")
+    suspend fun getRuleBySyncId(syncId: String): com.example.model.UnitConversionRule?
 
     @Query("DELETE FROM unit_conversion_rules")
     suspend fun clearAll()
