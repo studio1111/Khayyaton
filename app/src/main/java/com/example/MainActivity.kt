@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
         // App Check must be initialized before any Firebase service is used.
         val firebaseApp = FirebaseApp.initializeApp(applicationContext)
         if (firebaseApp != null) {
-            val appCheck = FirebaseAppCheck.getInstance(firebaseApp)
+            val appCheck = FirebaseAppCheck.getInstance()
             if (BuildConfig.DEBUG) {
                 appCheck.installAppCheckProviderFactory(
                     DebugAppCheckProviderFactory.getInstance()
