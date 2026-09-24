@@ -141,6 +141,43 @@ class WorkshopRepository(
         context?.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
     }
 
+    data class PendingCloudDeletion(
+        val collection: String,
+        val syncId: String
+    )
+
+    private val pendingDeletionKey = "pending_cloud_deletions"
+
+    private fun deletionKey(collection: String, syncId: String): String =
+        "$collection|$syncId"
+
+    fun recordCloudDeletion(collection: String, syncId: String) {
+        if (syncId.isBlank()) return
+        val current = prefs?.getStringSet(pendingDeletionKey, emptySet()).orEmpty().toMutableSet()
+        current += deletionKey(collection, syncId)
+        prefs?.edit()?.putStringSet(pendingDeletionKey, current)?.apply()
+    }
+
+    fun getPendingCloudDeletions(): List<PendingCloudDeletion> {
+        return prefs?.getStringSet(pendingDeletionKey, emptySet()).orEmpty()
+            .mapNotNull { raw ->
+                val parts = raw.split("|", limit = 2)
+                if (parts.size == 2 && parts[1].isNotBlank()) {
+                    PendingCloudDeletion(parts[0], parts[1])
+                } else null
+            }
+    }
+
+    fun clearCloudDeletions(deletions: Collection<PendingCloudDeletion>) {
+        if (deletions.isEmpty()) return
+        val removeKeys = deletions.map { deletionKey(it.collection, it.syncId) }.toSet()
+        val current = prefs?.getStringSet(pendingDeletionKey, emptySet()).orEmpty()
+        prefs?.edit()?.putStringSet(
+            pendingDeletionKey,
+            current.filterNot { it in removeKeys }.toSet()
+        )?.apply()
+    }
+
     fun getApplicationContext(): android.content.Context? = context?.applicationContext
 
     fun getSavedActiveWorkshopId(): Long {
@@ -407,7 +444,9 @@ class WorkshopRepository(
     }
 
     suspend fun deleteOrderById(id: Long) {
+        val existing = orderDao.getOrderById(id)
         orderDao.deleteOrderById(id)
+        existing?.syncId?.let { recordCloudDeletion("orders", it) }
     }
 
     suspend fun savePayment(payment: PaymentRecord) {
@@ -452,7 +491,9 @@ class WorkshopRepository(
     }
 
     suspend fun deletePaymentById(id: Long) {
+        val existing = paymentDao.getPaymentById(id)
         paymentDao.deletePaymentById(id)
+        existing?.syncId?.let { recordCloudDeletion("payments", it) }
     }
 
     suspend fun getAllOrdersSync(): List<FurnitureOrder> = orderDao.getAllOrdersSync()
@@ -581,10 +622,13 @@ class WorkshopRepository(
 
     suspend fun deletePreset(preset: ModelPreset) {
         modelPresetDao.deletePreset(preset)
+        recordCloudDeletion("presets", preset.syncId)
     }
 
     suspend fun deletePresetById(id: Long) {
+        val existing = modelPresetDao.getPresetById(id)
         modelPresetDao.deletePresetById(id)
+        existing?.syncId?.let { recordCloudDeletion("presets", it) }
     }
 
     suspend fun deletePresetByName(name: String) {
@@ -592,7 +636,9 @@ class WorkshopRepository(
     }
 
     suspend fun deletePresetByNameAndWorkshop(name: String, workshopId: Long) {
+        val existing = modelPresetDao.getPresetByNameAndWorkshop(name, workshopId)
         modelPresetDao.deletePresetByNameAndWorkshop(name, workshopId)
+        existing?.syncId?.let { recordCloudDeletion("presets", it) }
     }
 
     suspend fun saveUnitRule(rule: UnitConversionRule) {
