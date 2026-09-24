@@ -226,7 +226,7 @@ fun WorkshopsDialog(
 
                     // Workshop items list
                     items(workshops, key = { it.id }) { ws ->
-                        val isActive = ws.id == (activeWorkshop?.id ?: 1L)
+                        val isActive = ws.id == activeWorkshop?.id
 
                         Surface(
                             shape = RoundedCornerShape(16.dp),
@@ -310,7 +310,7 @@ fun WorkshopsDialog(
                                             )
                                         }
 
-                                        if (workshops.size > 1) {
+                                        if (workshops.isNotEmpty()) {
                                             IconButton(
                                                 onClick = { workshopWarningTarget = ws },
                                                 modifier = Modifier.size(34.dp)
