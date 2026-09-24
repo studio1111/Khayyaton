@@ -29,15 +29,30 @@ service cloud.firestore {
       allow read, create, update: if isOwner(uid);
       allow delete: if false;
 
-      // Subscription state is never a client-side entitlement authority.
+      match /workshops/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /orders/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /payments/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /presets/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /unitRules/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Subscription entitlement is server-controlled.
       match /subscription/{docId} {
         allow read: if isOwner(uid);
         allow write: if false;
-      }
-
-      // All other user-owned subcollections are private to the authenticated uid.
-      match /{subcollection}/{docId} {
-        allow read, write: if isOwner(uid);
       }
     }
   }
