@@ -2,8 +2,12 @@ package com.example.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.Index
 
-@Entity(tableName = "workshops")
+@Entity(
+    tableName = "workshops",
+    indices = [Index(value = ["createdAt"])]
+)
 data class Workshop(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -11,7 +15,10 @@ data class Workshop(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "furniture_orders")
+@Entity(
+    tableName = "furniture_orders",
+    indices = [Index(value = ["workshopId"]), Index(value = ["createdAt"]), Index(value = ["invoiceNumber"])]
+)
 data class FurnitureOrder(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -35,7 +42,10 @@ data class FurnitureOrder(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "payment_records")
+@Entity(
+    tableName = "payment_records",
+    indices = [Index(value = ["workshopId"]), Index(value = ["createdAt"]), Index(value = ["relatedOrderId"])]
+)
 data class PaymentRecord(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -54,7 +64,10 @@ data class PaymentRecord(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "model_presets")
+@Entity(
+    tableName = "model_presets",
+    indices = [Index(value = ["workshopId"]), Index(value = ["name"])]
+)
 data class ModelPreset(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
