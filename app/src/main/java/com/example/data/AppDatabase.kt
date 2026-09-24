@@ -265,12 +265,22 @@ class WorkshopRepository(
     }
 
     suspend fun deleteWorkshopAndAllData(workshopId: Long) {
+        val workshop = workshopDao.getWorkshopById(workshopId)
+        val orders = orderDao.getOrdersByWorkshopSync(workshopId)
+        val payments = paymentDao.getPaymentsByWorkshopSync(workshopId)
+        val presets = modelPresetDao.getPresetsByWorkshopSync(workshopId)
+
         database.withTransaction {
             workshopDao.deleteOrdersByWorkshop(workshopId)
             workshopDao.deletePaymentsByWorkshop(workshopId)
             workshopDao.deletePresetsByWorkshop(workshopId)
             workshopDao.deleteWorkshopById(workshopId)
         }
+
+        workshop?.syncId?.let { recordCloudDeletion("workshops", it) }
+        orders.forEach { recordCloudDeletion("orders", it.syncId) }
+        payments.forEach { recordCloudDeletion("payments", it.syncId) }
+        presets.forEach { recordCloudDeletion("presets", it.syncId) }
     }
 
     suspend fun clearAllDomainData() {
