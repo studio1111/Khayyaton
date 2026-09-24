@@ -94,6 +94,53 @@ class DataIntegrityTest {
     }
 
     @Test
+    fun \`cloud merge keeps separate workshops when local numeric IDs collide\`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val (db, repo) = repository(context)
+        try {
+            repo.replaceAllData(
+                workshops = listOf(Workshop(id = 1L, name = "دستگاه A", syncId = "workshop-A")),
+                orders = emptyList(),
+                payments = emptyList(),
+                presets = emptyList(),
+                unitRules = emptyList()
+            )
+            repo.mergeCloudData(
+                cloudWorkshops = listOf(Workshop(id = 1L, name = "دستگاه B", syncId = "workshop-B")),
+                cloudOrders = listOf(
+                    FurnitureOrder(
+                        id = 1L,
+                        syncId = "order-B",
+                        workshopId = 1L,
+                        workshopSyncId = "workshop-B",
+                        orderNumber = 1L,
+                        invoiceNumber = "B-1",
+                        modelName = "مدل B",
+                        pricePerSet = 100L,
+                        countFormula = "1",
+                        calculatedUnits = 1.0,
+                        calculatedTotal = 100L,
+                        dateJalali = "1405/07/02",
+                        dateGregorian = "2026-09-24",
+                        customerName = "مشتری B"
+                    )
+                ),
+                cloudPayments = emptyList(),
+                cloudPresets = emptyList(),
+                cloudUnitRules = emptyList()
+            )
+            val workshops = repo.getAllWorkshopsSync()
+            val orders = repo.getAllOrdersSync()
+            assertEquals(2, workshops.size)
+            assertEquals(1, orders.size)
+            assertEquals("workshop-B", workshops.first { it.name == "دستگاه B" }.syncId)
+            assertEquals(workshops.first { it.syncId == "workshop-B" }.id, orders.single().workshopId)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
     fun \`backup JSON contains full current data schema\`() {
         val order = FurnitureOrder(
             id = 1L,
