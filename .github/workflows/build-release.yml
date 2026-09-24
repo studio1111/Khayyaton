@@ -1,11 +1,9 @@
 name: Build Release AAB and APK
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/build-release.yml'
-  pull_request:
-    branches: [ main ]
+
+permissions:
+  contents: read
 
 jobs:
   build:
