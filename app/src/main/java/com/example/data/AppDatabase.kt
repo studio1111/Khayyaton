@@ -239,6 +239,87 @@ class WorkshopRepository(
         saveActiveWorkshopId(0L)
     }
 
+    suspend fun mergeCloudData(
+        cloudWorkshops: List<Workshop>,
+        cloudOrders: List<FurnitureOrder>,
+        cloudPayments: List<PaymentRecord>,
+        cloudPresets: List<ModelPreset>,
+        cloudUnitRules: List<UnitConversionRule>
+    ) {
+        database.withTransaction {
+            val workshopMap = mutableMapOf<String, Long>()
+
+            for (remote in cloudWorkshops) {
+                val existing = workshopDao.getWorkshopBySyncId(remote.syncId)
+                val localId = if (existing == null) {
+                    workshopDao.insertWorkshop(remote.copy(id = 0L))
+                } else {
+                    workshopDao.updateWorkshop(remote.copy(id = existing.id))
+                    existing.id
+                }
+                workshopMap[remote.syncId] = localId
+            }
+
+            val orderMap = mutableMapOf<String, Long>()
+            for (remote in cloudOrders) {
+                val localWorkshopId = workshopMap[remote.workshopSyncId]
+                    ?: remote.workshopId
+                val existing = orderDao.getOrderBySyncId(remote.syncId)
+                val value = remote.copy(
+                    id = existing?.id ?: 0L,
+                    workshopId = localWorkshopId
+                )
+                val localId = if (existing == null) {
+                    orderDao.insertOrder(value)
+                } else {
+                    orderDao.updateOrder(value)
+                    existing.id
+                }
+                orderMap[remote.syncId] = localId
+            }
+
+            for (remote in cloudPayments) {
+                val localWorkshopId = workshopMap[remote.workshopSyncId]
+                    ?: remote.workshopId
+                val localRelatedOrderId =
+                    remote.relatedOrderSyncId.takeIf { it.isNotBlank() }?.let { orderMap[it] }
+                        ?: remote.relatedOrderId
+                val existing = paymentDao.getPaymentBySyncId(remote.syncId)
+                val value = remote.copy(
+                    id = existing?.id ?: 0L,
+                    workshopId = localWorkshopId,
+                    relatedOrderId = localRelatedOrderId
+                )
+                if (existing == null) paymentDao.insertPayment(value)
+                else paymentDao.updatePayment(value)
+            }
+
+            for (remote in cloudPresets) {
+                val localWorkshopId = workshopMap[remote.workshopSyncId]
+                    ?: remote.workshopId
+                val existing = modelPresetDao.getPresetBySyncId(remote.syncId)
+                val value = remote.copy(
+                    id = existing?.id ?: 0L,
+                    workshopId = localWorkshopId
+                )
+                if (existing == null) modelPresetDao.insertPreset(value)
+                else modelPresetDao.updatePreset(value)
+            }
+
+            for (remote in cloudUnitRules) {
+                val existing = unitRuleDao.getRuleBySyncId(remote.syncId)
+                val value = remote.copy(id = existing?.id ?: 0L)
+                if (existing == null) unitRuleDao.insertRule(value)
+                else unitRuleDao.updateRule(value)
+            }
+        }
+
+        val savedId = getSavedActiveWorkshopId()
+        if (savedId <= 0L) {
+            saveActiveWorkshopId(workshopDao.getAllWorkshopsSync().firstOrNull()?.id ?: 0L)
+        }
+    }
+
     suspend fun replaceAllData(
         workshops: List<Workshop>,
         orders: List<FurnitureOrder>,
