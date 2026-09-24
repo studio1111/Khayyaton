@@ -594,6 +594,19 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             if (shouldDownload) {
                 val downloadRes = FirebaseService.downloadFromCloud(repository)
                 if (downloadRes.isSuccess) {
+                    // The cloud records keep their workshopId. Select a real restored
+                    // workshop before Compose starts filtering the cards.
+                    val restoredWorkshops = repository.getAllWorkshopsSync()
+                    val savedId = repository.getSavedActiveWorkshopId()
+                    val restoredActiveId = when {
+                        savedId > 0L && restoredWorkshops.any { it.id == savedId } -> savedId
+                        restoredWorkshops.isNotEmpty() -> restoredWorkshops.first().id
+                        else -> 0L
+                    }
+                    if (restoredActiveId > 0L) {
+                        activeWorkshopId.value = restoredActiveId
+                        repository.saveActiveWorkshopId(restoredActiveId)
+                    }
                     autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
                 }
             }
