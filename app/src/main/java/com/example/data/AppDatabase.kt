@@ -11,6 +11,7 @@ import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
 import com.example.model.UnitConversionRule
 import com.example.model.Workshop
+import com.example.model.CalendarType
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
 import androidx.room.withTransaction
@@ -293,6 +294,7 @@ class WorkshopRepository(
         paymentDao.getPaymentsByWorkshopSync(workshopId)
 
     suspend fun getAllPresetsSync(): List<ModelPreset> = modelPresetDao.getAllPresetsSync()
+    suspend fun getAllUnitRulesSync(): List<UnitConversionRule> = unitRuleDao.getAllRulesSync()
     suspend fun getPresetsByWorkshopSync(workshopId: Long): List<ModelPreset> =
         modelPresetDao.getPresetsByWorkshopSync(workshopId)
 
