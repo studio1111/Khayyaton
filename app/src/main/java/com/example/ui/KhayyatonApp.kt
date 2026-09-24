@@ -381,6 +381,8 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                 orders = orders,
                 payments = payments,
                 presets = modelPresets,
+                workshops = workshops,
+                unitRules = unitRules,
                 currencyUnit = currencyUnit,
                 repository = viewModel.repository,
                 onOpenFirebaseAuth = { viewModel.isAuthDialogOpen.value = true },
