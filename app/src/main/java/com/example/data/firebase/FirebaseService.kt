@@ -231,27 +231,76 @@ object FirebaseService {
         unitRules: List<UnitConversionRule>,
         workshops: List<Workshop> = emptyList()
     ): Result<CloudSyncResult> {
-        val user = auth?.currentUser ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
-        val db = firestore ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
+        val user = auth?.currentUser
+            ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
+        val db = firestore
+            ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
 
         return try {
             val userDoc = db.collection("users").document(user.uid)
+            val maxBatchSize = 400
 
-            // 0. Workshops upload
+            suspend fun batchSet(
+                collection: com.google.firebase.firestore.CollectionReference,
+                documents: List<Pair<String, Map<String, Any?>>>
+            ) {
+                var batch = db.batch()
+                var count = 0
+
+                for ((documentId, data) in documents) {
+                    batch.set(
+                        collection.document(documentId),
+                        data,
+                        SetOptions.merge()
+                    )
+                    count++
+
+                    if (count == maxBatchSize) {
+                        batch.commit().await()
+                        batch = db.batch()
+                        count = 0
+                    }
+                }
+
+                if (count > 0) batch.commit().await()
+            }
+
+            suspend fun deleteStale(
+                collection: com.google.firebase.firestore.CollectionReference,
+                keepIds: Set<String>
+            ) {
+                val snapshot = collection.get().await()
+                var batch = db.batch()
+                var count = 0
+
+                for (doc in snapshot.documents) {
+                    if (doc.id in keepIds) continue
+                    batch.delete(doc.reference)
+                    count++
+
+                    if (count == maxBatchSize) {
+                        batch.commit().await()
+                        batch = db.batch()
+                        count = 0
+                    }
+                }
+
+                if (count > 0) batch.commit().await()
+            }
+
             val workshopsCol = userDoc.collection("workshops")
-            for (workshop in workshops) {
-                val workshopMap = mapOf(
+            val workshopDocs = workshops.map { workshop ->
+                "wrk_\${workshop.id}" to mapOf(
                     "id" to workshop.id,
                     "name" to workshop.name,
                     "createdAt" to workshop.createdAt
                 )
-                workshopsCol.document("wrk_${workshop.id}").set(workshopMap, SetOptions.merge()).await()
             }
+            batchSet(workshopsCol, workshopDocs)
 
-            // 1. Orders batch upload
             val ordersCol = userDoc.collection("orders")
-            for (order in orders) {
-                val orderMap = mapOf(
+            val orderDocs = orders.map { order ->
+                "ord_\${order.id}" to mapOf(
                     "id" to order.id,
                     "workshopId" to order.workshopId,
                     "orderNumber" to order.orderNumber,
@@ -272,13 +321,12 @@ object FirebaseService {
                     "colorCode" to order.colorCode,
                     "createdAt" to order.createdAt
                 )
-                ordersCol.document("ord_${order.id}").set(orderMap, SetOptions.merge()).await()
             }
+            batchSet(ordersCol, orderDocs)
 
-            // 2. Payments upload
             val paymentsCol = userDoc.collection("payments")
-            for (payment in payments) {
-                val payMap = mapOf(
+            val paymentDocs = payments.map { payment ->
+                "pay_\${payment.id}" to mapOf(
                     "id" to payment.id,
                     "workshopId" to payment.workshopId,
                     "paymentNumber" to payment.paymentNumber,
@@ -294,13 +342,12 @@ object FirebaseService {
                     "relatedOrderId" to payment.relatedOrderId,
                     "createdAt" to payment.createdAt
                 )
-                paymentsCol.document("pay_${payment.id}").set(payMap, SetOptions.merge()).await()
             }
+            batchSet(paymentsCol, paymentDocs)
 
-            // 3. Presets upload
             val presetsCol = userDoc.collection("presets")
-            for (preset in presets) {
-                val presetMap = mapOf(
+            val presetDocs = presets.map { preset ->
+                "pre_\${preset.id}" to mapOf(
                     "id" to preset.id,
                     "workshopId" to preset.workshopId,
                     "name" to preset.name,
@@ -309,23 +356,27 @@ object FirebaseService {
                     "colorCode" to preset.colorCode,
                     "description" to preset.description
                 )
-                presetsCol.document("pre_${preset.id}").set(presetMap, SetOptions.merge()).await()
             }
+            batchSet(presetsCol, presetDocs)
 
-            // 4. Unit Rules upload
             val rulesCol = userDoc.collection("unitRules")
-            for (rule in unitRules) {
-                val ruleMap = mapOf(
+            val ruleDocs = unitRules.map { rule ->
+                "rule_\${rule.id}" to mapOf(
                     "id" to rule.id,
                     "pieceKey" to rule.pieceKey,
                     "pieceCount" to rule.pieceCount,
                     "calculatedUnits" to rule.calculatedUnits,
                     "isEnabled" to rule.isEnabled
                 )
-                rulesCol.document("rule_${rule.id}").set(ruleMap, SetOptions.merge()).await()
             }
+            batchSet(rulesCol, ruleDocs)
 
-            // Update user metadata
+            deleteStale(workshopsCol, workshops.map { "wrk_\${it.id}" }.toSet())
+            deleteStale(ordersCol, orders.map { "ord_\${it.id}" }.toSet())
+            deleteStale(paymentsCol, payments.map { "pay_\${it.id}" }.toSet())
+            deleteStale(presetsCol, presets.map { "pre_\${it.id}" }.toSet())
+            deleteStale(rulesCol, unitRules.map { "rule_\${it.id}" }.toSet())
+
             userDoc.set(
                 mapOf(
                     "email" to (user.email ?: ""),
