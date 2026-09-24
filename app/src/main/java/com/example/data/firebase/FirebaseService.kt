@@ -187,7 +187,7 @@ object FirebaseService {
                 db.runTransaction { transaction ->
                     val current = transaction.get(usernameRef)
                     if (current.exists()) throw IllegalStateException("USERNAME_TAKEN")
-                    transaction.set(usernameRef, mapOf("uid" to user.uid, "email" to (user.email ?: email)))
+                    transaction.set(usernameRef, mapOf("uid" to user.uid))
                     transaction.set(
                         userRef,
                         mapOf("username" to username.trim(), "email" to (user.email ?: email)),
