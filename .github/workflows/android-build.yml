@@ -34,7 +34,6 @@ jobs:
           fi
 
       - name: Run unit tests
-        continue-on-error: true
         run: gradle testDebugUnitTest --stacktrace --no-daemon
 
       - name: Assemble debug APK
