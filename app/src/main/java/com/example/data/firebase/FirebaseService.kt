@@ -240,6 +240,19 @@ object FirebaseService {
             val userDoc = db.collection("users").document(user.uid)
             val maxBatchSize = 400
 
+            // Respect deletion tombstones from other devices so stale local
+            // copies cannot resurrect records that were intentionally deleted.
+            val cloudDeletionSnapshot = userDoc.collection("deletions").get().await()
+            val blocked = cloudDeletionSnapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val collection = data["collection"] as? String ?: return@mapNotNull null
+                val syncId = data["syncId"] as? String ?: return@mapNotNull null
+                "$collection|$syncId"
+            }.toSet()
+
+            fun allowed(collection: String, syncId: String): Boolean =
+                "$collection|$syncId" !in blocked
+
             suspend fun batchSet(
                 collection: com.google.firebase.firestore.CollectionReference,
                 documents: List<Pair<String, Map<String, Any?>>>
@@ -340,7 +353,8 @@ object FirebaseService {
             }
 
             val workshopsCol = userDoc.collection("workshops")
-            val workshopDocs = workshops.map { workshop ->
+            val activeWorkshops = workshops.filter { allowed("workshops", it.syncId) }
+            val workshopDocs = activeWorkshops.map { workshop ->
                 "${workshop.syncId}" to mapOf(
                     "id" to workshop.id,
                     "syncId" to workshop.syncId,
@@ -351,7 +365,8 @@ object FirebaseService {
             batchSet(workshopsCol, workshopDocs)
 
             val ordersCol = userDoc.collection("orders")
-            val orderDocs = orders.map { order ->
+            val activeOrders = orders.filter { allowed("orders", it.syncId) }
+            val orderDocs = activeOrders.map { order ->
                 "${order.syncId}" to mapOf(
                     "id" to order.id,
                     "syncId" to order.syncId,
@@ -379,7 +394,8 @@ object FirebaseService {
             batchSet(ordersCol, orderDocs)
 
             val paymentsCol = userDoc.collection("payments")
-            val paymentDocs = payments.map { payment ->
+            val activePayments = payments.filter { allowed("payments", it.syncId) }
+            val paymentDocs = activePayments.map { payment ->
                 "${payment.syncId}" to mapOf(
                     "id" to payment.id,
                     "syncId" to payment.syncId,
@@ -403,7 +419,8 @@ object FirebaseService {
             batchSet(paymentsCol, paymentDocs)
 
             val presetsCol = userDoc.collection("presets")
-            val presetDocs = presets.map { preset ->
+            val activePresets = presets.filter { allowed("presets", it.syncId) }
+            val presetDocs = activePresets.map { preset ->
                 "${preset.syncId}" to mapOf(
                     "id" to preset.id,
                     "syncId" to preset.syncId,
@@ -419,7 +436,8 @@ object FirebaseService {
             batchSet(presetsCol, presetDocs)
 
             val rulesCol = userDoc.collection("unitRules")
-            val ruleDocs = unitRules.map { rule ->
+            val activeUnitRules = unitRules.filter { allowed("unitRules", it.syncId) }
+            val ruleDocs = activeUnitRules.map { rule ->
                 "${rule.syncId}" to mapOf(
                     "id" to rule.id,
                     "syncId" to rule.syncId,
@@ -447,10 +465,10 @@ object FirebaseService {
             Result.success(
                 CloudSyncResult(
                     success = true,
-                    ordersCount = orders.size,
-                    paymentsCount = payments.size,
-                    presetsCount = presets.size,
-                    unitRulesCount = unitRules.size
+                    ordersCount = activeOrders.size,
+                    paymentsCount = activePayments.size,
+                    presetsCount = activePresets.size,
+                    unitRulesCount = activeUnitRules.size
                 )
             )
         } catch (e: Exception) {
