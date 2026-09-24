@@ -498,7 +498,9 @@ object FirebaseService {
                 val name = data["name"] as? String ?: return@mapNotNull null
                 ModelPreset(
                     id = id,
+                    syncId = syncId,
                     workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
+                    workshopSyncId = data["workshopSyncId"] as? String ?: "",
                     name = name,
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
                     defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
