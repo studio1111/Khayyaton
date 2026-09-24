@@ -66,6 +66,7 @@ data class PaymentRecord(
     val bankName: String = "",
     val cardNumber: String = "",
     val relatedOrderId: Long? = null,
+    val relatedOrderSyncId: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
 
