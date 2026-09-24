@@ -21,7 +21,7 @@ import org.robolectric.annotation.Config
 import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [35])
 class DataIntegrityTest {
 
     private fun repository(context: Context): Pair<AppDatabase, WorkshopRepository> {
