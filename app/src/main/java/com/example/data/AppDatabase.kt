@@ -256,6 +256,10 @@ class WorkshopRepository(
     ) {
         database.withTransaction {
             val workshopMap = mutableMapOf<String, Long>()
+            // Legacy cloud records may have only the old numeric workshopId.
+            // Keep a second map so their child records are remapped to the
+            // actual local Room workshop id after multi-device merge.
+            val legacyWorkshopIdMap = mutableMapOf<Long, Long>()
 
             for (remote in cloudWorkshops) {
                 val existing = workshopDao.getWorkshopBySyncId(remote.syncId)
@@ -266,11 +270,14 @@ class WorkshopRepository(
                     existing.id
                 }
                 workshopMap[remote.syncId] = localId
+                legacyWorkshopIdMap[remote.id] = localId
             }
 
             val orderMap = mutableMapOf<String, Long>()
+            val legacyOrderIdMap = mutableMapOf<Long, Long>()
             for (remote in cloudOrders) {
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
+                    ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
                 val existing = orderDao.getOrderBySyncId(remote.syncId)
                 val value = remote.copy(
@@ -284,14 +291,16 @@ class WorkshopRepository(
                     existing.id
                 }
                 orderMap[remote.syncId] = localId
+                legacyOrderIdMap[remote.id] = localId
             }
 
             for (remote in cloudPayments) {
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
+                    ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
                 val localRelatedOrderId =
                     remote.relatedOrderSyncId.takeIf { it.isNotBlank() }?.let { orderMap[it] }
-                        ?: remote.relatedOrderId
+                        ?: remote.relatedOrderId?.let { legacyOrderIdMap[it] }
                 val existing = paymentDao.getPaymentBySyncId(remote.syncId)
                 val value = remote.copy(
                     id = existing?.id ?: 0L,
@@ -304,6 +313,7 @@ class WorkshopRepository(
 
             for (remote in cloudPresets) {
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
+                    ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
                 val existing = modelPresetDao.getPresetBySyncId(remote.syncId)
                 val value = remote.copy(
