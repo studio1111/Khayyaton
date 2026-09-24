@@ -354,40 +354,37 @@ object FirebaseService {
      * Download and restore all records from Firebase Firestore to local Room Database
      */
     suspend fun downloadFromCloud(repository: WorkshopRepository): Result<CloudSyncResult> {
-        val user = auth?.currentUser ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
-        val db = firestore ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
+        val user = auth?.currentUser
+            ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
+        val db = firestore
+            ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
 
         return try {
             val userDoc = db.collection("users").document(user.uid)
 
-            // 0. Download Workshops
             val workshopsSnapshot = userDoc.collection("workshops").get().await()
-            var workshopCount = 0
-            for (doc in workshopsSnapshot.documents) {
-                val data = doc.data ?: continue
-                // IMPORTANT: preserve the original Firestore/Room workshop ID.
-                // Orders/payments/presets reference this ID via workshopId. Generating
-                // a new Room ID here makes the restored records invisible to the UI.
-                val cloudId = (data["id"] as? Number)?.toLong()
+            val restoredWorkshops = workshopsSnapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong()
                     ?: doc.id.removePrefix("wrk_").toLongOrNull()
-                    ?: 0L
-                val workshop = Workshop(
-                    id = cloudId,
-                    name = data["name"] as? String ?: "",
+                    ?: return@mapNotNull null
+                Workshop(
+                    id = id,
+                    name = (data["name"] as? String).orEmpty().ifBlank { "کارگاه" },
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
-                repository.saveWorkshop(workshop)
-                workshopCount++
             }
+            val fallbackWorkshopId = restoredWorkshops.firstOrNull()?.id ?: 1L
 
-            // 1. Download Orders
             val ordersSnapshot = userDoc.collection("orders").get().await()
-            var ordCount = 0
-            for (doc in ordersSnapshot.documents) {
-                val data = doc.data ?: continue
-                val order = FurnitureOrder(
-                    id = 0L, // fresh auto-generated id or merge
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
+            val restoredOrders = ordersSnapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong()
+                    ?: doc.id.removePrefix("ord_").toLongOrNull()
+                    ?: return@mapNotNull null
+                FurnitureOrder(
+                    id = id,
+                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
                     orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
                     invoiceNumber = data["invoiceNumber"] as? String ?: "",
                     modelName = data["modelName"] as? String ?: "",
@@ -406,18 +403,17 @@ object FirebaseService {
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
-                repository.saveOrder(order)
-                ordCount++
             }
 
-            // 2. Download Payments
             val paymentsSnapshot = userDoc.collection("payments").get().await()
-            var payCount = 0
-            for (doc in paymentsSnapshot.documents) {
-                val data = doc.data ?: continue
-                val payment = PaymentRecord(
-                    id = 0L,
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
+            val restoredPayments = paymentsSnapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong()
+                    ?: doc.id.removePrefix("pay_").toLongOrNull()
+                    ?: return@mapNotNull null
+                PaymentRecord(
+                    id = id,
+                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
                     paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
                     amount = (data["amount"] as? Number)?.toLong() ?: 0L,
                     dateJalali = data["dateJalali"] as? String ?: "",
@@ -431,53 +427,58 @@ object FirebaseService {
                     relatedOrderId = (data["relatedOrderId"] as? Number)?.toLong(),
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
-                repository.savePayment(payment)
-                payCount++
             }
 
-            // 3. Download Presets
             val presetsSnapshot = userDoc.collection("presets").get().await()
-            var preCount = 0
-            for (doc in presetsSnapshot.documents) {
-                val data = doc.data ?: continue
-                val name = data["name"] as? String ?: continue
-                val preset = ModelPreset(
-                    id = 0L,
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: 1L,
+            val restoredPresets = presetsSnapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong()
+                    ?: doc.id.removePrefix("pre_").toLongOrNull()
+                    ?: return@mapNotNull null
+                val name = data["name"] as? String ?: return@mapNotNull null
+                ModelPreset(
+                    id = id,
+                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
                     name = name,
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
                     defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
                     description = data["description"] as? String ?: ""
                 )
-                repository.savePreset(preset)
-                preCount++
             }
 
-            // 4. Download Unit Rules
             val rulesSnapshot = userDoc.collection("unitRules").get().await()
-            var ruleCount = 0
-            for (doc in rulesSnapshot.documents) {
-                val data = doc.data ?: continue
-                val pieceKey = data["pieceKey"] as? String ?: ""
-                val rule = UnitConversionRule(
-                    id = 0L,
-                    pieceKey = pieceKey,
+            val restoredRules = rulesSnapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong()
+                    ?: doc.id.removePrefix("rule_").toLongOrNull()
+                    ?: return@mapNotNull null
+                UnitConversionRule(
+                    id = id,
+                    pieceKey = data["pieceKey"] as? String ?: "",
                     pieceCount = (data["pieceCount"] as? Number)?.toDouble() ?: 0.0,
                     calculatedUnits = (data["calculatedUnits"] as? Number)?.toDouble() ?: 0.0,
                     isEnabled = data["isEnabled"] as? Boolean ?: true
                 )
-                repository.saveUnitRule(rule)
-                ruleCount++
             }
+
+            // Restore as one atomic local transaction. This prevents half-restored
+            // databases and keeps IDs stable so relations such as relatedOrderId work.
+            repository.replaceAllData(
+                workshops = restoredWorkshops,
+                orders = restoredOrders,
+                payments = restoredPayments,
+                presets = restoredPresets,
+                unitRules = restoredRules
+            )
 
             Result.success(
                 CloudSyncResult(
                     success = true,
-                    ordersCount = ordCount,
-                    paymentsCount = payCount,
-                    presetsCount = preCount,
-                    unitRulesCount = ruleCount
+                    ordersCount = restoredOrders.size,
+                    paymentsCount = restoredPayments.size,
+                    presetsCount = restoredPresets.size,
+                    unitRulesCount = restoredRules.size
                 )
             )
         } catch (e: Exception) {
