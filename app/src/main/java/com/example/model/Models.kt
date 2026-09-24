@@ -12,6 +12,7 @@ data class Workshop(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
+    val syncId: String = java.util.UUID.randomUUID().toString(),
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -23,6 +24,8 @@ data class FurnitureOrder(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val workshopId: Long = 1L,
+    val workshopSyncId: String = "",
+    val syncId: String = java.util.UUID.randomUUID().toString(),
     val orderNumber: Long,
     val invoiceNumber: String,
     val modelName: String,
@@ -50,6 +53,8 @@ data class PaymentRecord(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val workshopId: Long = 1L,
+    val workshopSyncId: String = "",
+    val syncId: String = java.util.UUID.randomUUID().toString(),
     val paymentNumber: Long,
     val amount: Long,
     val dateJalali: String,
@@ -72,6 +77,8 @@ data class ModelPreset(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val workshopId: Long = 1L,
+    val workshopSyncId: String = "",
+    val syncId: String = java.util.UUID.randomUUID().toString(),
     val name: String,
     val defaultPricePerSet: Long = 2000000L,
     val defaultUnitsPerSet: Double = 6.0,
@@ -83,6 +90,7 @@ data class ModelPreset(
 data class UnitConversionRule(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val syncId: String = java.util.UUID.randomUUID().toString(),
     val pieceKey: String = "",
     val pieceCount: Double = 0.0,
     val calculatedUnits: Double = 0.0,
