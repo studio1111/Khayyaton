@@ -292,6 +292,7 @@ object FirebaseService {
             val workshopDocs = workshops.map { workshop ->
                 "wrk_\${workshop.id}" to mapOf(
                     "id" to workshop.id,
+                    "syncId" to workshop.syncId,
                     "name" to workshop.name,
                     "createdAt" to workshop.createdAt
                 )
@@ -302,7 +303,9 @@ object FirebaseService {
             val orderDocs = orders.map { order ->
                 "ord_\${order.id}" to mapOf(
                     "id" to order.id,
+                    "syncId" to order.syncId,
                     "workshopId" to order.workshopId,
+                    "workshopSyncId" to order.workshopSyncId,
                     "orderNumber" to order.orderNumber,
                     "invoiceNumber" to order.invoiceNumber,
                     "modelName" to order.modelName,
@@ -328,7 +331,9 @@ object FirebaseService {
             val paymentDocs = payments.map { payment ->
                 "pay_\${payment.id}" to mapOf(
                     "id" to payment.id,
+                    "syncId" to payment.syncId,
                     "workshopId" to payment.workshopId,
+                    "workshopSyncId" to payment.workshopSyncId,
                     "paymentNumber" to payment.paymentNumber,
                     "amount" to payment.amount,
                     "dateJalali" to payment.dateJalali,
@@ -340,6 +345,7 @@ object FirebaseService {
                     "bankName" to payment.bankName,
                     "cardNumber" to payment.cardNumber,
                     "relatedOrderId" to payment.relatedOrderId,
+                    "relatedOrderSyncId" to payment.relatedOrderSyncId,
                     "createdAt" to payment.createdAt
                 )
             }
@@ -349,7 +355,9 @@ object FirebaseService {
             val presetDocs = presets.map { preset ->
                 "pre_\${preset.id}" to mapOf(
                     "id" to preset.id,
+                    "syncId" to preset.syncId,
                     "workshopId" to preset.workshopId,
+                    "workshopSyncId" to preset.workshopSyncId,
                     "name" to preset.name,
                     "defaultPricePerSet" to preset.defaultPricePerSet,
                     "defaultUnitsPerSet" to preset.defaultUnitsPerSet,
@@ -363,6 +371,7 @@ object FirebaseService {
             val ruleDocs = unitRules.map { rule ->
                 "rule_\${rule.id}" to mapOf(
                     "id" to rule.id,
+                    "syncId" to rule.syncId,
                     "pieceKey" to rule.pieceKey,
                     "pieceCount" to rule.pieceCount,
                     "calculatedUnits" to rule.calculatedUnits,
@@ -516,12 +525,12 @@ object FirebaseService {
 
             // Restore as one atomic local transaction. This prevents half-restored
             // databases and keeps IDs stable so relations such as relatedOrderId work.
-            repository.replaceAllData(
-                workshops = restoredWorkshops,
-                orders = restoredOrders,
-                payments = restoredPayments,
-                presets = restoredPresets,
-                unitRules = restoredRules
+            repository.mergeCloudData(
+                cloudWorkshops = restoredWorkshops,
+                cloudOrders = restoredOrders,
+                cloudPayments = restoredPayments,
+                cloudPresets = restoredPresets,
+                cloudUnitRules = restoredRules
             )
 
             Result.success(
