@@ -302,6 +302,9 @@ class WorkshopRepository(
                     "orders" -> orderDao.deleteOrderBySyncId(deletion.syncId)
                     "payments" -> paymentDao.deletePaymentBySyncId(deletion.syncId)
                     "presets" -> modelPresetDao.deletePresetBySyncId(deletion.syncId)
+                    "unitRules" -> unitRuleDao.getRuleBySyncId(deletion.syncId)?.let {
+                        unitRuleDao.deleteRuleById(it.id)
+                    }
                     "workshops" -> {
                         workshopDao.getWorkshopBySyncId(deletion.syncId)?.let { workshop ->
                             workshopDao.deleteOrdersByWorkshop(workshop.id)
