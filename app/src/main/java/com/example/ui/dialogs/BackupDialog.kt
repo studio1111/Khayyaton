@@ -41,6 +41,8 @@ fun BackupDialog(
     orders: List<FurnitureOrder>,
     payments: List<PaymentRecord>,
     presets: List<ModelPreset>,
+    workshops: List<com.example.model.Workshop> = emptyList(),
+    unitRules: List<com.example.model.UnitConversionRule> = emptyList(),
     currencyUnit: String,
     repository: WorkshopRepository,
     onOpenFirebaseAuth: () -> Unit = {},
@@ -267,6 +269,8 @@ fun BackupDialog(
                                 orders = orders,
                                 payments = payments,
                                 presets = presets,
+                                workshops = workshops,
+                                unitRules = unitRules,
                                 preferGoogleDrive = true
                             )
                         },
@@ -305,7 +309,7 @@ fun BackupDialog(
                     // 2. Local Storage JSON Backup
                     OutlinedCard(
                         onClick = {
-                            val json = BackupManager.createBackupJson(orders, payments, presets)
+                            val json = BackupManager.createBackupJson(orders, payments, presets, workshops, unitRules)
                             val file = BackupManager.saveBackupToStorage(context, json)
                             if (file != null) {
                                 Toast.makeText(context, "فایل در مسیر پوشه اسناد ذخیره شد:\n${file.name}", Toast.LENGTH_LONG).show()
@@ -353,6 +357,8 @@ fun BackupDialog(
                                 orders = orders,
                                 payments = payments,
                                 presets = presets,
+                                workshops = workshops,
+                                unitRules = unitRules,
                                 preferGoogleDrive = false
                             )
                         },
