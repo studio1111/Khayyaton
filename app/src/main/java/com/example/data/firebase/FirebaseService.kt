@@ -167,44 +167,45 @@ object FirebaseService {
         if (normalizedUsername.isBlank()) {
             return Result.failure(Exception("لطفاً نام کاربری را وارد کنید."))
         }
-
-        // Step 1: Check username availability before creating the account
-        val available = try {
-            isUsernameAvailable(normalizedUsername)
-        } catch (e: Exception) {
-            return Result.failure(Exception(parseCloudError(e)))
-        }
-        if (!available) {
-            return Result.failure(Exception("این نام کاربری قبلاً استفاده شده است. لطفاً نام دیگری انتخاب کنید."))
+        if (!normalizedUsername.matches(Regex("^[\\p{L}\\p{N}_.-]{3,32}$"))) {
+            return Result.failure(Exception("نام کاربری باید ۳ تا ۳۲ نویسه و فقط شامل حروف، اعداد، نقطه، خط تیره یا زیرخط باشد."))
         }
 
-        // Step 2: Create the Firebase Auth account
+        // Fast availability check for UX. The transaction below is the actual
+        // uniqueness guarantee, so two simultaneous signups cannot claim one name.
+        if (!isUsernameAvailable(normalizedUsername)) {
+            return Result.failure(Exception("این نام کاربری قبلاً استفاده شده است یا فعلاً قابل بررسی نیست."))
+        }
+
         return try {
             val result = fbAuth.createUserWithEmailAndPassword(email.trim(), pass).await()
-            val user = result.user ?: return Result.failure(Exception("ثبت‌نام ناموفق بود."))
+            val user = result.user ?: return@try Result.failure(Exception("ثبت‌نام ناموفق بود."))
+            val usernameRef = db.collection("usernames").document(normalizedUsername)
+            val userRef = db.collection("users").document(user.uid)
 
-            // Step 3: Reserve the username, linked to this user's uid (best-effort)
             try {
-                db.collection("usernames").document(normalizedUsername)
-                    .set(mapOf("uid" to user.uid, "email" to (user.email ?: email)))
-                    .await()
-
-                db.collection("users").document(user.uid)
-                    .set(
+                db.runTransaction { transaction ->
+                    val current = transaction.get(usernameRef)
+                    if (current.exists()) throw IllegalStateException("USERNAME_TAKEN")
+                    transaction.set(usernameRef, mapOf("uid" to user.uid, "email" to (user.email ?: email)))
+                    transaction.set(
+                        userRef,
                         mapOf("username" to username.trim(), "email" to (user.email ?: email)),
                         SetOptions.merge()
                     )
-                    .await()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error reserving username: ${e.message}", e)
-                // Not fatal: the auth account was already created successfully
+                }.await()
+            } catch (reservationError: Exception) {
+                runCatching { user.delete().await() }
+                if (reservationError.message == "USERNAME_TAKEN") {
+                    return@try Result.failure(Exception("این نام کاربری قبلاً استفاده شده است. لطفاً نام دیگری انتخاب کنید."))
+                }
+                throw reservationError
             }
 
             Result.success(FirebaseUserDto(user.uid, user.email ?: email, username.trim()))
         } catch (e: Exception) {
             Result.failure(Exception(parseCloudError(e)))
-        }
-    }
+        }    }
 
     suspend fun sendPasswordResetEmail(email: String): Result<Unit> {
         val fbAuth = auth ?: return Result.failure(Exception("سرویس فایربیس در دسترس نیست."))
