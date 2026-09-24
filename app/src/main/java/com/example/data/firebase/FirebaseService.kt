@@ -290,7 +290,7 @@ object FirebaseService {
 
             val workshopsCol = userDoc.collection("workshops")
             val workshopDocs = workshops.map { workshop ->
-                "wrk_\${workshop.id}" to mapOf(
+                "${workshop.syncId}" to mapOf(
                     "id" to workshop.id,
                     "syncId" to workshop.syncId,
                     "name" to workshop.name,
@@ -301,7 +301,7 @@ object FirebaseService {
 
             val ordersCol = userDoc.collection("orders")
             val orderDocs = orders.map { order ->
-                "ord_\${order.id}" to mapOf(
+                "${order.syncId}" to mapOf(
                     "id" to order.id,
                     "syncId" to order.syncId,
                     "workshopId" to order.workshopId,
@@ -329,7 +329,7 @@ object FirebaseService {
 
             val paymentsCol = userDoc.collection("payments")
             val paymentDocs = payments.map { payment ->
-                "pay_\${payment.id}" to mapOf(
+                "${payment.syncId}" to mapOf(
                     "id" to payment.id,
                     "syncId" to payment.syncId,
                     "workshopId" to payment.workshopId,
@@ -353,7 +353,7 @@ object FirebaseService {
 
             val presetsCol = userDoc.collection("presets")
             val presetDocs = presets.map { preset ->
-                "pre_\${preset.id}" to mapOf(
+                "${preset.syncId}" to mapOf(
                     "id" to preset.id,
                     "syncId" to preset.syncId,
                     "workshopId" to preset.workshopId,
@@ -369,7 +369,7 @@ object FirebaseService {
 
             val rulesCol = userDoc.collection("unitRules")
             val ruleDocs = unitRules.map { rule ->
-                "rule_\${rule.id}" to mapOf(
+                "${rule.syncId}" to mapOf(
                     "id" to rule.id,
                     "syncId" to rule.syncId,
                     "pieceKey" to rule.pieceKey,
@@ -380,11 +380,8 @@ object FirebaseService {
             }
             batchSet(rulesCol, ruleDocs)
 
-            deleteStale(workshopsCol, workshops.map { "wrk_\${it.id}" }.toSet())
-            deleteStale(ordersCol, orders.map { "ord_\${it.id}" }.toSet())
-            deleteStale(paymentsCol, payments.map { "pay_\${it.id}" }.toSet())
-            deleteStale(presetsCol, presets.map { "pre_\${it.id}" }.toSet())
-            deleteStale(rulesCol, unitRules.map { "rule_\${it.id}" }.toSet())
+            // Multi-device sync is additive/update-only until tombstones are implemented.
+            // Never delete cloud records just because another device has not uploaded them yet.
 
             userDoc.set(
                 mapOf(
@@ -426,11 +423,11 @@ object FirebaseService {
             val workshopsSnapshot = userDoc.collection("workshops").get().await()
             val restoredWorkshops = workshopsSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
-                val id = (data["id"] as? Number)?.toLong()
-                    ?: doc.id.removePrefix("wrk_").toLongOrNull()
-                    ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong() ?: 0L
+                val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
                 Workshop(
                     id = id,
+                    syncId = syncId,
                     name = (data["name"] as? String).orEmpty().ifBlank { "کارگاه" },
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
@@ -440,12 +437,13 @@ object FirebaseService {
             val ordersSnapshot = userDoc.collection("orders").get().await()
             val restoredOrders = ordersSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
-                val id = (data["id"] as? Number)?.toLong()
-                    ?: doc.id.removePrefix("ord_").toLongOrNull()
-                    ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong() ?: 0L
+                val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
                 FurnitureOrder(
                     id = id,
+                    syncId = syncId,
                     workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
+                    workshopSyncId = data["workshopSyncId"] as? String ?: "",
                     orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
                     invoiceNumber = data["invoiceNumber"] as? String ?: "",
                     modelName = data["modelName"] as? String ?: "",
@@ -469,12 +467,13 @@ object FirebaseService {
             val paymentsSnapshot = userDoc.collection("payments").get().await()
             val restoredPayments = paymentsSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
-                val id = (data["id"] as? Number)?.toLong()
-                    ?: doc.id.removePrefix("pay_").toLongOrNull()
-                    ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong() ?: 0L
+                val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
                 PaymentRecord(
                     id = id,
+                    syncId = syncId,
                     workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
+                    workshopSyncId = data["workshopSyncId"] as? String ?: "",
                     paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
                     amount = (data["amount"] as? Number)?.toLong() ?: 0L,
                     dateJalali = data["dateJalali"] as? String ?: "",
@@ -486,6 +485,7 @@ object FirebaseService {
                     bankName = data["bankName"] as? String ?: "",
                     cardNumber = data["cardNumber"] as? String ?: "",
                     relatedOrderId = (data["relatedOrderId"] as? Number)?.toLong(),
+                    relatedOrderSyncId = data["relatedOrderSyncId"] as? String ?: "",
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
             }
@@ -493,9 +493,8 @@ object FirebaseService {
             val presetsSnapshot = userDoc.collection("presets").get().await()
             val restoredPresets = presetsSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
-                val id = (data["id"] as? Number)?.toLong()
-                    ?: doc.id.removePrefix("pre_").toLongOrNull()
-                    ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong() ?: 0L
+                val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
                 val name = data["name"] as? String ?: return@mapNotNull null
                 ModelPreset(
                     id = id,
@@ -511,11 +510,11 @@ object FirebaseService {
             val rulesSnapshot = userDoc.collection("unitRules").get().await()
             val restoredRules = rulesSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
-                val id = (data["id"] as? Number)?.toLong()
-                    ?: doc.id.removePrefix("rule_").toLongOrNull()
-                    ?: return@mapNotNull null
+                val id = (data["id"] as? Number)?.toLong() ?: 0L
+                val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
                 UnitConversionRule(
                     id = id,
+                    syncId = syncId,
                     pieceKey = data["pieceKey"] as? String ?: "",
                     pieceCount = (data["pieceCount"] as? Number)?.toDouble() ?: 0.0,
                     calculatedUnits = (data["calculatedUnits"] as? Number)?.toDouble() ?: 0.0,
