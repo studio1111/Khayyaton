@@ -31,7 +31,7 @@ object BackupManager {
     ): String {
         val root = JSONObject().apply {
             put("app", "Khayyaton")
-            put("version", 3)
+            put("version", 4)
             put("exportedAt", System.currentTimeMillis())
             put("exportedDateJalali", PersianUtils.getTodayJalaliString())
             put("exportedDateGregorian", PersianUtils.getTodayGregorianString())
@@ -41,6 +41,7 @@ object BackupManager {
         workshops.forEach { ws ->
             workshopsArray.put(JSONObject().apply {
                 put("id", ws.id)
+                put("syncId", ws.syncId)
                 put("name", ws.name)
                 put("createdAt", ws.createdAt)
             })
@@ -51,7 +52,9 @@ object BackupManager {
         orders.forEach { ord ->
             ordersArray.put(JSONObject().apply {
                 put("id", ord.id)
+                put("syncId", ord.syncId)
                 put("workshopId", ord.workshopId)
+                put("workshopSyncId", ord.workshopSyncId)
                 put("orderNumber", ord.orderNumber)
                 put("invoiceNumber", ord.invoiceNumber)
                 put("modelName", ord.modelName)
@@ -77,7 +80,9 @@ object BackupManager {
         payments.forEach { pay ->
             paymentsArray.put(JSONObject().apply {
                 put("id", pay.id)
+                put("syncId", pay.syncId)
                 put("workshopId", pay.workshopId)
+                put("workshopSyncId", pay.workshopSyncId)
                 put("paymentNumber", pay.paymentNumber)
                 put("amount", pay.amount)
                 put("dateJalali", pay.dateJalali)
@@ -89,6 +94,7 @@ object BackupManager {
                 put("bankName", pay.bankName)
                 put("cardNumber", pay.cardNumber)
                 put("relatedOrderId", pay.relatedOrderId ?: JSONObject.NULL)
+                put("relatedOrderSyncId", pay.relatedOrderSyncId)
                 put("createdAt", pay.createdAt)
             })
         }
@@ -98,7 +104,9 @@ object BackupManager {
         presets.forEach { pre ->
             presetsArray.put(JSONObject().apply {
                 put("id", pre.id)
+                put("syncId", pre.syncId)
                 put("workshopId", pre.workshopId)
+                put("workshopSyncId", pre.workshopSyncId)
                 put("name", pre.name)
                 put("defaultPricePerSet", pre.defaultPricePerSet)
                 put("defaultUnitsPerSet", pre.defaultUnitsPerSet)
@@ -112,6 +120,7 @@ object BackupManager {
         unitRules.forEach { rule ->
             rulesArray.put(JSONObject().apply {
                 put("id", rule.id)
+                put("syncId", rule.syncId)
                 put("pieceKey", rule.pieceKey)
                 put("pieceCount", rule.pieceCount)
                 put("calculatedUnits", rule.calculatedUnits)
@@ -217,6 +226,7 @@ object BackupManager {
                 if (id > 0L) {
                     workshops += com.example.model.Workshop(
                         id = id,
+                        syncId = obj.optString("syncId", if (id > 0) "wrk_" + id else java.util.UUID.randomUUID().toString()),
                         name = obj.optString("name", "کارگاه بازیابی‌شده").ifBlank { "کارگاه بازیابی‌شده" },
                         createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                     )
@@ -236,7 +246,9 @@ object BackupManager {
                 val id = obj.optLong("id", 0L)
                 orders += FurnitureOrder(
                     id = id,
+                    syncId = obj.optString("syncId", if (id > 0) "ord_" + id else java.util.UUID.randomUUID().toString()),
                     workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopSyncId = obj.optString("workshopSyncId", ""),
                     orderNumber = obj.optLong("orderNumber", (i + 1).toLong()),
                     invoiceNumber = obj.optString("invoiceNumber", (i + 1).toString()),
                     modelName = obj.optString("modelName", "مدل مبل"),
@@ -267,7 +279,9 @@ object BackupManager {
                     if (obj.has("relatedOrderId") && !obj.isNull("relatedOrderId")) obj.optLong("relatedOrderId") else null
                 payments += PaymentRecord(
                     id = obj.optLong("id", 0L),
+                    syncId = obj.optString("syncId", "pay_" + obj.optLong("id", 0L)),
                     workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopSyncId = obj.optString("workshopSyncId", ""),
                     paymentNumber = obj.optLong("paymentNumber", (i + 1).toLong()),
                     amount = obj.optLong("amount", 0L),
                     dateJalali = obj.optString("dateJalali", PersianUtils.getTodayJalaliString()),
@@ -279,6 +293,7 @@ object BackupManager {
                     bankName = obj.optString("bankName", ""),
                     cardNumber = obj.optString("cardNumber", ""),
                     relatedOrderId = relatedOrderId,
+                    relatedOrderSyncId = obj.optString("relatedOrderSyncId", ""),
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                 )
             }
@@ -291,7 +306,9 @@ object BackupManager {
                 val obj = array.getJSONObject(i)
                 presets += ModelPreset(
                     id = obj.optLong("id", 0L),
+                    syncId = obj.optString("syncId", "pre_" + obj.optLong("id", 0L)),
                     workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopSyncId = obj.optString("workshopSyncId", ""),
                     name = obj.optString("name", "مدل").ifBlank { "مدل" },
                     defaultPricePerSet = obj.optLong("defaultPricePerSet", 0L),
                     defaultUnitsPerSet = obj.optDouble("defaultUnitsPerSet", 6.0),
@@ -308,6 +325,7 @@ object BackupManager {
                 val obj = array.getJSONObject(i)
                 rules += com.example.model.UnitConversionRule(
                     id = obj.optLong("id", 0L),
+                    syncId = obj.optString("syncId", "rule_" + obj.optLong("id", 0L)),
                     pieceKey = obj.optString("pieceKey", ""),
                     pieceCount = obj.optDouble("pieceCount", 0.0),
                     calculatedUnits = obj.optDouble("calculatedUnits", 0.0),
