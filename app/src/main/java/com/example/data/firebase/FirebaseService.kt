@@ -449,8 +449,8 @@ object FirebaseService {
             }
             batchSet(rulesCol, ruleDocs)
 
-            // Multi-device sync is additive/update-only until tombstones are implemented.
-            // Never delete cloud records just because another device has not uploaded them yet.
+            // Normal sync remains additive/update-only. Explicit user deletions are
+            // handled separately through durable tombstones above.
 
             userDoc.set(
                 mapOf(
