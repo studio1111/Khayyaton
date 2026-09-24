@@ -613,27 +613,53 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
         currentUser.value = user
         SubscriptionManager.syncSubscriptionWithFirebase()
-        val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
-            ?: customUsername.value.takeIf { it.isNotBlank() }
-            ?: user.displayName?.takeIf { it.isNotBlank() }
-        if (!chosenName.isNullOrBlank()) {
-            updateCustomUsername(chosenName)
-        }
+        SubscriptionManager.refreshSubscriptionFromBazaar()
 
         viewModelScope.launch {
-            if (!workshopName.isNullOrBlank()) {
-                val currentWs = activeWorkshop.value
-                if (currentWs != null) {
-                    renameWorkshop(currentWs.id, workshopName.trim())
-                } else {
-                    createWorkshop(workshopName.trim())
-                }
+            val previousUid = repository.getLocalAccountUid()
+            val switchingUser = previousUid != null && previousUid != user.uid
+
+            if (switchingUser) {
+                repository.clearAllDomainData()
+                repository.clearLocalAccountUid()
+                repository.saveActiveWorkshopId(0L)
+                activeWorkshopId.value = 0L
+                customUsername.value = ""
+                clearFilters()
+            }
+
+            repository.saveLocalAccountUid(user.uid)
+
+            val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
+                ?: customUsername.value.takeIf { it.isNotBlank() }
+                ?: user.displayName?.takeIf { it.isNotBlank() }
+            if (!chosenName.isNullOrBlank()) {
+                updateCustomUsername(chosenName)
             }
 
             val localOrders = repository.getAllOrdersSync()
             val localPayments = repository.getAllPaymentsSync()
-            val shouldDownload = localOrders.isEmpty() && localPayments.isEmpty()
-            performAutoSync(user, shouldDownload = shouldDownload)
+            val localPresets = repository.getAllPresetsSync()
+            val localWorkshops = repository.getAllWorkshopsSync()
+
+            val shouldDownload = switchingUser ||
+                (previousUid == null && localOrders.isEmpty() && localPayments.isEmpty() &&
+                    localPresets.isEmpty() && localWorkshops.isEmpty())
+
+            if (shouldDownload) {
+                performAutoSync(user, shouldDownload = true)
+            } else {
+                performAutoSync(user, shouldDownload = false)
+            }
+
+            // The workshop name entered during first registration is used only for
+            // a genuinely new local/cloud account, never to rename an existing one.
+            if (!workshopName.isNullOrBlank() &&
+                localWorkshops.isEmpty() &&
+                repository.getAllWorkshopsSync().isEmpty()
+            ) {
+                createWorkshop(workshopName.trim())
+            }
         }
     }
 
