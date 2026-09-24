@@ -8,9 +8,6 @@ import com.example.model.SubscriptionPlan
 import com.example.model.SubscriptionStatus
 import com.example.model.UserSubscription
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import ir.cafebazaar.poolakey.Connection
 import ir.cafebazaar.poolakey.Payment
 import ir.cafebazaar.poolakey.config.PaymentConfiguration
@@ -23,7 +20,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 /**
@@ -45,6 +41,7 @@ object SubscriptionManager {
     private const val KEY_SUB_STATUS = "sub_status"
     private const val KEY_ACTIVE_PRODUCT_ID = "sub_active_product_id"
     private const val KEY_EXPIRES_AT = "sub_expires_at"
+    private const val KEY_CACHED_UID = "sub_cached_uid"
 
     private val _subscriptionState = MutableStateFlow(UserSubscription())
     val subscriptionState: StateFlow<UserSubscription> = _subscriptionState.asStateFlow()
@@ -69,7 +66,8 @@ object SubscriptionManager {
     fun initialize(context: Context) {
         val appContext = context.applicationContext
         prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        loadCachedSubscription()
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) loadCachedSubscription(uid) else clearCachedUserState()
 
         // راه‌اندازی پل پرداخت پولکی کافه‌بازار
         try {
@@ -137,14 +135,18 @@ object SubscriptionManager {
     /**
      * بارگذاری اطلاعات اشتراک ذخیره شده در حافظه محلی
      */
-    private fun loadCachedSubscription() {
+    private fun loadCachedSubscription(uid: String) {
         val sp = prefs ?: return
-        val statusStr = sp.getString(KEY_SUB_STATUS, SubscriptionStatus.UNKNOWN.name)
-        val status = try {
-            SubscriptionStatus.valueOf(statusStr ?: SubscriptionStatus.UNKNOWN.name)
-        } catch (_: Exception) {
-            SubscriptionStatus.UNKNOWN
+        val cachedUid = sp.getString(KEY_CACHED_UID, null)
+        if (cachedUid != uid) {
+            _subscriptionState.value = UserSubscription()
+            return
         }
+
+        val statusStr = sp.getString(KEY_SUB_STATUS, SubscriptionStatus.UNKNOWN.name)
+        val status = runCatching {
+            SubscriptionStatus.valueOf(statusStr ?: SubscriptionStatus.UNKNOWN.name)
+        }.getOrDefault(SubscriptionStatus.UNKNOWN)
 
         val trialStartedAt = sp.getLong(KEY_TRIAL_STARTED_AT, 0L)
         val trialEndsAt = sp.getLong(KEY_TRIAL_ENDS_AT, 0L)
@@ -163,7 +165,9 @@ object SubscriptionManager {
     }
 
     private fun cacheSubscription(sub: UserSubscription) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         prefs?.edit()?.apply {
+            putString(KEY_CACHED_UID, uid)
             putString(KEY_SUB_STATUS, sub.status.name)
             putLong(KEY_TRIAL_STARTED_AT, sub.trialStartedAt)
             putLong(KEY_TRIAL_ENDS_AT, sub.trialEndsAt)
@@ -178,6 +182,22 @@ object SubscriptionManager {
         }
     }
 
+    fun clearCachedUserState() {
+        prefs?.edit()?.apply {
+            remove(KEY_CACHED_UID)
+            remove(KEY_SUB_STATUS)
+            remove(KEY_TRIAL_STARTED_AT)
+            remove(KEY_TRIAL_ENDS_AT)
+            remove(KEY_TRIAL_USED)
+            remove(KEY_ACTIVE_PRODUCT_ID)
+            remove(KEY_EXPIRES_AT)
+            apply()
+        }
+        _subscriptionState.value = UserSubscription()
+        _trialAvailable.value = false
+        _trialPeriodDays.value = 0
+    }
+
     /**
      * همگام‌سازی اطلاعات اشتراک و نسخه آزمایشی با فایربیس
      */
@@ -185,100 +205,20 @@ object SubscriptionManager {
         scope.launch {
             val user = FirebaseAuth.getInstance().currentUser
             if (user == null) {
-                // کاربر هنوز وارد نشده است
+                clearCachedUserState()
                 onComplete?.invoke(Result.success(_subscriptionState.value))
                 return@launch
             }
 
+            loadCachedSubscription(user.uid)
+            _isLoading.value = true
             try {
-                _isLoading.value = true
-                val db = FirebaseFirestore.getInstance()
-                val subDocRef = db.collection("users").document(user.uid)
-                    .collection("subscription").document("info")
-
-                val snapshot = subDocRef.get().await()
-                val now = System.currentTimeMillis()
-
-                if (!snapshot.exists()) {
-                    // Trial واقعی توسط کافه‌بازار مدیریت می‌شود و Firebase آن را جعل نمی‌کند.
-                    val newSub = UserSubscription(
-                        status = SubscriptionStatus.UNKNOWN,
-                        trialUsed = false,
-                        activeProductId = null,
-                        startedAt = null,
-                        expiresAt = null,
-                        updatedAt = now
-                    )
-
-                    val data = hashMapOf(
-                        "trialUsed" to false,
-                        "subscriptionStatus" to SubscriptionStatus.UNKNOWN.name,
-                        "activeProductId" to null,
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-
-                    subDocRef.set(data, SetOptions.merge()).await()
-                    _subscriptionState.value = newSub
-                    cacheSubscription(newSub)
-                    onComplete?.invoke(Result.success(newSub))
-                } else {
-                    // اشتراک یا آزمایشی قبلاً ثبت شده است
-                    val trialStartedAt = snapshot.getLong("trialStartedAt") ?: 0L
-                    val trialEndsAt = snapshot.getLong("trialEndsAt") ?: 0L
-                    val trialUsed = snapshot.getBoolean("trialUsed") ?: false
-                    val statusStr = snapshot.getString("subscriptionStatus") ?: SubscriptionStatus.UNKNOWN.name
-                    val activeProductId = snapshot.getString("activeProductId")
-                    val startedAt = snapshot.getLong("startedAt")
-                    val expiresAt = snapshot.getLong("expiresAt")
-                    val purchaseToken = snapshot.getString("purchaseToken")
-                    val orderId = snapshot.getString("orderId")
-
-                    var currentStatus = try {
-                        SubscriptionStatus.valueOf(statusStr)
-                    } catch (_: Exception) {
-                        SubscriptionStatus.UNKNOWN
-                    }
-
-                    // بررسی انقضا
-                    var needUpdateFirestore = false
-                    if (currentStatus == SubscriptionStatus.TRIAL_ACTIVE && now > trialEndsAt) {
-                        currentStatus = SubscriptionStatus.TRIAL_EXPIRED
-                        needUpdateFirestore = true
-                    } else if (currentStatus == SubscriptionStatus.SUBSCRIBED && expiresAt != null && now > expiresAt) {
-                        currentStatus = SubscriptionStatus.EXPIRED
-                        needUpdateFirestore = true
-                    }
-
-                    if (needUpdateFirestore) {
-                        subDocRef.set(
-                            mapOf(
-                                "subscriptionStatus" to currentStatus.name,
-                                "updatedAt" to FieldValue.serverTimestamp()
-                            ),
-                            SetOptions.merge()
-                        ).await()
-                    }
-
-                    val updatedSub = UserSubscription(
-                        status = currentStatus,
-                        trialStartedAt = trialStartedAt,
-                        trialEndsAt = trialEndsAt,
-                        trialUsed = trialUsed,
-                        activeProductId = activeProductId,
-                        startedAt = startedAt,
-                        expiresAt = expiresAt,
-                        purchaseToken = purchaseToken,
-                        orderId = orderId,
-                        updatedAt = now
-                    )
-
-                    _subscriptionState.value = updatedSub
-                    cacheSubscription(updatedSub)
-                    onComplete?.invoke(Result.success(updatedSub))
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error syncing subscription: ${e.message}", e)
-                onComplete?.invoke(Result.failure(e))
+                // Firestore is intentionally not an entitlement authority.
+                // Premium access is based on locally verified Bazaar state.
+                refreshSubscriptionFromBazaar()
+                onComplete?.invoke(Result.success(_subscriptionState.value))
+            } catch (_: Exception) {
+                onComplete?.invoke(Result.success(_subscriptionState.value))
             } finally {
                 _isLoading.value = false
             }
@@ -371,39 +311,30 @@ object SubscriptionManager {
         extendExisting: Boolean = true
     ) {
         scope.launch {
-            val user = FirebaseAuth.getInstance().currentUser ?: return@launch
+            val user = FirebaseAuth.getInstance().currentUser
+            if (user == null) {
+                withContext(Dispatchers.Main) {
+                    onResult(Result.failure(Exception("برای فعال‌سازی اشتراک ابتدا وارد حساب کاربری شوید.")))
+                }
+                return@launch
+            }
+
             try {
                 val now = System.currentTimeMillis()
-                val purchaseExpiry = purchaseInfo.purchaseTime +
-                    (plan.durationDays.toLong() * 24 * 60 * 60 * 1000L)
+                val durationMillis = plan.durationDays.toLong() * 24 * 60 * 60 * 1000L
+                val purchaseExpiry = purchaseInfo.purchaseTime + durationMillis
                 val currentExpiry = _subscriptionState.value.expiresAt ?: 0L
                 val baseTime = if (currentExpiry > now) currentExpiry else now
                 val newExpiry = if (extendExisting) {
-                    baseTime + (plan.durationDays.toLong() * 24 * 60 * 60 * 1000L)
+                    baseTime + durationMillis
                 } else {
                     maxOf(currentExpiry, purchaseExpiry)
                 }
 
-                val subData = hashMapOf(
-                    "subscriptionStatus" to SubscriptionStatus.SUBSCRIBED.name,
-                    "activeProductId" to plan.productId,
-                    "startedAt" to now,
-                    "expiresAt" to newExpiry,
-                    "purchaseToken" to purchaseInfo.purchaseToken,
-                    "orderId" to purchaseInfo.orderId,
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-
-                val db = FirebaseFirestore.getInstance()
-                db.collection("users").document(user.uid)
-                    .collection("subscription").document("info")
-                    .set(subData, SetOptions.merge())
-                    .await()
-
                 val newSub = _subscriptionState.value.copy(
                     status = SubscriptionStatus.SUBSCRIBED,
                     activeProductId = plan.productId,
-                    startedAt = now,
+                    startedAt = purchaseInfo.purchaseTime.takeIf { it > 0L } ?: now,
                     expiresAt = newExpiry,
                     purchaseToken = purchaseInfo.purchaseToken,
                     orderId = purchaseInfo.orderId,
@@ -413,12 +344,13 @@ object SubscriptionManager {
                 _subscriptionState.value = newSub
                 cacheSubscription(newSub)
                 _operationMessage.value = "اشتراک با موفقیت فعال شد!"
+
                 withContext(Dispatchers.Main) {
                     onResult(Result.success(Unit))
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error recording subscription in Firebase: ${e.message}", e)
-                _operationMessage.value = "پرداخت موفق بود اما در ثبت ابری خطایی رخ داد: ${e.message}"
+                Log.e(TAG, "Error caching Bazaar subscription: " + e.message, e)
+                _operationMessage.value = "خرید موفق بود اما ذخیره وضعیت اشتراک انجام نشد."
                 withContext(Dispatchers.Main) {
                     onResult(Result.failure(e))
                 }
@@ -454,7 +386,7 @@ object SubscriptionManager {
     /**
      * وضعیت اشتراک از خود کافه‌بازار دوباره خوانده می‌شود.
      */
-    private fun refreshSubscriptionFromBazaar() {
+    fun refreshSubscriptionFromBazaar() {
         val p = payment ?: return
         try {
             p.getSubscribedProducts {
@@ -464,8 +396,11 @@ object SubscriptionManager {
                         .maxByOrNull { it.purchaseTime }
 
                     if (activePurchase == null) {
-                        if (_subscriptionState.value.status == SubscriptionStatus.SUBSCRIBED) {
-                            val expired = _subscriptionState.value.copy(
+                        val current = _subscriptionState.value
+                        if (current.status == SubscriptionStatus.SUBSCRIBED &&
+                            (current.expiresAt ?: 0L) <= System.currentTimeMillis()
+                        ) {
+                            val expired = current.copy(
                                 status = SubscriptionStatus.EXPIRED,
                                 activeProductId = null,
                                 expiresAt = null,
@@ -477,14 +412,14 @@ object SubscriptionManager {
                         return@querySucceed
                     }
 
-                    val plan = SubscriptionPlan.PLANS.first { it.productId == activePurchase.productId }
+                    val plan = SubscriptionPlan.PLANS.firstOrNull { it.productId == activePurchase.productId }
+                        ?: return@querySucceed
+
                     handleSuccessfulSubscription(
                         plan = plan,
                         purchaseInfo = activePurchase,
                         onResult = { result ->
-                            if (result.isFailure) {
-                                Log.w(TAG, "Could not persist Bazaar subscription")
-                            }
+                            if (result.isFailure) Log.w(TAG, "Could not cache Bazaar subscription")
                         },
                         extendExisting = false
                     )
@@ -522,10 +457,15 @@ object SubscriptionManager {
                         _operationMessage.value = msg
                         onResult(Result.success(0))
                     } else {
-                        // یافتن آخرین یا معتبرترین اشتراک
-                        val latestPurchase = purchases.last()
-                        val matchedPlan = SubscriptionPlan.PLANS.find { it.productId == latestPurchase.productId }
-                            ?: SubscriptionPlan.PLANS.first()
+                        val latestPurchase = purchases
+                            .filter { purchase -> SubscriptionPlan.PLANS.any { it.productId == purchase.productId } }
+                            .maxByOrNull { it.purchaseTime }
+                        if (latestPurchase == null) {
+                            _isLoading.value = false
+                            onResult(Result.success(0))
+                            return@querySucceed
+                        }
+                        val matchedPlan = SubscriptionPlan.PLANS.first { it.productId == latestPurchase.productId }
 
                         handleSuccessfulSubscription(matchedPlan, latestPurchase, onResult = { result ->
                             if (result.isSuccess) {
