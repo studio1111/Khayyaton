@@ -146,16 +146,19 @@ class WorkshopRepository(
         val syncId: String
     )
 
-    private val pendingDeletionKey = "pending_cloud_deletions"
+    private fun pendingDeletionKey(): String {
+        val uid = getLocalAccountUid().orEmpty()
+        return "pending_cloud_deletions_$uid"
+    }
 
     private fun deletionKey(collection: String, syncId: String): String =
         "$collection|$syncId"
 
     fun recordCloudDeletion(collection: String, syncId: String) {
         if (syncId.isBlank()) return
-        val current = prefs?.getStringSet(pendingDeletionKey, emptySet()).orEmpty().toMutableSet()
+        val current = prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty().toMutableSet()
         current += deletionKey(collection, syncId)
-        prefs?.edit()?.putStringSet(pendingDeletionKey, current)?.apply()
+        prefs?.edit()?.putStringSet(pendingDeletionKey(), current)?.apply()
     }
 
     fun getPendingCloudDeletions(): List<PendingCloudDeletion> {
@@ -173,7 +176,7 @@ class WorkshopRepository(
         val removeKeys = deletions.map { deletionKey(it.collection, it.syncId) }.toSet()
         val current = prefs?.getStringSet(pendingDeletionKey, emptySet()).orEmpty()
         prefs?.edit()?.putStringSet(
-            pendingDeletionKey,
+            pendingDeletionKey(),
             current.filterNot { it in removeKeys }.toSet()
         )?.apply()
     }
