@@ -6,7 +6,7 @@ import androidx.room.Index
 
 @Entity(
     tableName = "workshops",
-    indices = [Index(value = ["createdAt"])]
+    indices = [Index(value = ["createdAt"]), Index(value = ["syncId"], unique = true)]
 )
 data class Workshop(
     @PrimaryKey(autoGenerate = true)
@@ -18,7 +18,7 @@ data class Workshop(
 
 @Entity(
     tableName = "furniture_orders",
-    indices = [Index(value = ["workshopId"]), Index(value = ["createdAt"]), Index(value = ["invoiceNumber"])]
+    indices = [Index(value = ["workshopId"]), Index(value = ["createdAt"]), Index(value = ["invoiceNumber"]), Index(value = ["syncId"], unique = true), Index(value = ["workshopSyncId"])]
 )
 data class FurnitureOrder(
     @PrimaryKey(autoGenerate = true)
@@ -47,7 +47,7 @@ data class FurnitureOrder(
 
 @Entity(
     tableName = "payment_records",
-    indices = [Index(value = ["workshopId"]), Index(value = ["createdAt"]), Index(value = ["relatedOrderId"])]
+    indices = [Index(value = ["workshopId"]), Index(value = ["createdAt"]), Index(value = ["relatedOrderId"]), Index(value = ["syncId"], unique = true), Index(value = ["workshopSyncId"])]
 )
 data class PaymentRecord(
     @PrimaryKey(autoGenerate = true)
@@ -72,7 +72,7 @@ data class PaymentRecord(
 
 @Entity(
     tableName = "model_presets",
-    indices = [Index(value = ["workshopId"]), Index(value = ["name"])]
+    indices = [Index(value = ["workshopId"]), Index(value = ["name"]), Index(value = ["syncId"], unique = true), Index(value = ["workshopSyncId"])]
 )
 data class ModelPreset(
     @PrimaryKey(autoGenerate = true)
@@ -87,7 +87,7 @@ data class ModelPreset(
     val description: String = ""
 )
 
-@Entity(tableName = "unit_conversion_rules")
+@Entity(tableName = "unit_conversion_rules", indices = [Index(value = ["syncId"], unique = true)])
 data class UnitConversionRule(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
