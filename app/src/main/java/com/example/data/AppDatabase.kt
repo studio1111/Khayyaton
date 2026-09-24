@@ -702,10 +702,13 @@ class WorkshopRepository(
 
     suspend fun deleteUnitRule(rule: UnitConversionRule) {
         unitRuleDao.deleteRule(rule)
+        recordCloudDeletion("unitRules", rule.syncId)
     }
 
     suspend fun deleteUnitRuleById(id: Long) {
+        val existing = unitRuleDao.getAllRulesSync().firstOrNull { it.id == id }
         unitRuleDao.deleteRuleById(id)
+        existing?.syncId?.let { recordCloudDeletion("unitRules", it) }
     }
 
     suspend fun insertDefaultUnitRulesIfEmpty() {
