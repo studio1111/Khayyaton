@@ -373,14 +373,16 @@ object FirebaseService {
                 workshopCount++
             }
 
-            val validWorkshopIds = workshopIdMap.keys
+            // Keep records even if an older cloud backup has no matching workshop document.
+            // They are restored into workshopId=0 rather than silently discarded.
+            val fallbackWorkshopId = workshopIdMap.values.firstOrNull() ?: 0L
             // 1. Download Orders
             val ordersSnapshot = userDoc.collection("orders").get().await()
             var ordCount = 0
             for (doc in ordersSnapshot.documents) {
                 val data = doc.data ?: continue
                 val cloudWorkshopId = (data["workshopId"] as? Number)?.toLong() ?: 0L
-                val workshopId = workshopIdMap[cloudWorkshopId] ?: continue
+                val workshopId = workshopIdMap[cloudWorkshopId] ?: fallbackWorkshopId
                 val order = FurnitureOrder(
                     id = 0L, // fresh auto-generated id or merge
                     workshopId = workshopId,
