@@ -23,6 +23,7 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE furniture_orders ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE payment_records ADD COLUMN workshopSyncId TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE payment_records ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE payment_records ADD COLUMN relatedOrderSyncId TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE model_presets ADD COLUMN workshopSyncId TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE model_presets ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE unit_conversion_rules ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
