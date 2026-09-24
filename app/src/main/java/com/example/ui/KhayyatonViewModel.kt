@@ -99,39 +99,66 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     init {
         viewModelScope.launch {
             val savedUser = repository.getCustomUsername()
-            if (savedUser.isNotBlank()) {
-                customUsername.value = savedUser
-            }
+            if (savedUser.isNotBlank()) customUsername.value = savedUser
 
-            val defWsId = repository.ensureDefaultWorkshop()
             val savedWsId = repository.getSavedActiveWorkshopId()
             val allWorkshops = repository.getAllWorkshopsSync()
-            if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) {
-                activeWorkshopId.value = savedWsId
-            } else {
-                activeWorkshopId.value = defWsId
-                repository.saveActiveWorkshopId(defWsId)
-            }
+            activeWorkshopId.value =
+                if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) {
+                    savedWsId
+                } else {
+                    allWorkshops.firstOrNull()?.id ?: 0L
+                }
+            repository.saveActiveWorkshopId(activeWorkshopId.value)
+
             repository.deduplicatePresets()
             repository.deduplicateOrders()
             repository.deduplicatePayments()
             repository.insertDefaultUnitRulesIfEmpty()
 
+            repository.getSavedThemeMode()?.let {
+                runCatching { AppThemeMode.valueOf(it) }.getOrNull()?.let { mode -> themeMode.value = mode }
+            }
+            runCatching { CardDisplayMode.valueOf(repository.getSavedCardDisplayMode()) }
+                .getOrNull()?.let { cardDisplayMode.value = it }
+            runCatching { CardSortOrder.valueOf(repository.getSavedCardSortOrder()) }
+                .getOrNull()?.let { cardSortOrder.value = it }
+            runCatching { CalendarType.valueOf(repository.getSavedCalendarType()) }
+                .getOrNull()?.let { calendarType.value = it }
+            currencyUnit.value = repository.getSavedCurrencyUnit()
+
             val user = FirebaseService.getCurrentUser()
             currentUser.value = user
             SubscriptionManager.syncSubscriptionWithFirebase()
+
             if (user != null) {
-                if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
-                    customUsername.value = user.displayName
-                    repository.saveCustomUsername(user.displayName)
+                val localUid = repository.getLocalAccountUid()
+                val switchingUser = localUid != null && localUid != user.uid
+
+                if (switchingUser) {
+                    repository.clearAllDomainData()
+                    repository.clearLocalAccountUid()
+                    customUsername.value = ""
+                    activeWorkshopId.value = 0L
+                    repository.saveActiveWorkshopId(0L)
                 }
+
+                val currentWorkshops = repository.getAllWorkshopsSync()
                 val localOrders = repository.getAllOrdersSync()
                 val localPayments = repository.getAllPaymentsSync()
-                // If local data already exists, DO NOT restore duplicates from cloud!
-                if (localOrders.isEmpty() && localPayments.isEmpty()) {
+                val localPresets = repository.getAllPresetsSync()
+
+                repository.saveLocalAccountUid(user.uid)
+
+                if (switchingUser || (localUid == null && localOrders.isEmpty() && localPayments.isEmpty() && localPresets.isEmpty() && currentWorkshops.isEmpty())) {
                     performAutoSync(user, shouldDownload = true)
                 } else {
                     performAutoSync(user, shouldDownload = false)
+                }
+
+                if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
+                    customUsername.value = user.displayName
+                    repository.saveCustomUsername(user.displayName)
                 }
             }
         }
@@ -396,9 +423,17 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun saveOrder(order: FurnitureOrder, addToPresets: Boolean) {
         viewModelScope.launch {
             val wsId = activeWorkshopId.value
-            val orderToSave = if (order.workshopId <= 0L) order.copy(workshopId = wsId) else order
+            if (wsId <= 0L) return@launch
+
+            // New records always belong to the currently selected workshop.
+            // Existing records retain their own workshop unless it was invalid.
+            val orderToSave = when {
+                order.id == 0L -> order.copy(workshopId = wsId)
+                order.workshopId <= 0L -> order.copy(workshopId = wsId)
+                else -> order
+            }
             repository.saveOrder(orderToSave)
-            if (orderToSave.modelName.isNotBlank()) {
+            if (addToPresets && orderToSave.modelName.isNotBlank()) {
                 val trimmedName = orderToSave.modelName.trim()
                 if (orderToSave.colorCode.isNotBlank()) {
                     repository.updateOrdersColorForModel(trimmedName, orderToSave.colorCode, wsId)
@@ -443,7 +478,8 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun savePayment(payment: PaymentRecord) {
         viewModelScope.launch {
             val wsId = activeWorkshopId.value
-            val paymentToSave = if (payment.workshopId <= 0L) payment.copy(workshopId = wsId) else payment
+            if (wsId <= 0L) return@launch
+            val paymentToSave = if (payment.id == 0L || payment.workshopId <= 0L) payment.copy(workshopId = wsId) else payment
             repository.savePayment(paymentToSave)
             isPaymentDialogOpen.value = false
             editingPayment.value = null
@@ -508,11 +544,9 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun deleteWorkshop(workshop: com.example.model.Workshop) {
         viewModelScope.launch {
-            val all = repository.getAllWorkshopsSync()
-            if (all.size <= 1) return@launch
             repository.deleteWorkshopAndAllData(workshop.id)
             val remaining = repository.getAllWorkshopsSync()
-            val nextActive = remaining.firstOrNull()?.id ?: 1L
+            val nextActive = remaining.firstOrNull()?.id ?: 0L
             activeWorkshopId.value = nextActive
             repository.saveActiveWorkshopId(nextActive)
             clearFilters()
@@ -538,9 +572,30 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         }
     }
 
+    fun changeTheme(newMode: AppThemeMode) {
+        themeMode.value = newMode
+        repository.saveThemeMode(newMode.name)
+    }
+
     fun changeCurrency(newUnit: String) {
         if (newUnit == currencyUnit.value) return
         currencyUnit.value = newUnit
+        repository.saveCurrencyUnit(newUnit)
+    }
+
+    fun changeCalendarType(newType: CalendarType) {
+        calendarType.value = newType
+        repository.saveCalendarType(newType.name)
+    }
+
+    fun changeCardDisplayMode(mode: CardDisplayMode) {
+        cardDisplayMode.value = mode
+        repository.saveCardDisplayMode(mode.name)
+    }
+
+    fun changeCardSortOrder(order: CardSortOrder) {
+        cardSortOrder.value = order
+        repository.saveCardSortOrder(order.name)
     }
 
     fun clearFilters() {
@@ -586,6 +641,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         FirebaseService.signOut()
         currentUser.value = null
         autoSyncStatusMessage.value = null
+        SubscriptionManager.clearCachedUserState()
     }
 
     private suspend fun performAutoSync(user: FirebaseUserDto, shouldDownload: Boolean = false) {
@@ -593,31 +649,36 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         try {
             if (shouldDownload) {
                 val downloadRes = FirebaseService.downloadFromCloud(repository)
-                if (downloadRes.isSuccess) {
-                    // The cloud records keep their workshopId. Select a real restored
-                    // workshop before Compose starts filtering the cards.
-                    val restoredWorkshops = repository.getAllWorkshopsSync()
-                    val savedId = repository.getSavedActiveWorkshopId()
-                    val restoredActiveId = when {
-                        savedId > 0L && restoredWorkshops.any { it.id == savedId } -> savedId
-                        restoredWorkshops.isNotEmpty() -> restoredWorkshops.first().id
-                        else -> 0L
-                    }
-                    if (restoredActiveId > 0L) {
-                        activeWorkshopId.value = restoredActiveId
-                        repository.saveActiveWorkshopId(restoredActiveId)
-                    }
-                    autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
+                if (downloadRes.isFailure) {
+                    autoSyncStatusMessage.value = "بازیابی ابری انجام نشد؛ اطلاعات محلی دست‌نخورده باقی ماند."
+                    return
                 }
+
+                val restoredWorkshops = repository.getAllWorkshopsSync()
+                val savedId = repository.getSavedActiveWorkshopId()
+                val restoredActiveId = when {
+                    savedId > 0L && restoredWorkshops.any { it.id == savedId } -> savedId
+                    restoredWorkshops.isNotEmpty() -> restoredWorkshops.first().id
+                    else -> 0L
+                }
+                activeWorkshopId.value = restoredActiveId
+                repository.saveActiveWorkshopId(restoredActiveId)
+                repository.insertDefaultUnitRulesIfEmpty()
+                autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
             }
 
             val currentOrders = repository.getAllOrdersSync()
             val currentPayments = repository.getAllPaymentsSync()
             val currentPresets = repository.getAllPresetsSync()
-            val currentUnitRules = unitRules.value
+            val currentUnitRules = repository.getAllRulesSync()
             val currentWorkshops = repository.getAllWorkshopsSync()
 
-            if (currentOrders.isNotEmpty() || currentPayments.isNotEmpty() || currentPresets.isNotEmpty()) {
+            if (currentOrders.isNotEmpty() ||
+                currentPayments.isNotEmpty() ||
+                currentPresets.isNotEmpty() ||
+                currentUnitRules.isNotEmpty() ||
+                currentWorkshops.isNotEmpty()
+            ) {
                 FirebaseService.uploadAllToCloud(
                     orders = currentOrders,
                     payments = currentPayments,
@@ -625,8 +686,8 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                     unitRules = currentUnitRules,
                     workshops = currentWorkshops
                 )
+                autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
             }
-            autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
         } catch (e: Exception) {
             autoSyncStatusMessage.value = "همگام‌سازی ابری در دسترس نیست."
         } finally {
