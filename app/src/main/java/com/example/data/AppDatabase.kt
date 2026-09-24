@@ -28,11 +28,11 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE model_presets ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE unit_conversion_rules ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
 
-        db.execSQL("UPDATE workshops SET syncId = 'legacy_workshop_' || id WHERE syncId = ''")
-        db.execSQL("UPDATE furniture_orders SET syncId = 'legacy_order_' || id WHERE syncId = ''")
-        db.execSQL("UPDATE payment_records SET syncId = 'legacy_payment_' || id WHERE syncId = ''")
-        db.execSQL("UPDATE model_presets SET syncId = 'legacy_preset_' || id WHERE syncId = ''")
-        db.execSQL("UPDATE unit_conversion_rules SET syncId = 'legacy_rule_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE workshops SET syncId = 'wrk_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE furniture_orders SET syncId = 'ord_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE payment_records SET syncId = 'pay_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE model_presets SET syncId = 'pre_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE unit_conversion_rules SET syncId = 'rule_' || id WHERE syncId = ''")
 
         db.execSQL("""
             UPDATE furniture_orders
