@@ -129,12 +129,15 @@ class DataIntegrityTest {
         )
 
         val root = JSONObject(json)
-        assertEquals(3, root.getInt("version"))
+        assertEquals(4, root.getInt("version"))
         assertEquals(1, root.getJSONArray("workshops").length())
         assertEquals(1, root.getJSONArray("orders").length())
         assertEquals(1, root.getJSONArray("payments").length())
         assertEquals(1, root.getJSONArray("presets").length())
         assertEquals(1, root.getJSONArray("unitRules").length())
         assertTrue(root.getJSONArray("payments").getJSONObject(0).has("relatedOrderId"))
+        assertTrue(root.getJSONArray("orders").getJSONObject(0).has("syncId"))
+        assertTrue(root.getJSONArray("orders").getJSONObject(0).has("workshopSyncId"))
+        assertTrue(root.getJSONArray("payments").getJSONObject(0).has("relatedOrderSyncId"))
     }
 }
