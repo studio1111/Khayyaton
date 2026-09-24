@@ -365,8 +365,14 @@ object FirebaseService {
             var workshopCount = 0
             for (doc in workshopsSnapshot.documents) {
                 val data = doc.data ?: continue
+                // IMPORTANT: preserve the original Firestore/Room workshop ID.
+                // Orders/payments/presets reference this ID via workshopId. Generating
+                // a new Room ID here makes the restored records invisible to the UI.
+                val cloudId = (data["id"] as? Number)?.toLong()
+                    ?: doc.id.removePrefix("wrk_").toLongOrNull()
+                    ?: 0L
                 val workshop = Workshop(
-                    id = 0L,
+                    id = cloudId,
                     name = data["name"] as? String ?: "",
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
                 )
