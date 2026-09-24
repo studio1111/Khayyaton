@@ -45,6 +45,7 @@ fun BackupDialog(
     unitRules: List<com.example.model.UnitConversionRule> = emptyList(),
     currencyUnit: String,
     repository: WorkshopRepository,
+    onDataRestored: () -> Unit = {},
     onOpenFirebaseAuth: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
@@ -475,7 +476,8 @@ fun BackupDialog(
                             try {
                                 val result = BackupManager.restoreFromJson(content, repository)
                                 restoreResultMsg = "بازیابی موفق: ${PersianUtils.toPersianDigits(result.first)} سفارش، ${PersianUtils.toPersianDigits(result.second)} دریافتی، ${PersianUtils.toPersianDigits(result.third)} مدل اضافه شدند."
-                                Toast.makeText(context, restoreResultMsg, Toast.LENGTH_LONG).show()
+                                onDataRestored()
+                                                                Toast.makeText(context, restoreResultMsg, Toast.LENGTH_LONG).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "خطا در ساختار فایل بکاپ: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                             } finally {
