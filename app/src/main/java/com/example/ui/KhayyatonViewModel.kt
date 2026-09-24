@@ -750,7 +750,8 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                     payments = currentPayments,
                     presets = currentPresets,
                     unitRules = currentUnitRules,
-                    workshops = currentWorkshops
+                    workshops = currentWorkshops,
+                    repository = repository
                 )
                 autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
             }
