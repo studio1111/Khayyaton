@@ -179,7 +179,7 @@ object FirebaseService {
 
         return try {
             val result = fbAuth.createUserWithEmailAndPassword(email.trim(), pass).await()
-            val user = result.user ?: return@try Result.failure(Exception("ثبت‌نام ناموفق بود."))
+            val user = result.user ?: return Result.failure(Exception("ثبت‌نام ناموفق بود."))
             val usernameRef = db.collection("usernames").document(normalizedUsername)
             val userRef = db.collection("users").document(user.uid)
 
@@ -197,7 +197,7 @@ object FirebaseService {
             } catch (reservationError: Exception) {
                 runCatching { user.delete().await() }
                 if (reservationError.message == "USERNAME_TAKEN") {
-                    return@try Result.failure(Exception("این نام کاربری قبلاً استفاده شده است. لطفاً نام دیگری انتخاب کنید."))
+                    return Result.failure(Exception("این نام کاربری قبلاً استفاده شده است. لطفاً نام دیگری انتخاب کنید."))
                 }
                 throw reservationError
             }
