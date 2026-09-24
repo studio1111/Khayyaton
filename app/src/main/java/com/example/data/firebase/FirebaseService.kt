@@ -524,10 +524,32 @@ object FirebaseService {
                 )
             }
 
+            // Older Firestore data may contain orders/payments/presets without
+            // a corresponding workshops document. Without a local workshop those
+            // records become invisible because the UI filters cards by activeWorkshopId.
+            // Reconstruct the missing workshop identities from the legacy numeric IDs.
+            val normalizedWorkshops = restoredWorkshops.toMutableList()
+            val referencedWorkshopIds = buildSet {
+                restoredOrders.mapTo(this) { it.workshopId }
+                restoredPayments.mapTo(this) { it.workshopId }
+                restoredPresets.mapTo(this) { it.workshopId }
+            }.filter { it > 0L }
+
+            val existingWorkshopIds = normalizedWorkshops.map { it.id }.toSet()
+            for (legacyId in referencedWorkshopIds) {
+                if (legacyId !in existingWorkshopIds) {
+                    normalizedWorkshops += Workshop(
+                        id = legacyId,
+                        syncId = "legacy_workshop_$legacyId",
+                        name = if (legacyId == 1L) "کارگاه اصلی" else "کارگاه $legacyId"
+                    )
+                }
+            }
+
             // Restore as one atomic local transaction. This prevents half-restored
             // databases and keeps IDs stable so relations such as relatedOrderId work.
             repository.mergeCloudData(
-                cloudWorkshops = restoredWorkshops,
+                cloudWorkshops = normalizedWorkshops,
                 cloudOrders = restoredOrders,
                 cloudPayments = restoredPayments,
                 cloudPresets = restoredPresets,
