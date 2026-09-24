@@ -55,6 +55,14 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
             )
             WHERE workshopSyncId = ''
         """.trimIndent())
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_workshops_syncId ON workshops(syncId)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_furniture_orders_syncId ON furniture_orders(syncId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_furniture_orders_workshopSyncId ON furniture_orders(workshopSyncId)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_payment_records_syncId ON payment_records(syncId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_payment_records_workshopSyncId ON payment_records(workshopSyncId)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_model_presets_syncId ON model_presets(syncId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_model_presets_workshopSyncId ON model_presets(workshopSyncId)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_unit_conversion_rules_syncId ON unit_conversion_rules(syncId)")
     }
 }
 
