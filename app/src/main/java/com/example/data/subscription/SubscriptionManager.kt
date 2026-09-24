@@ -323,7 +323,7 @@ object SubscriptionManager {
                 val expectedPayload = "user_" + user.uid
                 if (purchaseInfo.developerPayload != expectedPayload) {
                     val mismatch = "این اشتراک به حساب کاربری دیگری تعلق دارد."
-                    Log.w(TAG, "Bazaar developerPayload mismatch for \${purchaseInfo.orderId}")
+                    Log.w(TAG, "Bazaar developerPayload mismatch for ${purchaseInfo.orderId}")
                     _operationMessage.value = mismatch
                     withContext(Dispatchers.Main) {
                         onResult(Result.failure(Exception(mismatch)))
