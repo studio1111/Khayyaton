@@ -92,12 +92,9 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
         context.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
     }
 
-    var hasCompletedFirstLaunchAuth by remember {
-        mutableStateOf(sharedPrefs.getBoolean("has_completed_first_auth", false))
-    }
-
-    // If user hasn't completed authentication with email/username and is not logged in, show GlassyAuthScreen (no offline skip)
-    if (!hasCompletedFirstLaunchAuth && currentUser == null) {
+    // Always keep the main application behind authentication. This prevents one
+    // Firebase account from seeing another account's local data after logout.
+    if (currentUser == null) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             KhayyatonTheme(themeMode = themeMode) {
                 GlassyAuthScreen(
@@ -105,7 +102,6 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                     onAuthSuccess = { user, username, workshopName ->
                         viewModel.onUserLoggedIn(user, username, workshopName)
                         sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
-                        hasCompletedFirstLaunchAuth = true
                     }
                 )
             }
@@ -175,7 +171,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                             remainingBalance = remainingBalance,
                             currencyUnit = currencyUnit,
                             orderCount = filteredOrders.size,
-                            paymentCount = payments.size
+                            paymentCount = filteredPayments.size
                         )
                     },
                     containerColor = MaterialTheme.colorScheme.background
@@ -279,7 +275,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                                     RecentPayments(
                                         payments = filteredPayments,
                                         currencyUnit = currencyUnit,
-                                        onOpenNewPayment = { viewModel.openNewPayment() },
+                                        onOpenNewPayment = { checkAccessAndExecute { viewModel.openNewPayment() } },
                                         onEditPayment = { viewModel.openEditPayment(it) },
                                         onDeletePayment = { viewModel.requestDeletePayment(it) },
                                         onSharePayment = { viewModel.openCardSharePayment(it) }
