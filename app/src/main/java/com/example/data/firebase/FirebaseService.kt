@@ -229,7 +229,8 @@ object FirebaseService {
         payments: List<PaymentRecord>,
         presets: List<ModelPreset>,
         unitRules: List<UnitConversionRule>,
-        workshops: List<Workshop> = emptyList()
+        workshops: List<Workshop> = emptyList(),
+        repository: WorkshopRepository? = null
     ): Result<CloudSyncResult> {
         val user = auth?.currentUser
             ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
@@ -302,7 +303,7 @@ object FirebaseService {
             }
 
             // Propagate local deletions with durable tombstones.
-            val pendingDeletions = repository.getPendingCloudDeletions()
+            val pendingDeletions = repository?.getPendingCloudDeletions().orEmpty()
             if (pendingDeletions.isNotEmpty()) {
                 var deletionBatch = db.batch()
                 var deletionCount = 0
@@ -349,7 +350,7 @@ object FirebaseService {
                 }
 
                 if (deletionCount > 0) deletionBatch.commit().await()
-                repository.clearCloudDeletions(pendingDeletions)
+                repository?.clearCloudDeletions(pendingDeletions)
             }
 
             val workshopsCol = userDoc.collection("workshops")
