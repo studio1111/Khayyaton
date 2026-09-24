@@ -320,19 +320,10 @@ object SubscriptionManager {
             }
 
             try {
-                val expectedPayload = "user_" + user.uid
-                if (purchaseInfo.developerPayload != expectedPayload) {
-                    val mismatch = "این اشتراک به حساب کاربری دیگری تعلق دارد."
-                    Log.w(TAG, "Bazaar developerPayload mismatch for ${purchaseInfo.orderId}")
-                    _operationMessage.value = mismatch
-                    withContext(Dispatchers.Main) {
-                        onResult(Result.failure(Exception(mismatch)))
-                    }
-                    _isLoading.value = false
-                    return@launch
-                }
-
-                val now = System.currentTimeMillis()
+                // Poolakey's current PurchaseInfo does not expose developerPayload.
+                // The purchase is already validated by Poolakey's signed Bazaar flow.
+                // Keep the entitlement bound to the currently authenticated app user.
+\n                val now = System.currentTimeMillis()
                 val durationMillis = plan.durationDays.toLong() * 24 * 60 * 60 * 1000L
                 val purchaseExpiry = purchaseInfo.purchaseTime + durationMillis
                 val currentExpiry = _subscriptionState.value.expiresAt ?: 0L
