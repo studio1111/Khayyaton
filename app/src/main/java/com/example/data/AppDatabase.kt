@@ -104,6 +104,27 @@ class WorkshopRepository(
         prefs?.edit()?.putString("custom_username", username.trim())?.apply()
     }
 
+    fun getSavedThemeMode(): String? = prefs?.getString("theme_mode", null)
+    fun saveThemeMode(mode: String) {
+        prefs?.edit()?.putString("theme_mode", mode)?.apply()
+    }
+
+    fun getSavedCurrencyUnit(): String = prefs?.getString("currency_unit", "تومان") ?: "تومان"
+    fun saveCurrencyUnit(value: String) { prefs?.edit()?.putString("currency_unit", value)?.apply() }
+
+    fun getSavedCalendarType(): String = prefs?.getString("calendar_type", CalendarType.JALALI.name) ?: CalendarType.JALALI.name
+    fun saveCalendarType(value: String) { prefs?.edit()?.putString("calendar_type", value)?.apply() }
+
+    fun getSavedCardDisplayMode(): String =
+        prefs?.getString("card_display_mode", com.example.model.CardDisplayMode.UNIFIED.name)
+            ?: com.example.model.CardDisplayMode.UNIFIED.name
+    fun saveCardDisplayMode(value: String) { prefs?.edit()?.putString("card_display_mode", value)?.apply() }
+
+    fun getSavedCardSortOrder(): String =
+        prefs?.getString("card_sort_order", com.example.model.CardSortOrder.NEWEST_BOTTOM.name)
+            ?: com.example.model.CardSortOrder.NEWEST_BOTTOM.name
+    fun saveCardSortOrder(value: String) { prefs?.edit()?.putString("card_sort_order", value)?.apply() }
+
     val orders: Flow<List<FurnitureOrder>> = orderDao.getAllOrders()
     val payments: Flow<List<PaymentRecord>> = paymentDao.getAllPayments()
     val modelPresets: Flow<List<ModelPreset>> = modelPresetDao.getAllPresets()
@@ -126,14 +147,7 @@ class WorkshopRepository(
         workshopDao.getWorkshopById(id)
 
     suspend fun ensureDefaultWorkshop(): Long {
-        val existing = workshopDao.getAllWorkshopsSync()
-        return if (existing.isEmpty()) {
-            val defaultWorkshop = Workshop(id = 1L, name = "کارگاه اصلی")
-            workshopDao.insertWorkshop(defaultWorkshop)
-            1L
-        } else {
-            existing.first().id
-        }
+        return workshopDao.getAllWorkshopsSync().firstOrNull()?.id ?: 0L
     }
 
     suspend fun saveWorkshop(workshop: Workshop): Long {
