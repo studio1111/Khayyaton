@@ -27,6 +27,12 @@ interface WorkshopDao {
     @Delete
     suspend fun deleteWorkshop(workshop: Workshop)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(workshops: List<Workshop>)
+
+    @Query("DELETE FROM workshops")
+    suspend fun clearAll()
+
     @Query("DELETE FROM workshops WHERE id = :id")
     suspend fun deleteWorkshopById(id: Long)
 
