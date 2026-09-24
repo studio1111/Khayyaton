@@ -294,6 +294,27 @@ class WorkshopRepository(
         saveActiveWorkshopId(0L)
     }
 
+    suspend fun applyCloudDeletions(deletions: List<PendingCloudDeletion>) {
+        if (deletions.isEmpty()) return
+        database.withTransaction {
+            for (deletion in deletions) {
+                when (deletion.collection) {
+                    "orders" -> orderDao.deleteOrderBySyncId(deletion.syncId)
+                    "payments" -> paymentDao.deletePaymentBySyncId(deletion.syncId)
+                    "presets" -> modelPresetDao.deletePresetBySyncId(deletion.syncId)
+                    "workshops" -> {
+                        workshopDao.getWorkshopBySyncId(deletion.syncId)?.let { workshop ->
+                            workshopDao.deleteOrdersByWorkshop(workshop.id)
+                            workshopDao.deletePaymentsByWorkshop(workshop.id)
+                            workshopDao.deletePresetsByWorkshop(workshop.id)
+                            workshopDao.deleteWorkshopById(workshop.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun mergeCloudData(
         cloudWorkshops: List<Workshop>,
         cloudOrders: List<FurnitureOrder>,
