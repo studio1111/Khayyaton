@@ -16,6 +16,20 @@ import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
 import androidx.room.withTransaction
 
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_workshops_createdAt ON workshops(createdAt)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_furniture_orders_workshopId ON furniture_orders(workshopId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_furniture_orders_createdAt ON furniture_orders(createdAt)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_furniture_orders_invoiceNumber ON furniture_orders(invoiceNumber)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_payment_records_workshopId ON payment_records(workshopId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_payment_records_createdAt ON payment_records(createdAt)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_payment_records_relatedOrderId ON payment_records(relatedOrderId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_model_presets_workshopId ON model_presets(workshopId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_model_presets_name ON model_presets(name)")
+    }
+}
+
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS workshops (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)")
@@ -34,7 +48,7 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 
 @Database(
     entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -55,7 +69,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "khayyaton_workshop.db"
                 )
-                    .addMigrations(MIGRATION_4_5)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
