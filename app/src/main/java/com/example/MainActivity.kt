@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
         val database = AppDatabase.getDatabase(applicationContext)
         val repository = WorkshopRepository(
             context = applicationContext,
+            database = database,
             orderDao = database.orderDao(),
             paymentDao = database.paymentDao(),
             modelPresetDao = database.modelPresetDao(),
