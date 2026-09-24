@@ -70,7 +70,6 @@ abstract class AppDatabase : RoomDatabase() {
                     "khayyaton_workshop.db"
                 )
                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
-                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance
@@ -91,6 +90,8 @@ class WorkshopRepository(
     private val prefs by lazy {
         context?.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
     }
+
+    fun getApplicationContext(): android.content.Context? = context?.applicationContext
 
     fun getSavedActiveWorkshopId(): Long {
         return prefs?.getLong("active_workshop_id", -1L) ?: -1L
