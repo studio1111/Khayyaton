@@ -140,7 +140,7 @@ class DataIntegrityTest {
         }
     }
 
-    @    @Test
+    @Test
     fun `local deletion creates a cloud tombstone`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val (db, repo) = repository(context)
@@ -184,7 +184,7 @@ class DataIntegrityTest {
         }
     }
 
-Test
+    @Test
     fun `backup JSON contains full current data schema`() {
         val order = FurnitureOrder(
             id = 1L,
