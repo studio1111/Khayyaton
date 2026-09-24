@@ -18,6 +18,8 @@ import com.example.data.firebase.FirebaseUserDto
 import com.example.data.subscription.SubscriptionManager
 import com.example.model.UserSubscription
 import com.example.util.PersianUtils
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -91,6 +93,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isDrawerOpen = MutableStateFlow(false)
     val isAutoSyncing = MutableStateFlow(false)
     val autoSyncStatusMessage = MutableStateFlow<String?>(null)
+    private var autoUploadJob: Job? = null
 
     fun hasPremiumAccess(): Boolean {
         return SubscriptionManager.hasPremiumAccess()
@@ -401,6 +404,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 repository.deletePaymentById(target.id)
             }
             deleteTarget.value = null
+            triggerAutoUpload()
         }
     }
 
@@ -417,6 +421,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 createdAt = System.currentTimeMillis()
             )
             repository.saveOrder(duplicated)
+            triggerAutoUpload()
         }
     }
 
@@ -507,6 +512,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         viewModelScope.launch {
             repository.deletePreset(preset)
             manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + preset.name.trim().lowercase()
+            triggerAutoUpload()
         }
     }
 
@@ -515,6 +521,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             val wsId = activeWorkshopId.value
             repository.deletePresetByNameAndWorkshop(name, wsId)
             manuallyDeletedModelNames.value = manuallyDeletedModelNames.value + name.trim().lowercase()
+            triggerAutoUpload()
         }
     }
 
@@ -557,18 +564,21 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun saveUnitRule(rule: com.example.model.UnitConversionRule) {
         viewModelScope.launch {
             repository.saveUnitRule(rule)
+            triggerAutoUpload()
         }
     }
 
     fun deleteUnitRule(rule: com.example.model.UnitConversionRule) {
         viewModelScope.launch {
             repository.deleteUnitRule(rule)
+            triggerAutoUpload()
         }
     }
 
     fun restoreDefaultUnitRules() {
         viewModelScope.launch {
             repository.restoreDefaultUnitRules()
+            triggerAutoUpload()
         }
     }
 
@@ -741,17 +751,21 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun triggerAutoUpload() {
-        val user = currentUser.value ?: return
-        viewModelScope.launch {
+        if (currentUser.value == null) return
+        autoUploadJob?.cancel()
+        autoUploadJob = viewModelScope.launch {
+            delay(400)
             try {
                 FirebaseService.uploadAllToCloud(
                     orders = repository.getAllOrdersSync(),
                     payments = repository.getAllPaymentsSync(),
                     presets = repository.getAllPresetsSync(),
-                    unitRules = unitRules.value,
+                    unitRules = repository.getAllUnitRulesSync(),
                     workshops = repository.getAllWorkshopsSync()
                 )
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                // Local Room is the durable source; a later trigger retries cloud sync.
+            }
         }
     }
 }
