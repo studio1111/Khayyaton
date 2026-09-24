@@ -674,15 +674,12 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             val localPresets = repository.getAllPresetsSync()
             val localWorkshops = repository.getAllWorkshopsSync()
 
-            val shouldDownload = switchingUser ||
-                (previousUid == null && localOrders.isEmpty() && localPayments.isEmpty() &&
-                    localPresets.isEmpty() && localWorkshops.isEmpty())
+            // A login is a cloud-account boundary. On the first login for this
+            // device/user, restore the cloud snapshot before uploading anything local.
+            // This prevents a default/anonymous local workshop from masking cloud data.
+            val shouldDownload = switchingUser || previousUid == null
 
-            if (shouldDownload) {
-                performAutoSync(user, shouldDownload = true)
-            } else {
-                performAutoSync(user, shouldDownload = false)
-            }
+            performAutoSync(user, shouldDownload = shouldDownload)
 
             // The workshop name entered during first registration is used only for
             // a genuinely new local/cloud account, never to rename an existing one.
@@ -700,6 +697,17 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         currentUser.value = null
         autoSyncStatusMessage.value = null
         SubscriptionManager.clearCachedUserState()
+
+        // Never leave one account's cards/workshops visible after logout.
+        // The next login restores that account from Firebase.
+        viewModelScope.launch {
+            repository.clearAllDomainData()
+            repository.clearLocalAccountUid()
+            repository.saveActiveWorkshopId(0L)
+            activeWorkshopId.value = 0L
+            customUsername.value = ""
+            clearFilters()
+        }
     }
 
     private suspend fun performAutoSync(user: FirebaseUserDto, shouldDownload: Boolean = false) {
