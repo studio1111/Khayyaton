@@ -288,6 +288,57 @@ object FirebaseService {
                 if (count > 0) batch.commit().await()
             }
 
+            // Propagate local deletions with durable tombstones.
+            val pendingDeletions = repository.getPendingCloudDeletions()
+            if (pendingDeletions.isNotEmpty()) {
+                var deletionBatch = db.batch()
+                var deletionCount = 0
+
+                for (deletion in pendingDeletions) {
+                    val collection = when (deletion.collection) {
+                        "workshops" -> userDoc.collection("workshops")
+                        "orders" -> userDoc.collection("orders")
+                        "payments" -> userDoc.collection("payments")
+                        "presets" -> userDoc.collection("presets")
+                        "unitRules" -> userDoc.collection("unitRules")
+                        else -> null
+                    } ?: continue
+
+                    deletionBatch.delete(collection.document(deletion.syncId))
+
+                    val legacyId = when {
+                        deletion.syncId.startsWith("wrk_") -> deletion.syncId.removePrefix("wrk_")
+                        deletion.syncId.startsWith("ord_") -> deletion.syncId.removePrefix("ord_")
+                        deletion.syncId.startsWith("pay_") -> deletion.syncId.removePrefix("pay_")
+                        deletion.syncId.startsWith("pre_") -> deletion.syncId.removePrefix("pre_")
+                        deletion.syncId.startsWith("rule_") -> deletion.syncId.removePrefix("rule_")
+                        else -> null
+                    }
+                    if (!legacyId.isNullOrBlank()) {
+                        deletionBatch.delete(collection.document(legacyId))
+                    }
+
+                    deletionBatch.set(
+                        userDoc.collection("deletions").document("${deletion.collection}_${deletion.syncId}"),
+                        mapOf(
+                            "collection" to deletion.collection,
+                            "syncId" to deletion.syncId,
+                            "deletedAt" to System.currentTimeMillis()
+                        )
+                    )
+                    deletionCount += 1
+
+                    if (deletionCount == maxBatchSize / 3) {
+                        deletionBatch.commit().await()
+                        deletionBatch = db.batch()
+                        deletionCount = 0
+                    }
+                }
+
+                if (deletionCount > 0) deletionBatch.commit().await()
+                repository.clearCloudDeletions(pendingDeletions)
+            }
+
             val workshopsCol = userDoc.collection("workshops")
             val workshopDocs = workshops.map { workshop ->
                 "${workshop.syncId}" to mapOf(
@@ -420,11 +471,39 @@ object FirebaseService {
         return try {
             val userDoc = db.collection("users").document(user.uid)
 
+            val deletionSnapshot = userDoc.collection("deletions").get().await()
+            val deletedRecords = deletionSnapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val collection = data["collection"] as? String ?: return@mapNotNull null
+                val syncId = data["syncId"] as? String ?: return@mapNotNull null
+                WorkshopRepository.PendingCloudDeletion(collection, syncId)
+            }
+            repository.applyCloudDeletions(deletedRecords)
+
+            fun isDeleted(collection: String, syncId: String, documentId: String): Boolean {
+                return deletedRecords.any { deletion ->
+                    if (deletion.collection != collection) return@any false
+                    deletion.syncId == syncId ||
+                        when {
+                            deletion.syncId.startsWith("wrk_") && collection == "workshops" ->
+                                deletion.syncId.removePrefix("wrk_") == documentId
+                            deletion.syncId.startsWith("ord_") && collection == "orders" ->
+                                deletion.syncId.removePrefix("ord_") == documentId
+                            deletion.syncId.startsWith("pay_") && collection == "payments" ->
+                                deletion.syncId.removePrefix("pay_") == documentId
+                            deletion.syncId.startsWith("pre_") && collection == "presets" ->
+                                deletion.syncId.removePrefix("pre_") == documentId
+                            else -> false
+                        }
+                }
+            }
+
             val workshopsSnapshot = userDoc.collection("workshops").get().await()
             val restoredWorkshops = workshopsSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
+                if (isDeleted("workshops", syncId, doc.id)) return@mapNotNull null
                 Workshop(
                     id = id,
                     syncId = syncId,
@@ -439,6 +518,7 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
+                if (isDeleted("orders", syncId, doc.id)) return@mapNotNull null
                 FurnitureOrder(
                     id = id,
                     syncId = syncId,
@@ -469,6 +549,7 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
+                if (isDeleted("payments", syncId, doc.id)) return@mapNotNull null
                 PaymentRecord(
                     id = id,
                     syncId = syncId,
@@ -495,6 +576,7 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
+                if (isDeleted("presets", syncId, doc.id)) return@mapNotNull null
                 val name = data["name"] as? String ?: return@mapNotNull null
                 ModelPreset(
                     id = id,
