@@ -3,6 +3,13 @@ package com.example.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 import com.example.data.WorkshopRepository
 import com.example.model.AppThemeMode
 import com.example.model.CalendarType
@@ -18,8 +25,6 @@ import com.example.data.firebase.FirebaseUserDto
 import com.example.data.subscription.SubscriptionManager
 import com.example.model.UserSubscription
 import com.example.util.PersianUtils
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -93,7 +98,6 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isDrawerOpen = MutableStateFlow(false)
     val isAutoSyncing = MutableStateFlow(false)
     val autoSyncStatusMessage = MutableStateFlow<String?>(null)
-    private var autoUploadJob: Job? = null
 
     fun hasPremiumAccess(): Boolean {
         return SubscriptionManager.hasPremiumAccess()
@@ -752,21 +756,33 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun triggerAutoUpload() {
         if (currentUser.value == null) return
-        autoUploadJob?.cancel()
-        autoUploadJob = viewModelScope.launch {
-            delay(400)
-            try {
-                FirebaseService.uploadAllToCloud(
-                    orders = repository.getAllOrdersSync(),
-                    payments = repository.getAllPaymentsSync(),
-                    presets = repository.getAllPresetsSync(),
-                    unitRules = repository.getAllUnitRulesSync(),
-                    workshops = repository.getAllWorkshopsSync()
-                )
-            } catch (_: Exception) {
-                // Local Room is the durable source; a later trigger retries cloud sync.
-            }
-        }
+
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val request = OneTimeWorkRequestBuilder<com.example.data.sync.CloudSyncWorker>()
+            .setConstraints(constraints)
+            .setInitialDelay(400, TimeUnit.MILLISECONDS)
+            .setBackoffCriteria(
+                androidx.work.BackoffPolicy.EXPONENTIAL,
+                30,
+                TimeUnit.SECONDS
+            )
+            .build()
+
+        WorkManager.getInstance(repositoryContext())
+            .enqueueUniqueWork(
+                "khayyaton_cloud_sync",
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
+    }
+
+    private fun repositoryContext(): android.content.Context {
+        return repository.getApplicationContext()
+            ?: throw IllegalStateException("Application context is required for cloud sync")
+    }
     }
 }
 
