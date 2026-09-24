@@ -16,6 +16,47 @@ import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
 import androidx.room.withTransaction
 
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE workshops ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE furniture_orders ADD COLUMN workshopSyncId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE furniture_orders ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE payment_records ADD COLUMN workshopSyncId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE payment_records ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE model_presets ADD COLUMN workshopSyncId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE model_presets ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE unit_conversion_rules ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+
+        db.execSQL("UPDATE workshops SET syncId = 'legacy_workshop_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE furniture_orders SET syncId = 'legacy_order_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE payment_records SET syncId = 'legacy_payment_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE model_presets SET syncId = 'legacy_preset_' || id WHERE syncId = ''")
+        db.execSQL("UPDATE unit_conversion_rules SET syncId = 'legacy_rule_' || id WHERE syncId = ''")
+
+        db.execSQL("""
+            UPDATE furniture_orders
+            SET workshopSyncId = (
+                SELECT syncId FROM workshops WHERE workshops.id = furniture_orders.workshopId
+            )
+            WHERE workshopSyncId = ''
+        """.trimIndent())
+        db.execSQL("""
+            UPDATE payment_records
+            SET workshopSyncId = (
+                SELECT syncId FROM workshops WHERE workshops.id = payment_records.workshopId
+            )
+            WHERE workshopSyncId = ''
+        """.trimIndent())
+        db.execSQL("""
+            UPDATE model_presets
+            SET workshopSyncId = (
+                SELECT syncId FROM workshops WHERE workshops.id = model_presets.workshopId
+            )
+            WHERE workshopSyncId = ''
+        """.trimIndent())
+    }
+}
+
 val MIGRATION_5_6 = object : Migration(5, 6) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_workshops_createdAt ON workshops(createdAt)")
@@ -48,7 +89,7 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 
 @Database(
     entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -69,7 +110,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "khayyaton_workshop.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                 INSTANCE = instance
                 instance
