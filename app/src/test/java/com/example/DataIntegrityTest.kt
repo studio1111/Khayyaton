@@ -42,7 +42,7 @@ class DataIntegrityTest {
     }
 
     @Test
-    fun \`replaceAllData preserves IDs and workshop relationships\`() = runBlocking {
+    fun `replaceAllData preserves IDs and workshop relationships`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val (db, repo) = repository(context)
 
@@ -94,7 +94,7 @@ class DataIntegrityTest {
     }
 
     @Test
-    fun \`cloud merge keeps separate workshops when local numeric IDs collide\`() = runBlocking {
+    fun `cloud merge keeps separate workshops when local numeric IDs collide`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val (db, repo) = repository(context)
         try {
@@ -140,8 +140,52 @@ class DataIntegrityTest {
         }
     }
 
-    @Test
-    fun \`backup JSON contains full current data schema\`() {
+    @    @Test
+    fun `local deletion creates a cloud tombstone`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val (db, repo) = repository(context)
+        try {
+            val workshop = Workshop(id = 1L, name = "کارگاه", syncId = "workshop-delete-test")
+            val order = FurnitureOrder(
+                id = 10L,
+                syncId = "order-delete-test",
+                workshopId = 1L,
+                workshopSyncId = "workshop-delete-test",
+                orderNumber = 1L,
+                invoiceNumber = "1",
+                modelName = "مدل",
+                pricePerSet = 100L,
+                countFormula = "1",
+                calculatedUnits = 1.0,
+                calculatedTotal = 100L,
+                dateJalali = "1405/07/02",
+                dateGregorian = "2026-09-24",
+                customerName = "مشتری"
+            )
+            repo.replaceAllData(
+                workshops = listOf(workshop),
+                orders = listOf(order),
+                payments = emptyList(),
+                presets = emptyList(),
+                unitRules = emptyList()
+            )
+
+            repo.deleteOrderById(10L)
+
+            assertTrue(repo.getAllOrdersSync().isEmpty())
+            assertTrue(
+                repo.getPendingCloudDeletions().any {
+                    it.collection == "orders" && it.syncId == "order-delete-test"
+                }
+            )
+            repo.clearCloudDeletions(repo.getPendingCloudDeletions())
+        } finally {
+            db.close()
+        }
+    }
+
+Test
+    fun `backup JSON contains full current data schema`() {
         val order = FurnitureOrder(
             id = 1L,
             workshopId = 42L,
