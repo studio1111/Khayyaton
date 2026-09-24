@@ -493,6 +493,8 @@ object FirebaseService {
                                 deletion.syncId.removePrefix("pay_") == documentId
                             deletion.syncId.startsWith("pre_") && collection == "presets" ->
                                 deletion.syncId.removePrefix("pre_") == documentId
+                            deletion.syncId.startsWith("rule_") && collection == "unitRules" ->
+                                deletion.syncId.removePrefix("rule_") == documentId
                             else -> false
                         }
                 }
@@ -596,6 +598,7 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
+                if (isDeleted("unitRules", syncId, doc.id)) return@mapNotNull null
                 UnitConversionRule(
                     id = id,
                     syncId = syncId,
