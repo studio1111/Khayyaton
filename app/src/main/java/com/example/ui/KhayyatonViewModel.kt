@@ -165,7 +165,9 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 activeWorkshopId.value = if (saved > 0 && all.any { it.id == saved }) saved else all.firstOrNull()?.id ?: 0L
             }
 
-            if (changed && SubscriptionManager.hasPremiumAccess()) {
+            val shouldRestoreCloud = changed || !repository.getCloudSyncInitialized() || !repository.hasAnyDataSync()
+
+            if (shouldRestoreCloud && SubscriptionManager.hasPremiumAccess()) {
                 val restored = FirebaseService.downloadFromCloud(repository)
                 if (restored.isSuccess) {
                     val restoredWorkshops = restored.getOrNull()?.workshopsCount ?: 0
@@ -182,7 +184,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                     if (restoredActiveId > 0L) {
                         repository.saveActiveWorkshopId(restoredActiveId)
                     }
-                    if (restoredWorkshops > 0) {
+                    if (restoredWorkshops > 0 || restored.getOrNull()?.ordersCount ?: 0 > 0 || restored.getOrNull()?.paymentsCount ?: 0 > 0) {
                         repository.saveCloudSyncInitialized(true)
                     } else if (SubscriptionManager.hasPremiumAccess()) {
                         performAutoSync(user, shouldDownload = false)
