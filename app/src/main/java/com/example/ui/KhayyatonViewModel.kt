@@ -606,6 +606,25 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         selectedInvoiceFilter.value = null
     }
 
+    fun refreshAfterLocalRestore() {
+        viewModelScope.launch {
+            val restored = repository.getAllWorkshopsSync()
+            val saved = repository.getSavedActiveWorkshopId()
+            val next = when {
+                saved > 0L && restored.any { it.id == saved } -> saved
+                restored.isNotEmpty() -> restored.first().id
+                else -> 0L
+            }
+            activeWorkshopId.value = next
+            repository.saveActiveWorkshopId(next)
+            repository.deduplicatePresets()
+            repository.deduplicateOrders()
+            repository.deduplicatePayments()
+            repository.insertDefaultUnitRulesIfEmpty()
+            clearFilters()
+        }
+    }
+
     /**
      * Automatic sync and restore when a user enters email/signs in or registers.
      * Restores existing cloud data if available, then syncs local state to Firebase.
