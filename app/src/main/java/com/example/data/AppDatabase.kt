@@ -174,6 +174,12 @@ class WorkshopRepository(
         paymentDao.deletePaymentById(id)
     }
 
+    suspend fun hasAnyDataSync(): Boolean =
+        workshopDao.getAllWorkshopsSync().isNotEmpty() ||
+            orderDao.getAllOrdersSync().isNotEmpty() ||
+            paymentDao.getAllPaymentsSync().isNotEmpty() ||
+            modelPresetDao.getAllPresetsSync().isNotEmpty()
+
     suspend fun getAllOrdersSync(): List<FurnitureOrder> = orderDao.getAllOrdersSync()
     suspend fun getOrdersByWorkshopSync(workshopId: Long): List<FurnitureOrder> =
         orderDao.getOrdersByWorkshopSync(workshopId)
