@@ -670,7 +670,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             val currentOrders = repository.getAllOrdersSync()
             val currentPayments = repository.getAllPaymentsSync()
             val currentPresets = repository.getAllPresetsSync()
-            val currentUnitRules = repository.getAllRulesSync()
+            val currentUnitRules = repository.getAllUnitRulesSync()
             val currentWorkshops = repository.getAllWorkshopsSync()
 
             if (currentOrders.isNotEmpty() ||
