@@ -352,12 +352,16 @@ class WorkshopRepository(
     }
 
     suspend fun saveOrder(order: FurnitureOrder) {
-        if (order.id == 0L) {
-            val existing = orderDao.getOrdersByWorkshopSync(order.workshopId)
-            val normInv = com.example.util.PersianUtils.toEnglishDigits(order.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
-            val normCust = order.customerName.trim().lowercase(java.util.Locale.ROOT)
-            val normModel = order.modelName.trim().lowercase(java.util.Locale.ROOT)
-            val normDate = com.example.util.PersianUtils.toEnglishDigits(order.dateJalali.trim())
+        val workshopSyncId = order.workshopSyncId.ifBlank {
+            workshopDao.getWorkshopById(order.workshopId)?.syncId.orEmpty()
+        }
+        val normalizedOrder = order.copy(workshopSyncId = workshopSyncId)
+        if (normalizedOrder.id == 0L) {
+            val existing = orderDao.getOrdersByWorkshopSync(normalizedOrder.workshopId)
+            val normInv = com.example.util.PersianUtils.toEnglishDigits(normalizedOrder.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
+            val normCust = normalizedOrder.customerName.trim().lowercase(java.util.Locale.ROOT)
+            val normModel = normalizedOrder.modelName.trim().lowercase(java.util.Locale.ROOT)
+            val normDate = com.example.util.PersianUtils.toEnglishDigits(normalizedOrder.dateJalali.trim())
 
             val match = existing.find { ex ->
                 val exInv = com.example.util.PersianUtils.toEnglishDigits(ex.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
@@ -366,17 +370,17 @@ class WorkshopRepository(
                 val exDate = com.example.util.PersianUtils.toEnglishDigits(ex.dateJalali.trim())
 
                 (normInv.isNotBlank() && normInv != "0" && exInv == normInv) ||
-                (ex.orderNumber == order.orderNumber && (exCust == normCust || ex.createdAt == order.createdAt)) ||
-                (normCust.isNotBlank() && exCust == normCust && exModel == normModel && ex.calculatedTotal == order.calculatedTotal && exDate == normDate)
+                (ex.orderNumber == normalizedOrder.orderNumber && (exCust == normCust || ex.createdAt == normalizedOrder.createdAt)) ||
+                (normCust.isNotBlank() && exCust == normCust && exModel == normModel && ex.calculatedTotal == normalizedOrder.calculatedTotal && exDate == normDate)
             }
 
             if (match != null) {
-                orderDao.updateOrder(order.copy(id = match.id))
+                orderDao.updateOrder(normalizedOrder.copy(id = match.id))
             } else {
-                orderDao.insertOrder(order)
+                orderDao.insertOrder(normalizedOrder)
             }
         } else {
-            orderDao.updateOrder(order)
+            orderDao.updateOrder(normalizedOrder)
         }
     }
 
@@ -389,11 +393,21 @@ class WorkshopRepository(
     }
 
     suspend fun savePayment(payment: PaymentRecord) {
-        if (payment.id == 0L) {
-            val existing = paymentDao.getPaymentsByWorkshopSync(payment.workshopId)
-            val normRef = com.example.util.PersianUtils.toEnglishDigits(payment.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
-            val normCust = payment.customerName.trim().lowercase(java.util.Locale.ROOT)
-            val normDate = com.example.util.PersianUtils.toEnglishDigits(payment.dateJalali.trim())
+        val workshopSyncId = payment.workshopSyncId.ifBlank {
+            workshopDao.getWorkshopById(payment.workshopId)?.syncId.orEmpty()
+        }
+        val relatedOrderSyncId = payment.relatedOrderSyncId.ifBlank {
+            payment.relatedOrderId?.let { orderDao.getAllOrdersSync().firstOrNull { o -> o.id == it }?.syncId }.orEmpty()
+        }
+        val normalizedPayment = payment.copy(
+            workshopSyncId = workshopSyncId,
+            relatedOrderSyncId = relatedOrderSyncId
+        )
+        if (normalizedPayment.id == 0L) {
+            val existing = paymentDao.getPaymentsByWorkshopSync(normalizedPayment.workshopId)
+            val normRef = com.example.util.PersianUtils.toEnglishDigits(normalizedPayment.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
+            val normCust = normalizedPayment.customerName.trim().lowercase(java.util.Locale.ROOT)
+            val normDate = com.example.util.PersianUtils.toEnglishDigits(normalizedPayment.dateJalali.trim())
 
             val match = existing.find { ex ->
                 val exRef = com.example.util.PersianUtils.toEnglishDigits(ex.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
@@ -401,17 +415,17 @@ class WorkshopRepository(
                 val exDate = com.example.util.PersianUtils.toEnglishDigits(ex.dateJalali.trim())
 
                 (normRef.isNotBlank() && exRef == normRef) ||
-                (ex.paymentNumber == payment.paymentNumber && (exCust == normCust || ex.createdAt == payment.createdAt)) ||
-                (normCust.isNotBlank() && exCust == normCust && ex.amount == payment.amount && exDate == normDate)
+                (ex.paymentNumber == normalizedPayment.paymentNumber && (exCust == normCust || ex.createdAt == normalizedPayment.createdAt)) ||
+                (normCust.isNotBlank() && exCust == normCust && ex.amount == normalizedPayment.amount && exDate == normDate)
             }
 
             if (match != null) {
-                paymentDao.updatePayment(payment.copy(id = match.id))
+                paymentDao.updatePayment(normalizedPayment.copy(id = match.id))
             } else {
-                paymentDao.insertPayment(payment)
+                paymentDao.insertPayment(normalizedPayment)
             }
         } else {
-            paymentDao.updatePayment(payment)
+            paymentDao.updatePayment(normalizedPayment)
         }
     }
 
@@ -527,18 +541,22 @@ class WorkshopRepository(
     }
 
     suspend fun savePreset(preset: ModelPreset) {
+        val workshopSyncId = preset.workshopSyncId.ifBlank {
+            workshopDao.getWorkshopById(preset.workshopId)?.syncId.orEmpty()
+        }
+        val normalizedPreset = preset.copy(workshopSyncId = workshopSyncId)
         val trimmed = preset.name.trim()
         if (trimmed.isBlank()) return
-        val existing = modelPresetDao.getPresetByNameAndWorkshop(trimmed, preset.workshopId)
+        val existing = modelPresetDao.getPresetByNameAndWorkshop(trimmed, normalizedPreset.workshopId)
         if (existing != null) {
             modelPresetDao.updatePreset(
-                preset.copy(id = existing.id, name = trimmed)
+                normalizedPreset.copy(id = existing.id, name = trimmed)
             )
         } else {
             if (preset.id == 0L) {
-                modelPresetDao.insertPreset(preset.copy(name = trimmed))
+                modelPresetDao.insertPreset(normalizedPreset.copy(name = trimmed))
             } else {
-                modelPresetDao.updatePreset(preset.copy(name = trimmed))
+                modelPresetDao.updatePreset(normalizedPreset.copy(name = trimmed))
             }
         }
     }
