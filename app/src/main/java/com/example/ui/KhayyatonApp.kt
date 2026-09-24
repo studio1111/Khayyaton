@@ -385,6 +385,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                 unitRules = unitRules,
                 currencyUnit = currencyUnit,
                 repository = viewModel.repository,
+                onDataRestored = { viewModel.refreshAfterLocalRestore() },
                 onOpenFirebaseAuth = { viewModel.isAuthDialogOpen.value = true },
                 onDismiss = { viewModel.isBackupDialogOpen.value = false }
             )
