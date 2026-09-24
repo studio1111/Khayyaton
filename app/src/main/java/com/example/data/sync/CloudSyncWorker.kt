@@ -33,7 +33,8 @@ class CloudSyncWorker(
                 payments = repository.getAllPaymentsSync(),
                 presets = repository.getAllPresetsSync(),
                 unitRules = repository.getAllUnitRulesSync(),
-                workshops = repository.getAllWorkshopsSync()
+                workshops = repository.getAllWorkshopsSync(),
+                repository = repository
             )
 
             if (result.isSuccess) Result.success() else Result.retry()
