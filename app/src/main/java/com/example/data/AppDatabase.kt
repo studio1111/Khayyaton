@@ -13,6 +13,7 @@ import com.example.model.UnitConversionRule
 import com.example.model.Workshop
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
+import androidx.room.withTransaction
 
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -65,6 +66,7 @@ abstract class AppDatabase : RoomDatabase() {
 
 class WorkshopRepository(
     private val context: android.content.Context? = null,
+    private val database: AppDatabase,
     val orderDao: OrderDao,
     val paymentDao: PaymentDao,
     val modelPresetDao: ModelPresetDao,
@@ -77,6 +79,17 @@ class WorkshopRepository(
 
     fun getSavedActiveWorkshopId(): Long {
         return prefs?.getLong("active_workshop_id", -1L) ?: -1L
+    }
+
+    fun getLocalAccountUid(): String? =
+        prefs?.getString("local_account_uid", null)
+
+    fun saveLocalAccountUid(uid: String) {
+        prefs?.edit()?.putString("local_account_uid", uid)?.apply()
+    }
+
+    fun clearLocalAccountUid() {
+        prefs?.edit()?.remove("local_account_uid")?.apply()
     }
 
     fun saveActiveWorkshopId(id: Long) {
@@ -135,10 +148,49 @@ class WorkshopRepository(
     }
 
     suspend fun deleteWorkshopAndAllData(workshopId: Long) {
-        workshopDao.deleteOrdersByWorkshop(workshopId)
-        workshopDao.deletePaymentsByWorkshop(workshopId)
-        workshopDao.deletePresetsByWorkshop(workshopId)
-        workshopDao.deleteWorkshopById(workshopId)
+        database.withTransaction {
+            workshopDao.deleteOrdersByWorkshop(workshopId)
+            workshopDao.deletePaymentsByWorkshop(workshopId)
+            workshopDao.deletePresetsByWorkshop(workshopId)
+            workshopDao.deleteWorkshopById(workshopId)
+        }
+    }
+
+    suspend fun clearAllDomainData() {
+        database.withTransaction {
+            orderDao.clearAll()
+            paymentDao.clearAll()
+            modelPresetDao.clearAll()
+            unitRuleDao.clearAll()
+            workshopDao.clearAll()
+        }
+        saveActiveWorkshopId(0L)
+    }
+
+    suspend fun replaceAllData(
+        workshops: List<Workshop>,
+        orders: List<FurnitureOrder>,
+        payments: List<PaymentRecord>,
+        presets: List<ModelPreset>,
+        unitRules: List<UnitConversionRule>
+    ) {
+        database.withTransaction {
+            orderDao.clearAll()
+            paymentDao.clearAll()
+            modelPresetDao.clearAll()
+            unitRuleDao.clearAll()
+            workshopDao.clearAll()
+
+            if (workshops.isNotEmpty()) workshopDao.insertAll(workshops)
+            if (orders.isNotEmpty()) orderDao.insertAll(orders)
+            if (payments.isNotEmpty()) paymentDao.insertAll(payments)
+            if (presets.isNotEmpty()) modelPresetDao.insertAll(presets)
+            if (unitRules.isNotEmpty()) unitRuleDao.insertAll(unitRules)
+        }
+        val savedId = getSavedActiveWorkshopId()
+        if (savedId <= 0L || workshops.none { it.id == savedId }) {
+            saveActiveWorkshopId(workshops.firstOrNull()?.id ?: 0L)
+        }
     }
 
     suspend fun updateOrdersColorForModel(modelName: String, newColor: String, workshopId: Long) {
@@ -446,9 +498,6 @@ class WorkshopRepository(
     }
 
     suspend fun resetAllData() {
-        orderDao.clearAll()
-        paymentDao.clearAll()
-        modelPresetDao.clearAll()
-        unitRuleDao.clearAll()
+        clearAllDomainData()
     }
 }
