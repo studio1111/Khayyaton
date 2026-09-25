@@ -150,7 +150,6 @@ object BackupManager {
             file.writeText(jsonContent, Charsets.UTF_8)
             file
         } catch (e: Exception) {
-            e.printStackTrace()
             null
         }
     }
@@ -202,7 +201,6 @@ object BackupManager {
                 context.startActivity(Intent.createChooser(intent, chooserTitle))
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             Toast.makeText(context, "ایجاد فایل پشتیبان انجام نشد. لطفاً فضای ذخیره‌سازی و دسترسی برنامه را بررسی کنید.", Toast.LENGTH_LONG).show()
         }
     }
