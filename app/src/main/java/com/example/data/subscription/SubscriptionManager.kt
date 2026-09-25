@@ -199,6 +199,44 @@ object SubscriptionManager {
     }
 
     /**
+     * دوره آزمایشی ۳ روزه بر اساس زمان ایجاد حساب Firebase محاسبه می‌شود.
+     * این زمان از سمت سرویس احراز هویت می‌آید و قابل ویرایش از کلاینت نیست.
+     */
+    private fun applyAccountTrial(user: com.google.firebase.auth.FirebaseUser) {
+        val createdAt = user.metadata?.creationTimestamp ?: 0L
+        if (createdAt <= 0L) return
+
+        val now = System.currentTimeMillis()
+        val trialEndsAt = createdAt + 3L * 86_400_000L
+        val current = _subscriptionState.value
+
+        if (current.status == SubscriptionStatus.SUBSCRIBED && current.expiresAt?.let { it > now } == true) {
+            return
+        }
+
+        if (now < trialEndsAt) {
+            val trial = current.copy(
+                status = SubscriptionStatus.TRIAL_ACTIVE,
+                trialStartedAt = createdAt,
+                trialEndsAt = trialEndsAt,
+                trialUsed = true,
+                activeProductId = null,
+                expiresAt = null,
+                updatedAt = now
+            )
+            _subscriptionState.value = trial
+            cacheSubscription(trial)
+        } else if (current.status == SubscriptionStatus.TRIAL_ACTIVE) {
+            val expired = current.copy(
+                status = SubscriptionStatus.TRIAL_EXPIRED,
+                updatedAt = now
+            )
+            _subscriptionState.value = expired
+            cacheSubscription(expired)
+        }
+    }
+
+    /**
      * همگام‌سازی اطلاعات اشتراک و نسخه آزمایشی با فایربیس
      */
     fun syncSubscriptionWithFirebase(onComplete: ((Result<UserSubscription>) -> Unit)? = null) {
@@ -213,8 +251,9 @@ object SubscriptionManager {
             loadCachedSubscription(user.uid)
             _isLoading.value = true
             try {
-                // Firestore is intentionally not an entitlement authority.
-                // Premium access is based on locally verified Bazaar state.
+                // وضعیت اشتراک خریداری‌شده از کافه‌بازار و دوره آزمایشی از زمان
+                // ایجاد حساب Firebase تعیین می‌شوند؛ Firestore مرجع entitlement نیست.
+                applyAccountTrial(user)
                 refreshSubscriptionFromBazaar()
                 onComplete?.invoke(Result.success(_subscriptionState.value))
             } catch (_: Exception) {
