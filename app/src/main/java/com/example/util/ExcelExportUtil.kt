@@ -44,7 +44,7 @@ object ExcelExportUtil {
   val f=File(context.cacheDir,"khayyaton_analysis_"+System.currentTimeMillis()+".xlsx")
   val oh=listOf("ردیف","تاریخ","مدل مبل","واحد","دستمزد ("+currencyUnit+")","طرف حساب")
   val or=orders.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.modelName,x.calculatedUnits.toString(),x.calculatedTotal.toString(),x.customerName)}
-  val ph=listOf("ردیف","تاریخ","طرف حساب","دریافتی ("+u+")","نوع","پیگیری")
+  val ph=listOf("ردیف","تاریخ","طرف حساب","دریافتی ("+currencyUnit+")","نوع","پیگیری")
   val pr=payments.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.customerName,x.amount.toString(),x.paymentType,x.referenceNo)}
   write(f,listOf("تحلیل کارگاه" to sheet(oh,or,setOf(0,3,4)),"دریافتی‌ها" to sheet(ph,pr,setOf(0,3))));share(context,f,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","خروجی اکسل آنالیز کارگاه")
  }
