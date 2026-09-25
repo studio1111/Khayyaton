@@ -151,7 +151,7 @@ fun SubscriptionDialog(
                             ) {
                                 Icon(Icons.Outlined.Timer, contentDescription = null, tint = Amber600)
                                 Text(
-                                    text = "نسخه آزمایشی داخلی خیاطان ۳ روزه است. ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت دیگر تا پایان دوره باقی مانده است.",
+                                    text = "نسخه آزمایشی ۷ روزه خیاطان. ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت دیگر تا پایان دوره باقی مانده است.",
                                     fontSize = 11.sp,
                                     lineHeight = 18.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -279,7 +279,7 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Amber600.copy(alpha = 0.45f),
                 Icons.Outlined.Timer,
                 "نسخه آزمایشی داخلی خیاطان فعال است",
-                "دوره رایگان ۳ روزه از زمان ساخت حساب Firebase محاسبه می‌شود؛ ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت باقی مانده است"
+                "دوره آزمایشی ۷ روزه از زمان ساخت حساب Firebase محاسبه می‌شود؛ ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت باقی مانده است"
             )
         }
         SubscriptionStatus.TRIAL_EXPIRED -> {
