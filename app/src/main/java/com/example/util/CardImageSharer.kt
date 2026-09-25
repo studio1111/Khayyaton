@@ -658,7 +658,7 @@ object CardImageSharer {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "خطا در ذخیره تصویر: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "ذخیره تصویر انجام نشد. لطفاً فضای ذخیره‌سازی و دسترسی برنامه را بررسی کنید.", Toast.LENGTH_SHORT).show()
             false
         }
     }
@@ -697,7 +697,7 @@ object CardImageSharer {
             context.startActivity(chooser)
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "خطا در اشتراک‌گذاری تصویر: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "اشتراک‌گذاری تصویر انجام نشد. لطفاً دوباره تلاش کنید.", Toast.LENGTH_SHORT).show()
         }
     }
 }
