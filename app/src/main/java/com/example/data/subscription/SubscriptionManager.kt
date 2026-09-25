@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
 
 /**
- * مدیریت اشتراک‌های کافه‌بازار و دوره آزمایشی ۳ روزه خیاطان
+ * مدیریت اشتراک‌های کافه‌بازار و دوره آزمایشی ۷ روزه خیاطان
  *
  * کلید عمومی RSA بازار:
  */
@@ -44,7 +44,7 @@ object SubscriptionManager {
     private const val KEY_ACTIVE_PRODUCT_ID = "sub_active_product_id"
     private const val KEY_EXPIRES_AT = "sub_expires_at"
     private const val KEY_CACHED_UID = "sub_cached_uid"
-    private const val TRIAL_DURATION_MILLIS = 3L * 24L * 60L * 60L * 1000L
+    private const val TRIAL_DURATION_MILLIS = 7L * 24L * 60L * 60L * 1000L
 
     private val _subscriptionState = MutableStateFlow(UserSubscription())
     val subscriptionState: StateFlow<UserSubscription> = _subscriptionState.asStateFlow()
@@ -206,7 +206,7 @@ object SubscriptionManager {
     }
 
     /**
-     * دوره آزمایشی ۳ روزه بر اساس زمان ایجاد حساب Firebase محاسبه می‌شود.
+     * دوره آزمایشی ۷ روزه بر اساس زمان ایجاد حساب Firebase محاسبه می‌شود.
      * این زمان از سمت سرویس احراز هویت می‌آید و قابل ویرایش از کلاینت نیست.
      */
     private fun applyAccountTrial(user: com.google.firebase.auth.FirebaseUser) {
@@ -466,27 +466,13 @@ object SubscriptionManager {
         }
     }
 
-    /**
-     * بررسی واجدشرایط بودن کاربر برای Trial واقعی کافه‌بازار.
-     */
+    /** Trial داخلی خیاطان مستقل از Trial احتمالی کافه‌بازار است. */
     fun checkBazaarTrialAvailability() {
-        val p = payment ?: return
-        try {
-            p.checkTrialSubscription {
-                checkTrialSubscriptionSucceed { info ->
-                    _trialAvailable.value = info.isAvailable
-                    _trialPeriodDays.value = info.trialPeriodDays
-                }
-                checkTrialSubscriptionFailed {
-                    _trialAvailable.value = false
-                    _trialPeriodDays.value = 0
-                }
-            }
-        } catch (e: Exception) {
-            _trialAvailable.value = false
-            _trialPeriodDays.value = 0
-            if (BuildConfig.DEBUG) Log.w(TAG, "Error checking Bazaar trial", e)
-        }
+        val user = FirebaseAuth.getInstance().currentUser
+        val createdAt = user?.metadata?.creationTimestamp ?: 0L
+        val available = createdAt > 0L && System.currentTimeMillis() < createdAt + TRIAL_DURATION_MILLIS
+        _trialAvailable.value = available
+        _trialPeriodDays.value = if (available) 7 else 0
     }
 
     /**
