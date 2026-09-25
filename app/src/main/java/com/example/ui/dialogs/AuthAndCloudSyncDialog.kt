@@ -644,9 +644,9 @@ fun AuthAndCloudSyncDialog(
                                 isLoading = true
                                 coroutineScope.launch {
                                     val res = if (mode == AuthScreenMode.SIGN_IN) {
-                                        FirebaseService.signInWithEmail(email, password)
+                                        FirebaseService.signInWithEmail(email, password, dialogUsername.trim())
                                     } else {
-                                        FirebaseService.registerWithEmail(email, password)
+                                        FirebaseService.registerWithEmailAndUsername(dialogUsername.trim(), email, password)
                                     }
                                     isLoading = false
                                     if (res.isSuccess) {
@@ -660,7 +660,7 @@ fun AuthAndCloudSyncDialog(
                                         onUserChanged(user)
                                         successMessage = if (mode == AuthScreenMode.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد و وارد شدید."
                                     } else {
-                                        errorMessage = res.exceptionOrNull()?.message ?: "عملیات انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
+                                        errorMessage = res.exceptionOrNull()?.message ?: "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
                                     }
                                 }
                             },
