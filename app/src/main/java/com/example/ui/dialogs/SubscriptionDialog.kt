@@ -151,7 +151,7 @@ fun SubscriptionDialog(
                             ) {
                                 Icon(Icons.Outlined.Timer, contentDescription = null, tint = Amber600)
                                 Text(
-                                    text = "نسخه آزمایشی ۳ روزه شما فعال است. ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت دیگر تا پایان این دوره باقی مانده است.",
+                                    text = "نسخه آزمایشی داخلی خیاطان ۳ روزه است. ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت دیگر تا پایان دوره باقی مانده است.",
                                     fontSize = 11.sp,
                                     lineHeight = 18.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -161,7 +161,7 @@ fun SubscriptionDialog(
                     }
                     // Description text
                     Text(
-                        text = "طرح‌های اشتراک کافه‌بازار (پرداخت امن درون‌برنامه‌ای):",
+                        text = "اشتراک‌های کافه‌بازار (پرداخت امن درون‌برنامه‌ای):",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -278,8 +278,8 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Amber600.copy(alpha = 0.12f),
                 Amber600.copy(alpha = 0.45f),
                 Icons.Outlined.Timer,
-                "نسخه آزمایشی کافه‌بازار فعال است",
-                "${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت از دوره رایگان باقی مانده است"
+                "نسخه آزمایشی داخلی خیاطان فعال است",
+                "دوره رایگان ۳ روزه از زمان ساخت حساب Firebase محاسبه می‌شود؛ ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت باقی مانده است"
             )
         }
         SubscriptionStatus.TRIAL_EXPIRED -> {
