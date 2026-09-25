@@ -88,17 +88,23 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
     val coroutineScope = rememberCoroutineScope()
 
     val context = androidx.compose.ui.platform.LocalContext.current
-    val sharedPrefs = remember {
-        context.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
-    }
 
-    var hasCompletedFirstLaunchAuth by remember {
-        mutableStateOf(sharedPrefs.getBoolean("has_completed_first_auth", false))
-    }
-
-    // If user hasn't completed authentication with email/username and is not logged in, show GlassyAuthScreen (no offline skip)
-    if (!hasCompletedFirstLaunchAuth && currentUser == null) {
+    // احراز هویت واقعی Firebase مرجع وضعیت ورود است؛ پرچم محلی نباید ورود را دور بزند.
+    if (currentUser == null) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            KhayyatonTheme(themeMode = themeMode) {
+                GlassyAuthScreen(
+                    isFirstLaunch = true,
+                    onAuthSuccess = { user, username, workshopName ->
+                        viewModel.onUserLoggedIn(user, username, workshopName)
+                    }
+                )
+            }
+        }
+        return
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             KhayyatonTheme(themeMode = themeMode) {
                 GlassyAuthScreen(
                     isFirstLaunch = true,
