@@ -151,7 +151,7 @@ fun SubscriptionDialog(
                             ) {
                                 Icon(Icons.Outlined.Timer, contentDescription = null, tint = Amber600)
                                 Text(
-                                    text = "نسخه آزمایشی ۷ روزه خیاطان. ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت دیگر تا پایان دوره باقی مانده است.",
+                                    text = "نسخه آزمایشی ۷ روزه خیاطان",
                                     fontSize = 11.sp,
                                     lineHeight = 18.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
