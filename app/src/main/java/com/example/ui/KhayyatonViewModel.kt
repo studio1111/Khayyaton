@@ -699,6 +699,21 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
             performAutoSync(user, shouldDownload = shouldDownload)
 
+            // Always reconcile the active workshop after login/sync. The numeric
+            // Room ID may change after cloud restore or migration, so a stale saved
+            // ID must never leave the home cards filtered to a non-existent workshop.
+            val restoredWorkshops = repository.getAllWorkshopsSync()
+            val restoredSavedId = repository.getSavedActiveWorkshopId()
+            val resolvedActiveId = when {
+                restoredSavedId > 0L && restoredWorkshops.any { it.id == restoredSavedId } ->
+                    restoredSavedId
+                restoredWorkshops.isNotEmpty() ->
+                    restoredWorkshops.first().id
+                else -> 0L
+            }
+            activeWorkshopId.value = resolvedActiveId
+            repository.saveActiveWorkshopId(resolvedActiveId)
+
             // The workshop name entered during first registration is used only for
             // a genuinely new local/cloud account, never to rename an existing one.
             if (!workshopName.isNullOrBlank() &&
