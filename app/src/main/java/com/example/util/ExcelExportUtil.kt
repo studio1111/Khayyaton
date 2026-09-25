@@ -42,7 +42,7 @@ object ExcelExportUtil {
  }
  fun shareAnalysisExcel(context:Context,orders:List<FurnitureOrder>,payments:List<PaymentRecord>,currencyUnit:String){
   val f=File(context.cacheDir,"khayyaton_analysis_"+System.currentTimeMillis()+".xlsx")
-  val oh=listOf("ردیف","تاریخ","مدل مبل","واحد","دستمزد ("+u+")","طرف حساب")
+  val oh=listOf("ردیف","تاریخ","مدل مبل","واحد","دستمزد ("+currencyUnit+")","طرف حساب")
   val or=orders.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.modelName,x.calculatedUnits.toString(),x.calculatedTotal.toString(),x.customerName)}
   val ph=listOf("ردیف","تاریخ","طرف حساب","دریافتی ("+u+")","نوع","پیگیری")
   val pr=payments.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.customerName,x.amount.toString(),x.paymentType,x.referenceNo)}
