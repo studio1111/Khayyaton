@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Username lookup is intentionally limited to single-document reads.
+    // The client uses this before authentication during registration.
+    match /usernames/{username} {
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        ;
+
+      // Username ownership is permanent once claimed.
+      allow update, delete: if false;
+    }
+
+    match /users/{uid} {
+      allow read, create, update: if isOwner(uid);
+      allow delete: if false;
+
+      match /workshops/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /orders/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /payments/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /presets/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /unitRules/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /deletions/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Subscription entitlement is server-controlled.
+      match /subscription/{docId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+    }
+  }
+}
