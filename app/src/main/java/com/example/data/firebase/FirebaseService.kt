@@ -172,12 +172,6 @@ object FirebaseService {
             return Result.failure(Exception("نام کاربری باید ۳ تا ۳۲ نویسه و فقط شامل حروف، اعداد، نقطه، خط تیره یا زیرخط باشد."))
         }
 
-        // Fast availability check for UX. The transaction below is the actual
-        // uniqueness guarantee, so two simultaneous signups cannot claim one name.
-        if (!isUsernameAvailable(normalizedUsername)) {
-            return Result.failure(Exception("این نام کاربری قبلاً استفاده شده است یا فعلاً قابل بررسی نیست."))
-        }
-
         return try {
             val result = fbAuth.createUserWithEmailAndPassword(email.trim(), pass).await()
             val user = result.user ?: return Result.failure(Exception("ثبت‌نام ناموفق بود."))
