@@ -14,7 +14,7 @@ service cloud.firestore {
     // Username lookup is intentionally limited to single-document reads.
     // The client uses this before authentication during registration.
     match /usernames/{username} {
-      allow get: if true;
+      allow get: if signedIn();
       allow list: if false;
 
       allow create: if signedIn()
