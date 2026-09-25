@@ -161,7 +161,7 @@ fun SubscriptionDialog(
                     }
                     // Description text
                     Text(
-                        text = "اشتراک‌های کافه‌بازار (پرداخت امن درون‌برنامه‌ای):",
+                        text = "اشتراک‌های برنامه (پرداخت امن درون‌برنامه‌ای):",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -287,7 +287,7 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Rose600.copy(alpha = 0.12f),
                 Rose600.copy(alpha = 0.45f),
                 Icons.Outlined.Warning,
-                "دوره آزمایشی کافه‌بازار به پایان رسیده است",
+                "نسخه آزمایشی ۷ روزه خیاطان به پایان رسیده است",
                 "برای ثبت فاکتور و ادامه استفاده از برنامه، لطفاً یکی از بسته‌های اشتراک را فعال کنید."
             )
         }
