@@ -87,13 +87,20 @@ fun OrderCard(
                     )
                 }
 
-                // Small model color dot/indicator
                 Box(
                     modifier = Modifier
-                        .size(10.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(Color.White.copy(alpha = 0.8f))
-                )
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(7.dp))
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "کارکرد",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
             }
 
             // ROW 1: [مدل مبل] (Right) | [دستمزد هر دست] (Left)
