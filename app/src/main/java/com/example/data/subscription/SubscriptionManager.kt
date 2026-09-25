@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.tasks.await
 
 /**
  * مدیریت اشتراک‌های کافه‌بازار و دوره آزمایشی ۳ روزه خیاطان
@@ -58,6 +59,9 @@ object SubscriptionManager {
 
     private val _trialPeriodDays = MutableStateFlow(0)
     val trialPeriodDays: StateFlow<Int> = _trialPeriodDays.asStateFlow()
+
+    private val _ownerAccess = MutableStateFlow(false)
+    val ownerAccess: StateFlow<Boolean> = _ownerAccess.asStateFlow()
 
     private var payment: Payment? = null
     private var paymentConnection: Connection? = null
@@ -195,6 +199,7 @@ object SubscriptionManager {
             apply()
         }
         _subscriptionState.value = UserSubscription()
+        _ownerAccess.value = false
         _trialAvailable.value = false
         _trialPeriodDays.value = 0
     }
@@ -238,6 +243,52 @@ object SubscriptionManager {
     }
 
     /**
+     * مالک فقط از طریق Firebase Authentication Custom Claims قابل فعال شدن است.
+     * هیچ فیلد قابل ویرایش در Firestore یا حافظه محلی نقش مالک را تعیین نمی‌کند.
+     * پشتیبانی از هر دو نام claim برای مهاجرت امن: role=owner یا admin=true.
+     */
+    private suspend fun refreshOwnerClaim(user: com.google.firebase.auth.FirebaseUser): Boolean {
+        return try {
+            val token = user.getIdToken(false).await()
+            val claims = token.claims
+            val owner = claims["role"] == "owner" || claims["admin"] == true
+            _ownerAccess.value = owner
+            owner
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Could not read Firebase owner claim", e)
+            _ownerAccess.value = false
+            false
+        }
+    }
+
+    /**
+     * وضعیت مالک را مجبور به تازه‌سازی می‌کند. برای تغییر claim در Firebase
+     * یک بار getIdToken(true) لازم است تا توکن جدید دریافت شود.
+     */
+    suspend fun refreshOwnerAccess(): Boolean {
+        val user = FirebaseAuth.getInstance().currentUser ?: run {
+            _ownerAccess.value = false
+            return false
+        }
+        return try {
+            val token = user.getIdToken(true).await()
+            val claims = token.claims
+            val owner = claims["role"] == "owner" || claims["admin"] == true
+            _ownerAccess.value = owner
+            if (owner) {
+                val granted = UserSubscription(status = SubscriptionStatus.ADMIN_GRANTED, updatedAt = System.currentTimeMillis())
+                _subscriptionState.value = granted
+                cacheSubscription(granted)
+            }
+            owner
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Could not force-refresh Firebase owner claim", e)
+            _ownerAccess.value = false
+            false
+        }
+    }
+
+    /**
      * همگام‌سازی اطلاعات اشتراک و نسخه آزمایشی با فایربیس
      */
     fun syncSubscriptionWithFirebase(onComplete: ((Result<UserSubscription>) -> Unit)? = null) {
@@ -252,6 +303,17 @@ object SubscriptionManager {
             loadCachedSubscription(user.uid)
             _isLoading.value = true
             try {
+                if (refreshOwnerClaim(user)) {
+                    val ownerSubscription = UserSubscription(
+                        status = SubscriptionStatus.ADMIN_GRANTED,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    _subscriptionState.value = ownerSubscription
+                    cacheSubscription(ownerSubscription)
+                    onComplete?.invoke(Result.success(ownerSubscription))
+                    return@launch
+                }
+
                 // وضعیت اشتراک خریداری‌شده از کافه‌بازار و دوره آزمایشی از زمان
                 // ایجاد حساب Firebase تعیین می‌شوند؛ Firestore مرجع entitlement نیست.
                 applyAccountTrial(user)
@@ -430,6 +492,7 @@ object SubscriptionManager {
      * وضعیت اشتراک از خود کافه‌بازار دوباره خوانده می‌شود.
      */
     fun refreshSubscriptionFromBazaar() {
+        if (_ownerAccess.value) return
         val p = payment ?: return
         try {
             p.getSubscribedProducts {
