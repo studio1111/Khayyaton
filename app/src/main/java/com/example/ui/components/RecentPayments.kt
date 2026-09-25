@@ -170,7 +170,7 @@ fun PaymentCardItem(
     }
 
     Surface(
-        color = CardOuterDarkBg,
+        color = PaymentCardBg,
         shape = RoundedCornerShape(24.dp),
         border = androidx.compose.foundation.BorderStroke(2.5.dp, PaymentGoldBorder),
         shadowElevation = 4.dp,
