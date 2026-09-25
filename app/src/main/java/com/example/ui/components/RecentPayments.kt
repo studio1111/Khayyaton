@@ -22,13 +22,14 @@ import com.example.model.PaymentRecord
 import com.example.ui.theme.Emerald600
 import com.example.util.PersianUtils
 
-private val CardOuterDarkBg = Color(0xFF131826)
-private val CardCellDarkBg = Color(0xFF1B2134)
-private val CardCellBorder = Color(0xFF2B334D)
-private val CardGoldBorder = Color(0xFFD4A017)
-private val LabelGrayText = Color(0xFF9AA4BF)
-private val ValueWhiteText = Color(0xFFF1F5F9)
-private val EditButtonGreen = Color(0xFF107C41)
+private val PaymentCardBg = Color(0xFF10271D)
+private val PaymentCellBg = Color(0xFF163A29)
+private val PaymentCellBorder = Color(0xFF2E6B4A)
+private val PaymentGoldBorder = Color(0xFFFFC107)
+private val PaymentNeonGreen = Color(0xFF39FF88)
+private val LabelGrayText = Color(0xFFB8D8C6)
+private val ValueWhiteText = Color(0xFFF3FFF7)
+private val EditButtonGreen = Color(0xFF159447)
 private val DeleteButtonRed = Color(0xFFA82828)
 private val ShareButtonBlue = Color(0xFF1D4ED8)
 
@@ -110,9 +111,9 @@ fun RecentPayments(
         // Empty state or list of payment cards
         if (payments.isEmpty()) {
             Surface(
-                color = CardOuterDarkBg,
+                color = PaymentCardBg,
                 shape = RoundedCornerShape(18.dp),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, CardGoldBorder),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, PaymentGoldBorder),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Box(
@@ -171,7 +172,7 @@ fun PaymentCardItem(
     Surface(
         color = CardOuterDarkBg,
         shape = RoundedCornerShape(24.dp),
-        border = androidx.compose.foundation.BorderStroke(2.5.dp, CardGoldBorder),
+        border = androidx.compose.foundation.BorderStroke(2.5.dp, PaymentGoldBorder),
         shadowElevation = 4.dp,
         modifier = modifier
             .fillMaxWidth()
@@ -216,7 +217,7 @@ fun PaymentCardItem(
                 ) {
                     Text(
                         text = "دریافتی",
-                        color = Emerald600,
+                        color = PaymentNeonGreen,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -499,9 +500,9 @@ private fun PaymentCell(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
-        color = CardCellDarkBg,
+        color = PaymentCellBg,
         shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, CardCellBorder),
+        border = androidx.compose.foundation.BorderStroke(1.dp, PaymentCellBorder),
         modifier = modifier
     ) {
         Column(
