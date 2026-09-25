@@ -4,6 +4,10 @@ on:
   push:
     branches: [ main ]
 
+concurrency:
+  group: khayyaton-production-release
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -18,9 +22,6 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Create .env file
-        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
       - name: Decode Khayyaton keystore
         run: echo "${{ secrets.KHAYYATON_KEYSTORE_BASE64 }}" | base64 -d > khayyaton.jks
