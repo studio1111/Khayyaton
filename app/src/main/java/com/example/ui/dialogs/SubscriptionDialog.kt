@@ -47,8 +47,6 @@ fun SubscriptionDialog(
     val subscription by SubscriptionManager.subscriptionState.collectAsStateWithLifecycle()
     val isLoading by SubscriptionManager.isLoading.collectAsStateWithLifecycle()
     val operationMessage by SubscriptionManager.operationMessage.collectAsStateWithLifecycle()
-    val trialAvailable by SubscriptionManager.trialAvailable.collectAsStateWithLifecycle()
-    val trialPeriodDays by SubscriptionManager.trialPeriodDays.collectAsStateWithLifecycle()
 
     LaunchedEffect(operationMessage) {
         operationMessage?.let { msg ->
@@ -133,8 +131,8 @@ fun SubscriptionDialog(
                     // Status Card
                     SubscriptionStatusBanner(subscription = subscription)
 
-                    // Trial status from Cafe Bazaar, not a locally fabricated trial.
-                    if (trialAvailable && trialPeriodDays > 0) {
+                    // نمایش وضعیت Trial واقعی حساب کاربری
+                    if (subscription.status == SubscriptionStatus.TRIAL_ACTIVE) {
                         Card(
                             shape = RoundedCornerShape(14.dp),
                             colors = CardDefaults.cardColors(
@@ -153,7 +151,7 @@ fun SubscriptionDialog(
                             ) {
                                 Icon(Icons.Outlined.Timer, contentDescription = null, tint = Amber600)
                                 Text(
-                                    text = "شما واجد شرایط ${PersianUtils.toPersianDigits(trialPeriodDays)} روز دوره آزمایشی کافه‌بازار هستید. در صورت تأیید بازار هنگام خرید، دوره آزمایشی روی همان اشتراک اعمال می‌شود.",
+                                    text = "نسخه آزمایشی ۳ روزه شما فعال است. ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت دیگر تا پایان این دوره باقی مانده است.",
                                     fontSize = 11.sp,
                                     lineHeight = 18.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -161,7 +159,6 @@ fun SubscriptionDialog(
                             }
                         }
                     }
-
                     // Description text
                     Text(
                         text = "طرح‌های اشتراک کافه‌بازار (پرداخت امن درون‌برنامه‌ای):",
