@@ -556,8 +556,10 @@ class WorkshopRepository(
         for (preset in all) {
             val key = "${preset.workshopId}_${preset.name.trim().lowercase(java.util.Locale.ROOT)}"
             if (preset.name.trim().isBlank()) {
+                if (getLocalAccountUid() != null) recordCloudDeletion("presets", preset.syncId)
                 modelPresetDao.deletePreset(preset)
             } else if (key in seen) {
+                if (getLocalAccountUid() != null) recordCloudDeletion("presets", preset.syncId)
                 modelPresetDao.deletePreset(preset)
             } else {
                 seen.add(key)
@@ -597,6 +599,7 @@ class WorkshopRepository(
             }
         }
         for (ord in toDelete) {
+            if (getLocalAccountUid() != null) recordCloudDeletion("orders", ord.syncId)
             orderDao.deleteOrder(ord)
         }
     }
@@ -632,6 +635,7 @@ class WorkshopRepository(
             }
         }
         for (pay in toDelete) {
+            if (getLocalAccountUid() != null) recordCloudDeletion("payments", pay.syncId)
             paymentDao.deletePayment(pay)
         }
     }
