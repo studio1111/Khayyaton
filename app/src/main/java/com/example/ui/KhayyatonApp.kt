@@ -145,7 +145,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                     } else {
                         val accessMessage = when (subscriptionState.status) {
                             com.example.model.SubscriptionStatus.TRIAL_EXPIRED ->
-                                "دوره آزمایشی ۳ روزه شما به پایان رسیده است. لطفاً برای ادامه استفاده از امکانات، اشتراک تهیه فرمایید."
+                                "دوره آزمایشی ۷ روزه خیاطان شما به پایان رسیده است. لطفاً برای ادامه استفاده از امکانات، اشتراک تهیه فرمایید."
                             com.example.model.SubscriptionStatus.EXPIRED ->
                                 "اشتراک شما منقضی شده است. لطفاً برای ادامه استفاده از امکانات، اشتراک خود را تمدید یا اشتراک جدید تهیه فرمایید."
                             else ->
