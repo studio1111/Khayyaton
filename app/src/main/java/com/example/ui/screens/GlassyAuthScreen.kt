@@ -514,7 +514,7 @@ fun GlassyAuthScreen(
                                     if (res.isSuccess) {
                                         successMessage = "لینک بازیابی رمز عبور به ایمیل شما ارسال گردید."
                                     } else {
-                                        errorMessage = res.exceptionOrNull()?.message ?: "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
+                                        errorMessage = "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
                                     }
                                 }
                                 return@Button
