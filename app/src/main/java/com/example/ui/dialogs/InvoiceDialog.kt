@@ -49,9 +49,15 @@ fun InvoiceDialog(
     val context = LocalContext.current
     val displayOrders = if (selectedOrder != null) listOf(selectedOrder) else orders
     val targetCustomer = selectedOrder?.customerName ?: ""
+    // مشتری فاکتور و پرداخت‌کننده مستقل هستند؛ ارتباط سند با فاکتور فقط با relatedOrderId است.
     val customerPayments = if (selectedOrder != null) {
-        payments.filter { it.customerName == selectedOrder.customerName || it.relatedOrderId == selectedOrder.id }
+        payments.filter { it.relatedOrderId == selectedOrder.id }
     } else payments
+
+    val lastPayer = customerPayments.asSequence()
+        .sortedByDescending { it.createdAt }
+        .map { it.customerName.trim() }
+        .firstOrNull { it.isNotBlank() } ?: ""
 
     val totalWork = displayOrders.sumOf { it.calculatedTotal }
     val totalPaid = customerPayments.sumOf { it.amount }
@@ -238,7 +244,7 @@ fun InvoiceDialog(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (targetCustomer.isNotBlank()) "پرداخت‌کننده: $targetCustomer" else "مجموع فاکتور های کارکرد و دریافتی",
+                                    text = if (lastPayer.isNotBlank()) "پرداخت‌کننده: $lastPayer" else "پرداخت‌کننده: ثبت نشده",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Black,
                                     color = MaterialTheme.colorScheme.primary
