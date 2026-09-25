@@ -3,6 +3,12 @@ package com.example.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 import com.example.data.WorkshopRepository
 import com.example.model.AppThemeMode
 import com.example.model.CalendarType
@@ -99,38 +105,66 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     init {
         viewModelScope.launch {
             val savedUser = repository.getCustomUsername()
-            if (savedUser.isNotBlank()) {
-                customUsername.value = savedUser
-            }
+            if (savedUser.isNotBlank()) customUsername.value = savedUser
 
-            repository.getSavedThemeMode()?.let { saved ->
-                runCatching { AppThemeMode.valueOf(saved) }.getOrNull()?.let { themeMode.value = it }
-            }
             val savedWsId = repository.getSavedActiveWorkshopId()
             val allWorkshops = repository.getAllWorkshopsSync()
             activeWorkshopId.value =
-                if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) savedWsId
-                else allWorkshops.firstOrNull()?.id ?: 0L
-            if (activeWorkshopId.value > 0L) repository.saveActiveWorkshopId(activeWorkshopId.value)
+                if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) {
+                    savedWsId
+                } else {
+                    allWorkshops.firstOrNull()?.id ?: 0L
+                }
+            repository.saveActiveWorkshopId(activeWorkshopId.value)
+
             repository.deduplicatePresets()
             repository.deduplicateOrders()
             repository.deduplicatePayments()
+            repository.insertDefaultUnitRulesIfEmpty()
+
+            repository.getSavedThemeMode()?.let {
+                runCatching { AppThemeMode.valueOf(it) }.getOrNull()?.let { mode -> themeMode.value = mode }
+            }
+            runCatching { CardDisplayMode.valueOf(repository.getSavedCardDisplayMode()) }
+                .getOrNull()?.let { cardDisplayMode.value = it }
+            runCatching { CardSortOrder.valueOf(repository.getSavedCardSortOrder()) }
+                .getOrNull()?.let { cardSortOrder.value = it }
+            runCatching { CalendarType.valueOf(repository.getSavedCalendarType()) }
+                .getOrNull()?.let { calendarType.value = it }
+            currencyUnit.value = repository.getSavedCurrencyUnit()
 
             val user = FirebaseService.getCurrentUser()
             currentUser.value = user
             SubscriptionManager.syncSubscriptionWithFirebase()
+
             if (user != null) {
-                if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
-                    customUsername.value = user.displayName
-                    repository.saveCustomUsername(user.displayName)
+                val localUid = repository.getLocalAccountUid()
+                val switchingUser = localUid != null && localUid != user.uid
+
+                if (switchingUser) {
+                    repository.clearAllDomainData()
+                    repository.clearLocalAccountUid()
+                    customUsername.value = ""
+                    activeWorkshopId.value = 0L
+                    repository.saveActiveWorkshopId(0L)
                 }
+
+                val currentWorkshops = repository.getAllWorkshopsSync()
                 val localOrders = repository.getAllOrdersSync()
                 val localPayments = repository.getAllPaymentsSync()
-                // If local data already exists, DO NOT restore duplicates from cloud!
-                if (localOrders.isEmpty() && localPayments.isEmpty()) {
+                val localPresets = repository.getAllPresetsSync()
+
+                repository.saveLocalAccountUid(user.uid)
+
+                if (switchingUser || (localUid == null && localOrders.isEmpty() && localPayments.isEmpty() && localPresets.isEmpty() && currentWorkshops.isEmpty())) {
                     performAutoSync(user, shouldDownload = true)
                 } else {
                     performAutoSync(user, shouldDownload = false)
+                }
+
+                if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
+                    customUsername.value = user.displayName
+                    repository.saveCustomUsername(user.displayName)
                 }
             }
         }
@@ -390,13 +424,22 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 createdAt = System.currentTimeMillis()
             )
             repository.saveOrder(duplicated)
+            triggerAutoUpload()
         }
     }
 
     fun saveOrder(order: FurnitureOrder, addToPresets: Boolean) {
         viewModelScope.launch {
             val wsId = activeWorkshopId.value
-            val orderToSave = if (order.workshopId <= 0L) order.copy(workshopId = wsId) else order
+            if (wsId <= 0L) return@launch
+
+            // New records always belong to the currently selected workshop.
+            // Existing records retain their own workshop unless it was invalid.
+            val orderToSave = when {
+                order.id == 0L -> order.copy(workshopId = wsId)
+                order.workshopId <= 0L -> order.copy(workshopId = wsId)
+                else -> order
+            }
             repository.saveOrder(orderToSave)
             if (addToPresets && orderToSave.modelName.isNotBlank()) {
                 val trimmedName = orderToSave.modelName.trim()
@@ -443,7 +486,8 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun savePayment(payment: PaymentRecord) {
         viewModelScope.launch {
             val wsId = activeWorkshopId.value
-            val paymentToSave = if (payment.workshopId <= 0L) payment.copy(workshopId = wsId) else payment
+            if (wsId <= 0L) return@launch
+            val paymentToSave = if (payment.id == 0L || payment.workshopId <= 0L) payment.copy(workshopId = wsId) else payment
             repository.savePayment(paymentToSave)
             isPaymentDialogOpen.value = false
             editingPayment.value = null
@@ -510,11 +554,9 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
     fun deleteWorkshop(workshop: com.example.model.Workshop) {
         viewModelScope.launch {
-            val all = repository.getAllWorkshopsSync()
-            if (all.size <= 1) return@launch
             repository.deleteWorkshopAndAllData(workshop.id)
             val remaining = repository.getAllWorkshopsSync()
-            val nextActive = remaining.firstOrNull()?.id ?: 1L
+            val nextActive = remaining.firstOrNull()?.id ?: 0L
             activeWorkshopId.value = nextActive
             repository.saveActiveWorkshopId(nextActive)
             clearFilters()
@@ -525,6 +567,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun saveUnitRule(rule: com.example.model.UnitConversionRule) {
         viewModelScope.launch {
             repository.saveUnitRule(rule)
+            triggerAutoUpload()
         }
     }
 
@@ -538,12 +581,34 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun restoreDefaultUnitRules() {
         viewModelScope.launch {
             repository.restoreDefaultUnitRules()
+            triggerAutoUpload()
         }
+    }
+
+    fun changeTheme(newMode: AppThemeMode) {
+        themeMode.value = newMode
+        repository.saveThemeMode(newMode.name)
     }
 
     fun changeCurrency(newUnit: String) {
         if (newUnit == currencyUnit.value) return
         currencyUnit.value = newUnit
+        repository.saveCurrencyUnit(newUnit)
+    }
+
+    fun changeCalendarType(newType: CalendarType) {
+        calendarType.value = newType
+        repository.saveCalendarType(newType.name)
+    }
+
+    fun changeCardDisplayMode(mode: CardDisplayMode) {
+        cardDisplayMode.value = mode
+        repository.saveCardDisplayMode(mode.name)
+    }
+
+    fun changeCardSortOrder(order: CardSortOrder) {
+        cardSortOrder.value = order
+        repository.saveCardSortOrder(order.name)
     }
 
     fun clearFilters() {
@@ -554,6 +619,25 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         selectedInvoiceFilter.value = null
     }
 
+    fun refreshAfterLocalRestore() {
+        viewModelScope.launch {
+            val restored = repository.getAllWorkshopsSync()
+            val saved = repository.getSavedActiveWorkshopId()
+            val next = when {
+                saved > 0L && restored.any { it.id == saved } -> saved
+                restored.isNotEmpty() -> restored.first().id
+                else -> 0L
+            }
+            activeWorkshopId.value = next
+            repository.saveActiveWorkshopId(next)
+            repository.deduplicatePresets()
+            repository.deduplicateOrders()
+            repository.deduplicatePayments()
+            repository.insertDefaultUnitRulesIfEmpty()
+            clearFilters()
+        }
+    }
+
     /**
      * Automatic sync and restore when a user enters email/signs in or registers.
      * Restores existing cloud data if available, then syncs local state to Firebase.
@@ -561,16 +645,83 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
         currentUser.value = user
         SubscriptionManager.syncSubscriptionWithFirebase()
-        val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
-            ?: customUsername.value.takeIf { it.isNotBlank() }
-            ?: user.displayName?.takeIf { it.isNotBlank() }
-        if (!chosenName.isNullOrBlank()) {
-            updateCustomUsername(chosenName)
-        }
+        SubscriptionManager.refreshSubscriptionFromBazaar()
 
         viewModelScope.launch {
-            val shouldDownload = !repository.getCloudSyncInitialized()
+            val previousUid = repository.getLocalAccountUid()
+            val switchingUser = previousUid != null && previousUid != user.uid
+
+            if (switchingUser) {
+                repository.clearAllDomainData()
+                repository.clearLocalAccountUid()
+                repository.saveActiveWorkshopId(0L)
+                activeWorkshopId.value = 0L
+                customUsername.value = ""
+                clearFilters()
+            }
+
+            repository.saveLocalAccountUid(user.uid)
+
+            val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
+                ?: customUsername.value.takeIf { it.isNotBlank() }
+                ?: user.displayName?.takeIf { it.isNotBlank() }
+            if (!chosenName.isNullOrBlank()) {
+                updateCustomUsername(chosenName)
+            }
+
+            val localOrders = repository.getAllOrdersSync()
+            val localPayments = repository.getAllPaymentsSync()
+            val localPresets = repository.getAllPresetsSync()
+            val localWorkshops = repository.getAllWorkshopsSync()
+            val savedWorkshopId = repository.getSavedActiveWorkshopId()
+
+            // Treat an empty/incomplete local database as a restore case even when
+            // SharedPreferences still contains the same UID. This is important after
+            // an app update/migration where the account marker can survive while Room
+            // data or the saved active-workshop ID does not.
+            //
+            // Never upload first in this state: uploading an empty/default local
+            // snapshot could mask the real cloud account data.
+            val localDomainIsEmpty =
+                localWorkshops.isEmpty() &&
+                    localOrders.isEmpty() &&
+                    localPayments.isEmpty() &&
+                    localPresets.isEmpty()
+
+            val activeWorkshopIsInvalid =
+                savedWorkshopId > 0L && localWorkshops.none { it.id == savedWorkshopId }
+
+            val shouldDownload =
+                switchingUser ||
+                    previousUid == null ||
+                    localDomainIsEmpty ||
+                    activeWorkshopIsInvalid
+
             performAutoSync(user, shouldDownload = shouldDownload)
+
+            // Always reconcile the active workshop after login/sync. The numeric
+            // Room ID may change after cloud restore or migration, so a stale saved
+            // ID must never leave the home cards filtered to a non-existent workshop.
+            val restoredWorkshops = repository.getAllWorkshopsSync()
+            val restoredSavedId = repository.getSavedActiveWorkshopId()
+            val resolvedActiveId = when {
+                restoredSavedId > 0L && restoredWorkshops.any { it.id == restoredSavedId } ->
+                    restoredSavedId
+                restoredWorkshops.isNotEmpty() ->
+                    restoredWorkshops.first().id
+                else -> 0L
+            }
+            activeWorkshopId.value = resolvedActiveId
+            repository.saveActiveWorkshopId(resolvedActiveId)
+
+            // The workshop name entered during first registration is used only for
+            // a genuinely new local/cloud account, never to rename an existing one.
+            if (!workshopName.isNullOrBlank() &&
+                localWorkshops.isEmpty() &&
+                repository.getAllWorkshopsSync().isEmpty()
+            ) {
+                createWorkshop(workshopName.trim())
+            }
         }
     }
 
@@ -578,6 +729,18 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         FirebaseService.signOut()
         currentUser.value = null
         autoSyncStatusMessage.value = null
+        SubscriptionManager.clearCachedUserState()
+
+        // Never leave one account's cards/workshops visible after logout.
+        // The next login restores that account from Firebase.
+        viewModelScope.launch {
+            repository.clearAllDomainData()
+            repository.clearLocalAccountUid()
+            repository.saveActiveWorkshopId(0L)
+            activeWorkshopId.value = 0L
+            customUsername.value = ""
+            clearFilters()
+        }
     }
 
     private suspend fun performAutoSync(user: FirebaseUserDto, shouldDownload: Boolean = false) {
@@ -585,28 +748,46 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         try {
             if (shouldDownload) {
                 val downloadRes = FirebaseService.downloadFromCloud(repository)
-                if (downloadRes.isSuccess) {
-                    autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
+                if (downloadRes.isFailure) {
+                    autoSyncStatusMessage.value = "بازیابی ابری انجام نشد؛ اطلاعات محلی دست‌نخورده باقی ماند."
+                    return
                 }
+
+                val restoredWorkshops = repository.getAllWorkshopsSync()
+                val savedId = repository.getSavedActiveWorkshopId()
+                val restoredActiveId = when {
+                    savedId > 0L && restoredWorkshops.any { it.id == savedId } -> savedId
+                    restoredWorkshops.isNotEmpty() -> restoredWorkshops.first().id
+                    else -> 0L
+                }
+                activeWorkshopId.value = restoredActiveId
+                repository.saveActiveWorkshopId(restoredActiveId)
+                repository.insertDefaultUnitRulesIfEmpty()
+                autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
             }
 
             val currentOrders = repository.getAllOrdersSync()
             val currentPayments = repository.getAllPaymentsSync()
             val currentPresets = repository.getAllPresetsSync()
-            val currentUnitRules = unitRules.value
+            val currentUnitRules = repository.getAllUnitRulesSync()
             val currentWorkshops = repository.getAllWorkshopsSync()
 
-            if (currentOrders.isNotEmpty() || currentPayments.isNotEmpty() || currentPresets.isNotEmpty()) {
+            if (currentOrders.isNotEmpty() ||
+                currentPayments.isNotEmpty() ||
+                currentPresets.isNotEmpty() ||
+                currentUnitRules.isNotEmpty() ||
+                currentWorkshops.isNotEmpty()
+            ) {
                 FirebaseService.uploadAllToCloud(
                     orders = currentOrders,
                     payments = currentPayments,
                     presets = currentPresets,
                     unitRules = currentUnitRules,
-                    workshops = currentWorkshops
+                    workshops = currentWorkshops,
+                    repository = repository
                 )
+                autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
             }
-            repository.saveCloudSyncInitialized(true)
-            autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
         } catch (e: Exception) {
             autoSyncStatusMessage.value = "همگام‌سازی ابری در دسترس نیست."
         } finally {
@@ -615,18 +796,33 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun triggerAutoUpload() {
-        val user = currentUser.value ?: return
-        viewModelScope.launch {
-            try {
-                FirebaseService.uploadAllToCloud(
-                    orders = repository.getAllOrdersSync(),
-                    payments = repository.getAllPaymentsSync(),
-                    presets = repository.getAllPresetsSync(),
-                    unitRules = unitRules.value,
-                    workshops = repository.getAllWorkshopsSync()
-                )
-            } catch (_: Exception) {}
-        }
+        if (currentUser.value == null) return
+
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val request = OneTimeWorkRequestBuilder<com.example.data.sync.CloudSyncWorker>()
+            .setConstraints(constraints)
+            .setInitialDelay(400, TimeUnit.MILLISECONDS)
+            .setBackoffCriteria(
+                androidx.work.BackoffPolicy.EXPONENTIAL,
+                30,
+                TimeUnit.SECONDS
+            )
+            .build()
+
+        WorkManager.getInstance(repositoryContext())
+            .enqueueUniqueWork(
+                "khayyaton_cloud_sync",
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
+    }
+
+    private fun repositoryContext(): android.content.Context {
+        return repository.getApplicationContext()
+            ?: throw IllegalStateException("Application context is required for cloud sync")
     }
 }
 
