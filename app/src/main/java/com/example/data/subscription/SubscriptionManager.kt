@@ -75,7 +75,7 @@ object SubscriptionManager {
             val securityCheck = if (BAZAAR_RSA_PUBLIC_KEY.isNotBlank() && BAZAAR_RSA_PUBLIC_KEY != "YOUR_BAZAAR_RSA_PUBLIC_KEY") {
                 SecurityCheck.Enable(rsaPublicKey = BAZAAR_RSA_PUBLIC_KEY)
             } else {
-                Log.w(TAG, "Bazaar RSA Public Key is placeholder, using SecurityCheck.Disable for development mode.")
+                if (BuildConfig.DEBUG) Log.w(TAG, "Bazaar RSA Public Key is placeholder, using SecurityCheck.Disable for development mode.")
                 SecurityCheck.Disable
             }
 
@@ -102,7 +102,7 @@ object SubscriptionManager {
                     refreshSubscriptionFromBazaar()
                 }
                 connectionFailed { throwable ->
-                    Log.w(TAG, "Poolakey connection failed: ${throwable.message}")
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Poolakey connection failed", throwable)
                 }
                 disconnected {
                     if (BuildConfig.DEBUG) Log.d(TAG, "Poolakey disconnected from Cafe Bazaar")
@@ -118,7 +118,7 @@ object SubscriptionManager {
             paymentConnection?.disconnect()
             paymentConnection = null
         } catch (e: Exception) {
-            Log.e(TAG, "Error disconnecting Poolakey: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.e(TAG, "Error disconnecting Poolakey", e)
         }
     }
 
@@ -309,7 +309,7 @@ object SubscriptionManager {
                 failedToBeginFlow { throwable ->
                     _isLoading.value = false
                     val errorMsg = "ارتباط با کافه‌بازار برقرار نشد. لطفاً از نصب بودن و به‌روز بودن کافه‌بازار و اتصال اینترنت اطمینان حاصل کنید."
-                    Log.e(TAG, errorMsg, throwable)
+                    if (BuildConfig.DEBUG) Log.e(TAG, errorMsg, throwable)
                     _operationMessage.value = errorMsg
                     onResult(Result.failure(Exception(errorMsg)))
                 }
@@ -335,7 +335,7 @@ object SubscriptionManager {
         } catch (e: Exception) {
             _isLoading.value = false
             val errorMsg = "خطایی در فرآیند پرداخت رخ داد. لطفاً دوباره تلاش کنید."
-            Log.e(TAG, errorMsg, e)
+            if (BuildConfig.DEBUG) Log.e(TAG, errorMsg, e)
             _operationMessage.value = errorMsg
             onResult(Result.failure(Exception(errorMsg)))
         }
@@ -392,7 +392,7 @@ object SubscriptionManager {
                     onResult(Result.success(Unit))
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error caching Bazaar subscription: " + e.message, e)
+                if (BuildConfig.DEBUG) Log.e(TAG, "Error caching Bazaar subscription", e)
                 _operationMessage.value = "خرید موفق بود اما ذخیره وضعیت اشتراک انجام نشد."
                 withContext(Dispatchers.Main) {
                     onResult(Result.failure(Exception("خرید با موفقیت انجام نشد و وضعیت اشتراک ذخیره نشد.")))
@@ -422,7 +422,7 @@ object SubscriptionManager {
         } catch (e: Exception) {
             _trialAvailable.value = false
             _trialPeriodDays.value = 0
-            Log.w(TAG, "Error checking Bazaar trial: " + e.message)
+            if (BuildConfig.DEBUG) Log.w(TAG, "Error checking Bazaar trial", e)
         }
     }
 
