@@ -136,22 +136,6 @@ object FirebaseService {
     }
 
     /**
-     * Check if a username is available (not already taken) in Firestore.
-     * Usernames are stored (lowercased) as document IDs under "usernames".
-     */
-    suspend fun isUsernameAvailable(username: String): Boolean {
-        val db = firestore ?: return false
-        val normalized = username.trim().lowercase()
-        return try {
-            val doc = db.collection("usernames").document(normalized).get().await()
-            !doc.exists()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking username: ${e.message}", e)
-            false
-        }
-    }
-
-    /**
      * Register with email, password, and a unique username.
      * Checks username availability first, then creates the Firebase Auth account,
      * then reserves the username permanently linked to this user's uid.
