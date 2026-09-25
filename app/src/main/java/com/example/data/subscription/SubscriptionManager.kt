@@ -329,7 +329,7 @@ object SubscriptionManager {
                     val errorMsg = "پرداخت انجام نشد. لطفاً اتصال اینترنت و وضعیت کافه‌بازار را بررسی کنید."
                     Log.e(TAG, errorMsg, throwable)
                     _operationMessage.value = errorMsg
-                    onResult(Result.failure(throwable))
+                    onResult(Result.failure(Exception(errorMsg)))
                 }
             }
         } catch (e: Exception) {
@@ -395,7 +395,7 @@ object SubscriptionManager {
                 Log.e(TAG, "Error caching Bazaar subscription: " + e.message, e)
                 _operationMessage.value = "خرید موفق بود اما ذخیره وضعیت اشتراک انجام نشد."
                 withContext(Dispatchers.Main) {
-                    onResult(Result.failure(e))
+                    onResult(Result.failure(Exception("خرید با موفقیت انجام نشد و وضعیت اشتراک ذخیره نشد.")))
                 }
             } finally {
                 _isLoading.value = false
