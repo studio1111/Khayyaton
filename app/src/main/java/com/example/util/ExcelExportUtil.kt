@@ -36,7 +36,7 @@ object ExcelExportUtil {
   val f=File(context.cacheDir,"khayyaton_invoice_"+System.currentTimeMillis()+".xlsx")
   val oh=listOf("ردیف","تاریخ","شماره فاکتور","مدل مبل","واحد","دستمزد کل ("+currencyUnit+")","طرف حساب")
   val or=orders.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.invoiceNumber,x.modelName,x.calculatedUnits.toString(),x.calculatedTotal.toString(),x.customerName)}
-  val ph=listOf("ردیف","تاریخ","طرف حساب","مبلغ دریافتی ("+u+")","نوع پرداخت","شماره پیگیری","شرح")
+  val ph=listOf("ردیف","تاریخ","طرف حساب","مبلغ دریافتی ("+currencyUnit+")","نوع پرداخت","شماره پیگیری","شرح")
   val pr=payments.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.customerName,x.amount.toString(),x.paymentType,x.referenceNo,x.description)}
   write(f,listOf("کارکرد" to sheet(oh,or,setOf(0,4,5)),"دریافتی‌ها" to sheet(ph,pr,setOf(0,3))));share(context,f,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","خروجی اکسل خیاطان")
  }
