@@ -673,11 +673,29 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             val localPayments = repository.getAllPaymentsSync()
             val localPresets = repository.getAllPresetsSync()
             val localWorkshops = repository.getAllWorkshopsSync()
+            val savedWorkshopId = repository.getSavedActiveWorkshopId()
 
-            // A login is a cloud-account boundary. On the first login for this
-            // device/user, restore the cloud snapshot before uploading anything local.
-            // This prevents a default/anonymous local workshop from masking cloud data.
-            val shouldDownload = switchingUser || previousUid == null
+            // Treat an empty/incomplete local database as a restore case even when
+            // SharedPreferences still contains the same UID. This is important after
+            // an app update/migration where the account marker can survive while Room
+            // data or the saved active-workshop ID does not.
+            //
+            // Never upload first in this state: uploading an empty/default local
+            // snapshot could mask the real cloud account data.
+            val localDomainIsEmpty =
+                localWorkshops.isEmpty() &&
+                    localOrders.isEmpty() &&
+                    localPayments.isEmpty() &&
+                    localPresets.isEmpty()
+
+            val activeWorkshopIsInvalid =
+                savedWorkshopId > 0L && localWorkshops.none { it.id == savedWorkshopId }
+
+            val shouldDownload =
+                switchingUser ||
+                    previousUid == null ||
+                    localDomainIsEmpty ||
+                    activeWorkshopIsInvalid
 
             performAutoSync(user, shouldDownload = shouldDownload)
 
