@@ -32,6 +32,7 @@ import com.example.ui.theme.Amber600
 import com.example.ui.theme.Emerald600
 import com.example.ui.theme.Rose600
 import com.example.util.InvoiceDocumentGenerator
+import com.example.util.ExcelExportUtil
 import com.example.util.PersianUtils
 
 @Composable
@@ -56,6 +57,7 @@ fun InvoiceDialog(
     val totalPaid = customerPayments.sumOf { it.amount }
     val balance = totalWork - totalPaid
     val todayDate = PersianUtils.getTodayJalaliString()
+    val tableHorizontalScroll = rememberScrollState()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -151,6 +153,27 @@ fun InvoiceDialog(
                         ) {
                             Icon(imageVector = Icons.Outlined.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
                             Text("خروجی PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Excel Export Button
+                    Button(
+                        onClick = {
+                            ExcelExportUtil.shareInvoiceExcel(
+                                context = context,
+                                orders = displayOrders,
+                                payments = customerPayments,
+                                currencyUnit = currencyUnit
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Emerald600),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(imageVector = Icons.Outlined.TableView, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Text("خروجی Excel", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -250,9 +273,10 @@ fun InvoiceDialog(
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-                        color = MaterialTheme.colorScheme.surface
+                        color = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.horizontalScroll(tableHorizontalScroll)
                     ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.width(760.dp)) {
                             // Table Header Row
                             Row(
                                 modifier = Modifier
@@ -393,9 +417,10 @@ fun InvoiceDialog(
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             border = androidx.compose.foundation.BorderStroke(1.5.dp, Emerald600.copy(alpha = 0.4f)),
-                            color = MaterialTheme.colorScheme.surface
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.horizontalScroll(tableHorizontalScroll)
                         ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.width(760.dp)) {
                                 // Payment Table Header
                                 Row(
                                     modifier = Modifier
