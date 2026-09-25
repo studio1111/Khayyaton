@@ -213,7 +213,7 @@ fun SubscriptionDialog(
                             Spacer(modifier = Modifier.width(8.dp))
                         }
                         Text(
-                            text = "بازیابی خریدهای قبلی از کافه‌بازار",
+                            text = "بازیابی خریدهای قبلی",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -239,7 +239,7 @@ fun SubscriptionDialog(
                                 modifier = Modifier.size(20.dp)
                             )
                             Text(
-                                text = "کلیه پرداخت‌ها به صورت کاملاً امن از طریق درگاه کافه‌بازار انجام می‌شوند و اشتراک شما به حساب کاربری ابری شما متصل خواهد ماند.",
+                                text = "کلیه پرداخت‌ها به صورت کاملاً امن انجام می‌شوند و اشتراک شما به حساب کاربری ابری شما متصل خواهد ماند.",
                                 fontSize = 11.sp,
                                 lineHeight = 18.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
