@@ -117,9 +117,6 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 }
             repository.saveActiveWorkshopId(activeWorkshopId.value)
 
-            repository.deduplicatePresets()
-            repository.deduplicateOrders()
-            repository.deduplicatePayments()
             repository.insertDefaultUnitRulesIfEmpty()
 
             repository.getSavedThemeMode()?.let {
@@ -155,6 +152,12 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 val localPresets = repository.getAllPresetsSync()
 
                 repository.saveLocalAccountUid(user.uid)
+
+                // Deduplicate only after the authenticated account is known so
+                // any removed duplicate can receive a durable cloud tombstone.
+                repository.deduplicatePresets()
+                repository.deduplicateOrders()
+                repository.deduplicatePayments()
 
                 if (switchingUser || (localUid == null && localOrders.isEmpty() && localPayments.isEmpty() && localPresets.isEmpty() && currentWorkshops.isEmpty())) {
                     performAutoSync(user, shouldDownload = true)
