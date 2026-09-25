@@ -44,6 +44,7 @@ object SubscriptionManager {
     private const val KEY_ACTIVE_PRODUCT_ID = "sub_active_product_id"
     private const val KEY_EXPIRES_AT = "sub_expires_at"
     private const val KEY_CACHED_UID = "sub_cached_uid"
+    private const val TRIAL_DURATION_MILLIS = 3L * 24L * 60L * 60L * 1000L
 
     private val _subscriptionState = MutableStateFlow(UserSubscription())
     val subscriptionState: StateFlow<UserSubscription> = _subscriptionState.asStateFlow()
@@ -213,7 +214,7 @@ object SubscriptionManager {
         if (createdAt <= 0L) return
 
         val now = System.currentTimeMillis()
-        val trialEndsAt = createdAt + 3L * 86_400_000L
+        val trialEndsAt = createdAt + TRIAL_DURATION_MILLIS
         val current = _subscriptionState.value
 
         if (current.status == SubscriptionStatus.SUBSCRIBED && current.expiresAt?.let { it > now } == true) {
