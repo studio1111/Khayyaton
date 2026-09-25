@@ -1497,6 +1497,5 @@ private fun shareAnalysisReport(
         }
         context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری گزارش تحلیلی"))
     } catch (e: Exception) {
-        e.printStackTrace()
     }
 }
