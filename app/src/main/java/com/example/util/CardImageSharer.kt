@@ -657,7 +657,6 @@ object CardImageSharer {
                 false
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             Toast.makeText(context, "ذخیره تصویر انجام نشد. لطفاً فضای ذخیره‌سازی و دسترسی برنامه را بررسی کنید.", Toast.LENGTH_SHORT).show()
             false
         }
@@ -696,7 +695,6 @@ object CardImageSharer {
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooser)
         } catch (e: Exception) {
-            e.printStackTrace()
             Toast.makeText(context, "اشتراک‌گذاری تصویر انجام نشد. لطفاً دوباره تلاش کنید.", Toast.LENGTH_SHORT).show()
         }
     }
