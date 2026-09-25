@@ -405,10 +405,10 @@ object SubscriptionManager {
                 }
 
                 val newSub = _subscriptionState.value.copy(
-                    status = SubscriptionStatus.SUBSCRIBED,
+                    status = if (isBazaarTrialPurchase) SubscriptionStatus.TRIAL_ACTIVE else SubscriptionStatus.SUBSCRIBED,
                     activeProductId = plan.productId,
                     startedAt = purchaseInfo.purchaseTime.takeIf { it > 0L } ?: now,
-                    expiresAt = newExpiry,
+                    expiresAt = if (isBazaarTrialPurchase) null else newExpiry,
                     purchaseToken = purchaseInfo.purchaseToken,
                     orderId = purchaseInfo.orderId,
                     updatedAt = now
@@ -417,6 +417,15 @@ object SubscriptionManager {
                 _subscriptionState.value = newSub
                 cacheSubscription(newSub)
                 if (isBazaarTrialPurchase) {
+                    val trialEndsAt = purchaseInfo.purchaseTime + BAZAAR_TRIAL_DURATION_MILLIS
+                    val trial = newSub.copy(
+                        trialStartedAt = purchaseInfo.purchaseTime,
+                        trialEndsAt = trialEndsAt,
+                        trialUsed = true,
+                        expiresAt = null
+                    )
+                    _subscriptionState.value = trial
+                    cacheSubscription(trial)
                     bazaarTrialInfo = null
                     _trialAvailable.value = false
                     _trialPeriodDays.value = 0
