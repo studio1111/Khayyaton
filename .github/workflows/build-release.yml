@@ -47,6 +47,13 @@ jobs:
       - name: Verify AAB signature
         run: jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
 
+      - name: Verify APK signature
+        run: |
+          jarsigner -verify -verbose -certs app/build/outputs/apk/release/app-release.apk
+          if command -v apksigner >/dev/null 2>&1; then
+            apksigner verify --verbose app/build/outputs/apk/release/app-release.apk
+          fi
+
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v6
         with:
@@ -68,6 +75,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "release-${GITHUB_RUN_NUMBER}" --target "${GITHUB_SHA}" --title "Khayyaton Release ${GITHUB_RUN_NUMBER}" --notes "Production release built from commit ${GITHUB_SHA}. Includes signed AAB, signed APK, and complete source ZIP." "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB" "app/build/outputs/apk/release/app-release.apk#Khayyaton APK" "Khayyaton-Source-${GITHUB_SHA::7}.zip#Khayyaton Source ZIP"
+
+      - name: Verify release identity
+        run: |
+          echo "=== Release identity ==="
+          jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab | grep -E "X.509|SHA256 digest|jar verified" | head -20 || true
+          if command -v apkanalyzer >/dev/null 2>&1; then
+            apkanalyzer manifest application-id app/build/outputs/bundle/release/app-release.aab || true
+          fi
 
       - name: Remove keystore
         if: always()
