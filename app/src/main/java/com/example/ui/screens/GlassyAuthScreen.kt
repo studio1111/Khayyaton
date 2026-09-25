@@ -514,7 +514,7 @@ fun GlassyAuthScreen(
                                     if (res.isSuccess) {
                                         successMessage = "لینک بازیابی رمز عبور به ایمیل شما ارسال گردید."
                                     } else {
-                                        errorMessage = res.exceptionOrNull()?.message ?: "خطا در ارسال ایمیل بازیابی"
+                                        errorMessage = res.exceptionOrNull()?.message ?: "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
                                     }
                                 }
                                 return@Button
@@ -538,9 +538,9 @@ fun GlassyAuthScreen(
                             isLoading = true
                             coroutineScope.launch {
                                 val res = if (activeTab == GlassAuthTab.SIGN_IN) {
-                                    FirebaseService.signInWithEmail(email, password)
+                                    FirebaseService.signInWithEmail(email, password, username.trim())
                                 } else {
-                                    FirebaseService.registerWithEmail(email, password)
+                                    FirebaseService.registerWithEmailAndUsername(username.trim(), email, password)
                                 }
                                 isLoading = false
                                 if (res.isSuccess) {
@@ -553,7 +553,7 @@ fun GlassyAuthScreen(
                                     successMessage = if (activeTab == GlassAuthTab.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد."
                                     onAuthSuccess(finalUser, username.trim(), workshopName.trim())
                                 } else {
-                                    errorMessage = res.exceptionOrNull()?.message ?: "عملیات ناموفق بود."
+                                    errorMessage = res.exceptionOrNull()?.message ?: "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
                                 }
                             }
                         },
