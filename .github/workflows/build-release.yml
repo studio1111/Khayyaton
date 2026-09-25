@@ -2,12 +2,6 @@ name: Build Release AAB and APK
 on:
   workflow_dispatch:
   push:
-    paths:
-      - '.github/workflows/build-release.yml'
-      - 'app/src/main/java/**'
-      - 'app/src/main/res/**'
-      - 'app/src/main/AndroidManifest.xml'
-  pull_request:
     branches: [ main ]
 
 permissions:
@@ -31,29 +25,24 @@ jobs:
       - name: Decode Khayyaton keystore
         run: echo "${{ secrets.KHAYYATON_KEYSTORE_BASE64 }}" | base64 -d > khayyaton.jks
 
-      - name: Setup Gradle
+      - name: Setup Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Generate gradlew if missing
-        run: |
-          if [ ! -f "./gradlew" ]; then
-            gradle wrapper
-          fi
-          chmod +x gradlew
+        with:
+          gradle-version: '9.3.1'
 
       - name: Build AAB
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/khayyaton.jks
           STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
-        run: ./gradlew bundleRelease
+        run: gradle :app:bundleRelease --stacktrace --no-daemon
 
       - name: Build APK
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/khayyaton.jks
           STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
+        run: gradle :app:assembleRelease --stacktrace --no-daemon
 
       - name: Verify AAB signature
         run: jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
