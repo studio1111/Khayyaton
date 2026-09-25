@@ -10,7 +10,6 @@ import com.example.model.SubscriptionPlan
 import com.example.model.SubscriptionStatus
 import com.example.model.UserSubscription
 import com.google.firebase.auth.FirebaseAuth
-import ir.cafebazaar.poolakey.entity.TrialSubscriptionInfo
 import ir.cafebazaar.poolakey.Connection
 import ir.cafebazaar.poolakey.Payment
 import ir.cafebazaar.poolakey.config.PaymentConfiguration
@@ -27,7 +26,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
 
 /**
- * مدیریت اشتراک‌های کافه‌بازار و دوره آزمایشی ۷ روزه خیاطان
+ * مدیریت اشتراک‌های برنامه و دوره آزمایشی داخلی ۷ روزه خیاطان
  *
  * کلید عمومی RSA بازار:
  */
@@ -45,8 +44,8 @@ object SubscriptionManager {
     private const val KEY_ACTIVE_PRODUCT_ID = "sub_active_product_id"
     private const val KEY_EXPIRES_AT = "sub_expires_at"
     private const val KEY_CACHED_UID = "sub_cached_uid"
-    private const val BAZAAR_TRIAL_DAYS = 7
-    private const val BAZAAR_TRIAL_DURATION_MILLIS = BAZAAR_TRIAL_DAYS.toLong() * 24L * 60L * 60L * 1000L
+    private const val INTERNAL_TRIAL_DAYS = 7
+    private const val INTERNAL_TRIAL_DURATION_MILLIS = INTERNAL_TRIAL_DAYS.toLong() * 24L * 60L * 60L * 1000L
 
     private val _subscriptionState = MutableStateFlow(UserSubscription())
     val subscriptionState: StateFlow<UserSubscription> = _subscriptionState.asStateFlow()
@@ -63,7 +62,6 @@ object SubscriptionManager {
     private val _trialPeriodDays = MutableStateFlow(0)
     val trialPeriodDays: StateFlow<Int> = _trialPeriodDays.asStateFlow()
 
-    private var bazaarTrialInfo: TrialSubscriptionInfo? = null
 
     private val _ownerAccess = MutableStateFlow(false)
     val ownerAccess: StateFlow<Boolean> = _ownerAccess.asStateFlow()
@@ -107,7 +105,6 @@ object SubscriptionManager {
             paymentConnection = payment?.connect {
                 connectionSucceed {
                     if (BuildConfig.DEBUG) Log.d(TAG, "Poolakey connected successfully to Cafe Bazaar")
-                    checkBazaarTrialAvailability()
                     refreshSubscriptionFromBazaar()
                 }
                 connectionFailed { throwable ->
@@ -256,7 +253,7 @@ object SubscriptionManager {
     }
 
     /**
-     * همگام‌سازی اطلاعات اشتراک و نسخه آزمایشی با فایربیس
+     * همگام‌سازی اشتراک و دوره آزمایشی داخلی
      */
     fun syncSubscriptionWithFirebase(onComplete: ((Result<UserSubscription>) -> Unit)? = null) {
         scope.launch {
@@ -281,8 +278,8 @@ object SubscriptionManager {
                     return@launch
                 }
 
-                // وضعیت Trial و اشتراک از سرویس پرداخت تعیین می‌شوند؛ Firestore مرجع entitlement نیست.
-                checkBazaarTrialAvailability()
+                // دوره آزمایشی توسط خود برنامه مدیریت می‌شود و به Trial کافه‌بازار وابسته نیست.
+                ensureInternalTrial(user)
                 refreshSubscriptionFromBazaar()
                 onComplete?.invoke(Result.success(_subscriptionState.value))
             } catch (_: Exception) {
@@ -392,9 +389,7 @@ object SubscriptionManager {
                 // The purchase is already validated by Poolakey's signed Bazaar flow.
                 // Keep the entitlement bound to the currently authenticated app user.
                 val now = System.currentTimeMillis()
-                val trialInfo = bazaarTrialInfo
-                val isBazaarTrialPurchase = trialInfo?.isAvailable == true && trialInfo.trialPeriodDays == BAZAAR_TRIAL_DAYS
-                val durationMillis = if (isBazaarTrialPurchase) BAZAAR_TRIAL_DURATION_MILLIS else plan.durationDays.toLong() * 24 * 60 * 60 * 1000L
+                val durationMillis = plan.durationDays.toLong() * 24 * 60 * 60 * 1000L
                 val purchaseExpiry = purchaseInfo.purchaseTime + durationMillis
                 val currentExpiry = _subscriptionState.value.expiresAt ?: 0L
                 val baseTime = if (currentExpiry > now) currentExpiry else now
@@ -405,10 +400,10 @@ object SubscriptionManager {
                 }
 
                 val newSub = _subscriptionState.value.copy(
-                    status = if (isBazaarTrialPurchase) SubscriptionStatus.TRIAL_ACTIVE else SubscriptionStatus.SUBSCRIBED,
+                    status = SubscriptionStatus.SUBSCRIBED,
                     activeProductId = plan.productId,
                     startedAt = purchaseInfo.purchaseTime.takeIf { it > 0L } ?: now,
-                    expiresAt = if (isBazaarTrialPurchase) null else newExpiry,
+                    expiresAt = newExpiry,
                     purchaseToken = purchaseInfo.purchaseToken,
                     orderId = purchaseInfo.orderId,
                     updatedAt = now
@@ -416,20 +411,8 @@ object SubscriptionManager {
 
                 _subscriptionState.value = newSub
                 cacheSubscription(newSub)
-                if (isBazaarTrialPurchase) {
-                    val trialEndsAt = purchaseInfo.purchaseTime + BAZAAR_TRIAL_DURATION_MILLIS
-                    val trial = newSub.copy(
-                        trialStartedAt = purchaseInfo.purchaseTime,
-                        trialEndsAt = trialEndsAt,
-                        trialUsed = true,
-                        expiresAt = null
-                    )
-                    _subscriptionState.value = trial
-                    cacheSubscription(trial)
-                    bazaarTrialInfo = null
-                    _trialAvailable.value = false
-                    _trialPeriodDays.value = 0
-                }
+                _trialAvailable.value = false
+                _trialPeriodDays.value = 0
                 _operationMessage.value = "اشتراک با موفقیت فعال شد!"
 
                 withContext(Dispatchers.Main) {
@@ -448,29 +431,54 @@ object SubscriptionManager {
     }
 
     /**
-     * بررسی Trial واقعی سرویس پرداخت.
+     * دوره آزمایشی داخلی ۷ روزه، مستقل از Trial کافه‌بازار.
+     * شروع دوره بر اساس زمان ایجاد حساب Firebase است تا با حذف/نصب برنامه
+     * یا تغییر دستگاه، دوره دوباره از صفر شروع نشود.
      */
-    fun checkBazaarTrialAvailability() {
-        val p = payment ?: return
-        try {
-            p.checkTrialSubscription {
-                checkTrialSubscriptionSucceed { info ->
-                    bazaarTrialInfo = info
-                    _trialAvailable.value = info.isAvailable && info.trialPeriodDays == BAZAAR_TRIAL_DAYS
-                    _trialPeriodDays.value = if (_trialAvailable.value) BAZAAR_TRIAL_DAYS else 0
-                }
-                checkTrialSubscriptionFailed { throwable ->
-                    bazaarTrialInfo = null
-                    _trialAvailable.value = false
-                    _trialPeriodDays.value = 0
-                    if (BuildConfig.DEBUG) Log.w(TAG, "Bazaar trial check failed", throwable)
-                }
-            }
-        } catch (e: Exception) {
-            bazaarTrialInfo = null
+    private fun ensureInternalTrial(user: com.google.firebase.auth.FirebaseUser) {
+        if (_ownerAccess.value) return
+
+        val creationTime = user.metadata?.creationTimestamp ?: 0L
+        if (creationTime <= 0L) return
+
+        val now = System.currentTimeMillis()
+        val trialEndsAt = creationTime + INTERNAL_TRIAL_DURATION_MILLIS
+        val current = _subscriptionState.value
+
+        if (current.status == SubscriptionStatus.SUBSCRIBED || current.status == SubscriptionStatus.ADMIN_GRANTED) {
             _trialAvailable.value = false
             _trialPeriodDays.value = 0
-            if (BuildConfig.DEBUG) Log.w(TAG, "Error checking Bazaar trial", e)
+            return
+        }
+
+        if (now < trialEndsAt) {
+            val trial = current.copy(
+                status = SubscriptionStatus.TRIAL_ACTIVE,
+                trialStartedAt = creationTime,
+                trialEndsAt = trialEndsAt,
+                trialUsed = true,
+                activeProductId = null,
+                expiresAt = null,
+                updatedAt = now
+            )
+            _subscriptionState.value = trial
+            cacheSubscription(trial)
+            _trialAvailable.value = true
+            _trialPeriodDays.value = INTERNAL_TRIAL_DAYS
+        } else {
+            val expired = current.copy(
+                status = SubscriptionStatus.TRIAL_EXPIRED,
+                trialStartedAt = creationTime,
+                trialEndsAt = trialEndsAt,
+                trialUsed = true,
+                activeProductId = null,
+                expiresAt = null,
+                updatedAt = now
+            )
+            _subscriptionState.value = expired
+            cacheSubscription(expired)
+            _trialAvailable.value = false
+            _trialPeriodDays.value = 0
         }
     }
 
