@@ -525,7 +525,7 @@ object SubscriptionManager {
                     val errorMsg = "بررسی اشتراک‌های کافه‌بازار انجام نشد. لطفاً اتصال اینترنت و وضعیت کافه‌بازار را بررسی کنید."
                     Log.e(TAG, errorMsg, throwable)
                     _operationMessage.value = errorMsg
-                    onResult(Result.failure(throwable))
+                    onResult(Result.failure(Exception(errorMsg)))
                 }
             }
         } catch (e: Exception) {
@@ -533,7 +533,7 @@ object SubscriptionManager {
             val errorMsg = "بازیابی اشتراک انجام نشد. لطفاً دوباره تلاش کنید."
             Log.e(TAG, errorMsg, e)
             _operationMessage.value = errorMsg
-            onResult(Result.failure(e))
+            onResult(Result.failure(Exception(errorMsg)))
         }
     }
 }
