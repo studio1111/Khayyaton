@@ -11,6 +11,13 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // Owner/admin is controlled only by Firebase Authentication Custom Claims.
+    // Client-writable Firestore fields such as role/owner_account are never trusted.
+    function isFirebaseOwner() {
+      return signedIn() &&
+        (request.auth.token.role == "owner" || request.auth.token.admin == true);
+    }
+
     // Username lookup is intentionally limited to single-document reads.
     // The client uses this before authentication during registration.
     match /usernames/{username} {
