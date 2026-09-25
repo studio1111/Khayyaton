@@ -2,6 +2,7 @@ package com.example.data.firebase
 
 import android.content.Context
 import android.util.Log
+import com.example.BuildConfig
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.FirebaseTooManyRequestsException
 import com.example.data.WorkshopRepository
@@ -37,15 +38,15 @@ object FirebaseService {
                         .setGcmSenderId("15543905804")
                         .build()
                     FirebaseApp.initializeApp(context, options)
-                    Log.d(TAG, "Firebase initialized with explicit options")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Firebase initialized with explicit options")
                 } else {
-                    Log.d(TAG, "Firebase initialized with default app")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Firebase initialized with default app")
                 }
             } else {
-                Log.d(TAG, "Firebase already initialized with ${apps.size} apps")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Firebase already initialized with ${apps.size} apps")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error initializing Firebase: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.e(TAG, "Error initializing Firebase: ${e.message}", e)
             try {
                 val options = FirebaseOptions.Builder()
                     .setApplicationId("1:15543905804:android:8fc6393c86598be4310829")
@@ -57,7 +58,7 @@ object FirebaseService {
                 FirebaseApp.initializeApp(context, options)
                 Log.d(TAG, "Firebase recovered with explicit options")
             } catch (ex: Exception) {
-                Log.e(TAG, "Firebase fallback initialization failed: ${ex.message}", ex)
+                if (BuildConfig.DEBUG) Log.e(TAG, "Firebase fallback initialization failed: ${ex.message}", ex)
             }
         }
     }
