@@ -10,6 +10,7 @@ import com.google.firebase.appcheck.FirebaseAppCheck
 import com.example.data.AppDatabase
 import com.example.data.WorkshopRepository
 import com.example.ui.KhayyatonApp
+import com.example.ui.screens.SplashScreen
 import com.example.ui.KhayyatonViewModel
 import com.example.ui.KhayyatonViewModelFactory
 
@@ -44,7 +45,15 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            KhayyatonApp(viewModel = viewModel)
+            var showSplash by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+
+            if (showSplash) {
+                SplashScreen(
+                    onSplashFinished = { showSplash = false }
+                )
+            } else {
+                KhayyatonApp(viewModel = viewModel)
+            }
         }
     }
 
