@@ -711,52 +711,88 @@ class WorkshopRepository(
     }
 
     suspend fun deleteUnitRule(rule: UnitConversionRule) {
+        markDefaultUnitRuleDeleted(rule)
         unitRuleDao.deleteRule(rule)
         recordCloudDeletion("unitRules", rule.syncId)
     }
 
     suspend fun deleteUnitRuleById(id: Long) {
         val existing = unitRuleDao.getAllRulesSync().firstOrNull { it.id == id }
+        existing?.let { markDefaultUnitRuleDeleted(it) }
         unitRuleDao.deleteRuleById(id)
         existing?.syncId?.let { recordCloudDeletion("unitRules", it) }
     }
 
+    private data class DefaultUnitRule(val key: String, val calculatedUnits: Double)
+
+    private val defaultUnitRules = listOf(
+        DefaultUnitRule("3", 2.0),
+        DefaultUnitRule("2", 1.5),
+        DefaultUnitRule("1", 1.0),
+        DefaultUnitRule("0.5", 0.5)
+    )
+
+    private fun deletedDefaultUnitRules(): MutableSet<String> =
+        prefs?.getStringSet("deleted_default_unit_rules", emptySet()).orEmpty().toMutableSet()
+
+    private fun markDefaultUnitRuleDeleted(rule: UnitConversionRule) {
+        val raw = rule.pieceKey.ifBlank {
+            if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
+        }
+        val key = normalizeUnitKey(raw)
+        if (defaultUnitRules.any { it.key == key }) {
+            val deleted = deletedDefaultUnitRules()
+            deleted += key
+            prefs?.edit()?.putStringSet("deleted_default_unit_rules", deleted)?.apply()
+        }
+    }
+
     suspend fun insertDefaultUnitRulesIfEmpty() {
         val existing = unitRuleDao.getAllRulesSync()
-        if (existing.isEmpty()) {
-            val defaultRules = listOf(
-                UnitConversionRule(pieceKey = "3", pieceCount = 3.0, calculatedUnits = 2.0, isEnabled = true),
-                UnitConversionRule(pieceKey = "2", pieceCount = 2.0, calculatedUnits = 1.5, isEnabled = true),
-                UnitConversionRule(pieceKey = "1", pieceCount = 1.0, calculatedUnits = 1.0, isEnabled = true),
-                UnitConversionRule(pieceKey = "0.5", pieceCount = 0.5, calculatedUnits = 0.5, isEnabled = true)
-            )
-            unitRuleDao.insertAll(defaultRules)
-        } else {
-            // Clean up any duplicates in the database to guarantee uniqueness
-            val seen = mutableSetOf<String>()
-            for (r in existing) {
-                val rawKey = r.pieceKey.ifBlank {
-                    if (r.pieceCount % 1.0 == 0.0) r.pieceCount.toInt().toString() else r.pieceCount.toString()
+        val deletedDefaults = deletedDefaultUnitRules()
+
+        for (defaultRule in defaultUnitRules) {
+            if (defaultRule.key in deletedDefaults) continue
+            val exists = existing.any { rule ->
+                val raw = rule.pieceKey.ifBlank {
+                    if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
                 }
-                val norm = normalizeUnitKey(rawKey)
-                if (norm in seen) {
-                    unitRuleDao.deleteRuleById(r.id)
-                } else {
-                    seen.add(norm)
-                }
+                normalizeUnitKey(raw) == defaultRule.key
             }
+            if (!exists) {
+                unitRuleDao.insertRule(
+                    UnitConversionRule(
+                        pieceKey = defaultRule.key,
+                        pieceCount = defaultRule.key.toDouble(),
+                        calculatedUnits = defaultRule.calculatedUnits,
+                        isEnabled = true
+                    )
+                )
+            }
+        }
+
+        val all = unitRuleDao.getAllRulesSync()
+        val seen = mutableSetOf<String>()
+        for (r in all) {
+            val rawKey = r.pieceKey.ifBlank {
+                if (r.pieceCount % 1.0 == 0.0) r.pieceCount.toInt().toString() else r.pieceCount.toString()
+            }
+            val norm = normalizeUnitKey(rawKey)
+            if (norm in seen) unitRuleDao.deleteRuleById(r.id) else seen.add(norm)
         }
     }
 
     suspend fun restoreDefaultUnitRules() {
+        prefs?.edit()?.remove("deleted_default_unit_rules")?.apply()
         unitRuleDao.clearAll()
-        val defaultRules = listOf(
-            UnitConversionRule(pieceKey = "3", pieceCount = 3.0, calculatedUnits = 2.0, isEnabled = true),
-            UnitConversionRule(pieceKey = "2", pieceCount = 2.0, calculatedUnits = 1.5, isEnabled = true),
-            UnitConversionRule(pieceKey = "1", pieceCount = 1.0, calculatedUnits = 1.0, isEnabled = true),
-            UnitConversionRule(pieceKey = "0.5", pieceCount = 0.5, calculatedUnits = 0.5, isEnabled = true)
-        )
-        unitRuleDao.insertAll(defaultRules)
+        unitRuleDao.insertAll(defaultUnitRules.map {
+            UnitConversionRule(
+                pieceKey = it.key,
+                pieceCount = it.key.toDouble(),
+                calculatedUnits = it.calculatedUnits,
+                isEnabled = true
+            )
+        })
     }
 
     companion object {
