@@ -394,7 +394,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             message = "آیا از حذف این رکورد پرداخت اطمینان دارید؟",
             details = listOf(
                 "مبلغ واریزی" to PersianUtils.formatCurrency(payment.amount, currencyUnit.value),
-                "مشتری" to payment.customerName,
+                "پرداخت‌کننده" to payment.customerName,
                 "تاریخ" to PersianUtils.toPersianDigits(payment.dateJalali),
                 "شرح" to payment.description.ifBlank { "واریزی وجه" }
             )
