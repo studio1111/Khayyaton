@@ -361,7 +361,7 @@ object SubscriptionManager {
                 }
                 failedToBeginFlow { throwable ->
                     _isLoading.value = false
-                    val errorMsg = "خطا در برقراری ارتباط با کافه‌بازار: ${throwable.message}"
+                    val errorMsg = "ارتباط با کافه‌بازار برقرار نشد. لطفاً از نصب بودن و به‌روز بودن کافه‌بازار و اتصال اینترنت اطمینان حاصل کنید."
                     Log.e(TAG, errorMsg, throwable)
                     _operationMessage.value = errorMsg
                     onResult(Result.failure(throwable))
@@ -379,7 +379,7 @@ object SubscriptionManager {
                 }
                 purchaseFailed { throwable ->
                     _isLoading.value = false
-                    val errorMsg = "پرداخت انجام نشد: ${throwable.message}"
+                    val errorMsg = "پرداخت انجام نشد. لطفاً اتصال اینترنت و وضعیت کافه‌بازار را بررسی کنید."
                     Log.e(TAG, errorMsg, throwable)
                     _operationMessage.value = errorMsg
                     onResult(Result.failure(throwable))
@@ -387,7 +387,7 @@ object SubscriptionManager {
             }
         } catch (e: Exception) {
             _isLoading.value = false
-            val errorMsg = "خطای پرداخت: ${e.message}"
+            val errorMsg = "خطایی در فرآیند پرداخت رخ داد. لطفاً دوباره تلاش کنید."
             Log.e(TAG, errorMsg, e)
             _operationMessage.value = errorMsg
             onResult(Result.failure(e))
