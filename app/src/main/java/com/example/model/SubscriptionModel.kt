@@ -1,7 +1,7 @@
 package com.example.model
 
 enum class SubscriptionStatus(val titleFa: String) {
-    TRIAL_ACTIVE("نسخه آزمایشی فعال"),
+    TRIAL_ACTIVE("نسخه آزمایشی ۷ روزه خیاطان"),
     TRIAL_EXPIRED("پایان دوره آزمایشی"),
     SUBSCRIBED("اشتراک ویژه فعال"),
     ADMIN_GRANTED("دسترسی مالک"),
