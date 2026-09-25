@@ -73,7 +73,7 @@ jobs:
 
       - name: Create Source ZIP
         if: github.event_name != 'pull_request'
-        run: git archive --format=zip --output="Khayyaton-Source-${GITHUB_SHA::7}.zip" "${GITHUB_SHA}"
+        run: git archive --format=zip --output="Khayyaton-Source-${GITHUB_SHA}.zip" "${GITHUB_SHA}"
 
       - name: Upload Source ZIP artifact
         uses: actions/upload-artifact@v6
