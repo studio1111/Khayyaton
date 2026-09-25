@@ -203,7 +203,7 @@ object BackupManager {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "خطا در ایجاد فایل پشتیبان: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "ایجاد فایل پشتیبان انجام نشد. لطفاً فضای ذخیره‌سازی و دسترسی برنامه را بررسی کنید.", Toast.LENGTH_LONG).show()
         }
     }
 
