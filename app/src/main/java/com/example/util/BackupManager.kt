@@ -25,20 +25,36 @@ object BackupManager {
     fun createBackupJson(
         orders: List<FurnitureOrder>,
         payments: List<PaymentRecord>,
-        presets: List<ModelPreset>
+        presets: List<ModelPreset>,
+        workshops: List<com.example.model.Workshop> = emptyList(),
+        unitRules: List<com.example.model.UnitConversionRule> = emptyList()
     ): String {
-        val root = JSONObject()
-        root.put("app", "KhayyatOn")
-        root.put("version", 2)
-        root.put("exportedAt", System.currentTimeMillis())
-        root.put("exportedDateJalali", PersianUtils.getTodayJalaliString())
-        root.put("exportedDateGregorian", PersianUtils.getTodayGregorianString())
+        val root = JSONObject().apply {
+            put("app", "Khayyaton")
+            put("version", 4)
+            put("exportedAt", System.currentTimeMillis())
+            put("exportedDateJalali", PersianUtils.getTodayJalaliString())
+            put("exportedDateGregorian", PersianUtils.getTodayGregorianString())
+        }
 
-        // Orders
+        val workshopsArray = JSONArray()
+        workshops.forEach { ws ->
+            workshopsArray.put(JSONObject().apply {
+                put("id", ws.id)
+                put("syncId", ws.syncId)
+                put("name", ws.name)
+                put("createdAt", ws.createdAt)
+            })
+        }
+        root.put("workshops", workshopsArray)
+
         val ordersArray = JSONArray()
         orders.forEach { ord ->
-            val obj = JSONObject().apply {
+            ordersArray.put(JSONObject().apply {
                 put("id", ord.id)
+                put("syncId", ord.syncId)
+                put("workshopId", ord.workshopId)
+                put("workshopSyncId", ord.workshopSyncId)
                 put("orderNumber", ord.orderNumber)
                 put("invoiceNumber", ord.invoiceNumber)
                 put("modelName", ord.modelName)
@@ -56,16 +72,17 @@ object BackupManager {
                 put("notes", ord.notes)
                 put("colorCode", ord.colorCode)
                 put("createdAt", ord.createdAt)
-            }
-            ordersArray.put(obj)
+            })
         }
         root.put("orders", ordersArray)
 
-        // Payments
         val paymentsArray = JSONArray()
         payments.forEach { pay ->
-            val obj = JSONObject().apply {
+            paymentsArray.put(JSONObject().apply {
                 put("id", pay.id)
+                put("syncId", pay.syncId)
+                put("workshopId", pay.workshopId)
+                put("workshopSyncId", pay.workshopSyncId)
                 put("paymentNumber", pay.paymentNumber)
                 put("amount", pay.amount)
                 put("dateJalali", pay.dateJalali)
@@ -74,27 +91,43 @@ object BackupManager {
                 put("description", pay.description)
                 put("paymentType", pay.paymentType)
                 put("referenceNo", pay.referenceNo)
+                put("bankName", pay.bankName)
+                put("cardNumber", pay.cardNumber)
                 put("relatedOrderId", pay.relatedOrderId ?: JSONObject.NULL)
+                put("relatedOrderSyncId", pay.relatedOrderSyncId)
                 put("createdAt", pay.createdAt)
-            }
-            paymentsArray.put(obj)
+            })
         }
         root.put("payments", paymentsArray)
 
-        // Presets
         val presetsArray = JSONArray()
         presets.forEach { pre ->
-            val obj = JSONObject().apply {
+            presetsArray.put(JSONObject().apply {
                 put("id", pre.id)
+                put("syncId", pre.syncId)
+                put("workshopId", pre.workshopId)
+                put("workshopSyncId", pre.workshopSyncId)
                 put("name", pre.name)
                 put("defaultPricePerSet", pre.defaultPricePerSet)
                 put("defaultUnitsPerSet", pre.defaultUnitsPerSet)
                 put("colorCode", pre.colorCode)
                 put("description", pre.description)
-            }
-            presetsArray.put(obj)
+            })
         }
         root.put("presets", presetsArray)
+
+        val rulesArray = JSONArray()
+        unitRules.forEach { rule ->
+            rulesArray.put(JSONObject().apply {
+                put("id", rule.id)
+                put("syncId", rule.syncId)
+                put("pieceKey", rule.pieceKey)
+                put("pieceCount", rule.pieceCount)
+                put("calculatedUnits", rule.calculatedUnits)
+                put("isEnabled", rule.isEnabled)
+            })
+        }
+        root.put("unitRules", rulesArray)
 
         return root.toString(2)
     }
@@ -130,10 +163,12 @@ object BackupManager {
         orders: List<FurnitureOrder>,
         payments: List<PaymentRecord>,
         presets: List<ModelPreset>,
+        workshops: List<com.example.model.Workshop> = emptyList(),
+        unitRules: List<com.example.model.UnitConversionRule> = emptyList(),
         preferGoogleDrive: Boolean = false
     ) {
         try {
-            val json = createBackupJson(orders, payments, presets)
+            val json = createBackupJson(orders, payments, presets, workshops, unitRules)
             val cacheDir = File(context.cacheDir, "backups")
             if (!cacheDir.exists()) cacheDir.mkdirs()
 
@@ -180,24 +215,47 @@ object BackupManager {
         repository: WorkshopRepository
     ): Triple<Int, Int, Int> {
         val root = JSONObject(jsonString)
-        var restoredOrders = 0
-        var restoredPayments = 0
-        var restoredPresets = 0
+        val version = root.optInt("version", 1)
 
-        // Parse orders
+        val workshops = mutableListOf<com.example.model.Workshop>()
+        if (root.has("workshops")) {
+            val array = root.getJSONArray("workshops")
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val id = obj.optLong("id", 0L)
+                if (id > 0L) {
+                    workshops += com.example.model.Workshop(
+                        id = id,
+                        syncId = obj.optString("syncId", if (id > 0) "wrk_" + id else java.util.UUID.randomUUID().toString()),
+                        name = obj.optString("name", "کارگاه بازیابی‌شده").ifBlank { "کارگاه بازیابی‌شده" },
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                    )
+                }
+            }
+        }
+
+        val fallbackWorkshopId = workshops.firstOrNull()?.id
+            ?: repository.getAllWorkshopsSync().firstOrNull()?.id
+            ?: 1L
+
+        val orders = mutableListOf<FurnitureOrder>()
         if (root.has("orders")) {
-            val ordersArray = root.getJSONArray("orders")
-            for (i in 0 until ordersArray.length()) {
-                val obj = ordersArray.getJSONObject(i)
-                val order = FurnitureOrder(
-                    id = 0, // Reset ID for clean insertion
+            val array = root.getJSONArray("orders")
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val id = obj.optLong("id", 0L)
+                orders += FurnitureOrder(
+                    id = id,
+                    syncId = obj.optString("syncId", if (id > 0) "ord_" + id else java.util.UUID.randomUUID().toString()),
+                    workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopSyncId = obj.optString("workshopSyncId", ""),
                     orderNumber = obj.optLong("orderNumber", (i + 1).toLong()),
                     invoiceNumber = obj.optString("invoiceNumber", (i + 1).toString()),
                     modelName = obj.optString("modelName", "مدل مبل"),
                     pricePerSet = obj.optLong("pricePerSet", 0L),
-                    unitsPerSet = obj.optDouble("unitsPerSet", 8.0),
-                    countFormula = obj.optString("countFormula", "3+3+1+1"),
-                    calculatedUnits = obj.optDouble("calculatedUnits", 8.0),
+                    unitsPerSet = obj.optDouble("unitsPerSet", 6.0),
+                    countFormula = obj.optString("countFormula", ""),
+                    calculatedUnits = obj.optDouble("calculatedUnits", 0.0),
                     calculatedTotal = obj.optLong("calculatedTotal", 0L),
                     dateJalali = obj.optString("dateJalali", PersianUtils.getTodayJalaliString()),
                     dateGregorian = obj.optString("dateGregorian", PersianUtils.getTodayGregorianString()),
@@ -209,18 +267,21 @@ object BackupManager {
                     colorCode = obj.optString("colorCode", "#2563EB"),
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                 )
-                repository.saveOrder(order)
-                restoredOrders++
             }
         }
 
-        // Parse payments
+        val payments = mutableListOf<PaymentRecord>()
         if (root.has("payments")) {
-            val paymentsArray = root.getJSONArray("payments")
-            for (i in 0 until paymentsArray.length()) {
-                val obj = paymentsArray.getJSONObject(i)
-                val payment = PaymentRecord(
-                    id = 0,
+            val array = root.getJSONArray("payments")
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val relatedOrderId =
+                    if (obj.has("relatedOrderId") && !obj.isNull("relatedOrderId")) obj.optLong("relatedOrderId") else null
+                payments += PaymentRecord(
+                    id = obj.optLong("id", 0L),
+                    syncId = obj.optString("syncId", "pay_" + obj.optLong("id", 0L)),
+                    workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopSyncId = obj.optString("workshopSyncId", ""),
                     paymentNumber = obj.optLong("paymentNumber", (i + 1).toLong()),
                     amount = obj.optLong("amount", 0L),
                     dateJalali = obj.optString("dateJalali", PersianUtils.getTodayJalaliString()),
@@ -229,32 +290,70 @@ object BackupManager {
                     description = obj.optString("description", ""),
                     paymentType = obj.optString("paymentType", "transfer"),
                     referenceNo = obj.optString("referenceNo", ""),
-                    relatedOrderId = if (obj.has("relatedOrderId") && !obj.isNull("relatedOrderId")) obj.optLong("relatedOrderId") else null,
+                    bankName = obj.optString("bankName", ""),
+                    cardNumber = obj.optString("cardNumber", ""),
+                    relatedOrderId = relatedOrderId,
+                    relatedOrderSyncId = obj.optString("relatedOrderSyncId", ""),
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                 )
-                repository.savePayment(payment)
-                restoredPayments++
             }
         }
 
-        // Parse presets
+        val presets = mutableListOf<ModelPreset>()
         if (root.has("presets")) {
-            val presetsArray = root.getJSONArray("presets")
-            for (i in 0 until presetsArray.length()) {
-                val obj = presetsArray.getJSONObject(i)
-                val preset = ModelPreset(
-                    id = 0,
-                    name = obj.optString("name", "مدل"),
+            val array = root.getJSONArray("presets")
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                presets += ModelPreset(
+                    id = obj.optLong("id", 0L),
+                    syncId = obj.optString("syncId", "pre_" + obj.optLong("id", 0L)),
+                    workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopSyncId = obj.optString("workshopSyncId", ""),
+                    name = obj.optString("name", "مدل").ifBlank { "مدل" },
                     defaultPricePerSet = obj.optLong("defaultPricePerSet", 0L),
-                    defaultUnitsPerSet = obj.optDouble("defaultUnitsPerSet", 8.0),
+                    defaultUnitsPerSet = obj.optDouble("defaultUnitsPerSet", 6.0),
                     colorCode = obj.optString("colorCode", "#2563EB"),
                     description = obj.optString("description", "")
                 )
-                repository.savePreset(preset)
-                restoredPresets++
             }
         }
 
-        return Triple(restoredOrders, restoredPayments, restoredPresets)
+        val rules = mutableListOf<com.example.model.UnitConversionRule>()
+        if (root.has("unitRules")) {
+            val array = root.getJSONArray("unitRules")
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                rules += com.example.model.UnitConversionRule(
+                    id = obj.optLong("id", 0L),
+                    syncId = obj.optString("syncId", "rule_" + obj.optLong("id", 0L)),
+                    pieceKey = obj.optString("pieceKey", ""),
+                    pieceCount = obj.optDouble("pieceCount", 0.0),
+                    calculatedUnits = obj.optDouble("calculatedUnits", 0.0),
+                    isEnabled = obj.optBoolean("isEnabled", true)
+                )
+            }
+        }
+
+        // Legacy v1/v2 backups did not contain workshops. Create one only as part
+        // of an explicit user restore operation, never during normal app startup.
+        val finalWorkshops = if (workshops.isEmpty() && (orders.isNotEmpty() || payments.isNotEmpty() || presets.isNotEmpty())) {
+            listOf(
+                com.example.model.Workshop(
+                    id = fallbackWorkshopId,
+                    name = "کارگاه بازیابی‌شده"
+                )
+            )
+        } else workshops
+
+        repository.replaceAllData(
+            workshops = finalWorkshops,
+            orders = orders,
+            payments = payments,
+            presets = presets,
+            unitRules = rules
+        )
+
+        return Triple(orders.size, payments.size, presets.size)
     }
+
 }
