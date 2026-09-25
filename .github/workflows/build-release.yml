@@ -32,6 +32,7 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Run unit tests
+        timeout-minutes: 10
         run: gradle testDebugUnitTest --stacktrace --no-daemon
 
       - name: Build AAB
@@ -39,6 +40,7 @@ jobs:
           KEYSTORE_PATH: ${{ github.workspace }}/khayyaton.jks
           STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
+        timeout-minutes: 20
         run: gradle :app:bundleRelease --stacktrace --no-daemon
 
       - name: Build APK
@@ -46,6 +48,7 @@ jobs:
           KEYSTORE_PATH: ${{ github.workspace }}/khayyaton.jks
           STORE_PASSWORD: ${{ secrets.KHAYYATON_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KHAYYATON_KEY_PASSWORD }}
+        timeout-minutes: 15
         run: gradle :app:assembleRelease --stacktrace --no-daemon
 
       - name: Verify AAB signature
