@@ -23,11 +23,11 @@ import androidx.compose.ui.unit.sp
 import com.example.model.FurnitureOrder
 import com.example.util.PersianUtils
 
-private val CardCellDarkBg = Color(0xFFFFF0BF).copy(alpha = 0.78f)
+private val CardCellDarkBg = Color(0xFF0F172A).copy(alpha = 0.78f)
 private val CardCellBorder = Color.White.copy(alpha = 0.15f)
-private val CardGoldBorder = Color(0xFF39FF88)
-private val LabelGrayText = Color(0xFF38533F)
-private val ValueWhiteText = Color(0xFF17221A)
+private val CardGoldBorder = Color(0xFFD4A017)
+private val LabelGrayText = Color(0xFFCBD5E1)
+private val ValueWhiteText = Color(0xFFFFFFFF)
 private val EditButtonGreen = Color(0xFF107C41)
 private val DeleteButtonRed = Color(0xFFA82828)
 private val ShareButtonBlue = Color(0xFF1D4ED8)
