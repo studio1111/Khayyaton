@@ -1,5 +1,7 @@
 package com.example.data.subscription
 
+import com.example.BuildConfig
+
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
@@ -85,7 +87,7 @@ object SubscriptionManager {
             payment = Payment(context = appContext, config = paymentConfig)
             connectPaymentService()
         } catch (e: Exception) {
-            Log.e(TAG, "Error initializing Poolakey: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.e(TAG, "Error initializing Poolakey: ${e.message}", e)
         }
 
         // بارگذاری اولیه اشتراک از فایربیس
@@ -96,7 +98,7 @@ object SubscriptionManager {
         try {
             paymentConnection = payment?.connect {
                 connectionSucceed {
-                    Log.d(TAG, "Poolakey connected successfully to Cafe Bazaar")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Poolakey connected successfully to Cafe Bazaar")
                     checkBazaarTrialAvailability()
                     refreshSubscriptionFromBazaar()
                 }
@@ -104,11 +106,11 @@ object SubscriptionManager {
                     Log.w(TAG, "Poolakey connection failed: ${throwable.message}")
                 }
                 disconnected {
-                    Log.d(TAG, "Poolakey disconnected from Cafe Bazaar")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Poolakey disconnected from Cafe Bazaar")
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error connecting to Poolakey: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.e(TAG, "Error connecting to Poolakey: ${e.message}", e)
         }
     }
 
