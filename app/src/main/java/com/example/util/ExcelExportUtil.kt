@@ -32,21 +32,21 @@ object ExcelExportUtil {
    put("xl/styles.xml",styles);s.forEachIndexed{i,p->put("xl/worksheets/sheet"+(i+1)+".xml",p.second)}
   }
  }
- fun shareInvoiceExcel(c:Context,o:List<FurnitureOrder>,p:List<PaymentRecord>,u:String){
-  val f=File(c.cacheDir,"khayyaton_invoice_"+System.currentTimeMillis()+".xlsx")
-  val oh=listOf("ردیف","تاریخ","شماره فاکتور","مدل مبل","واحد","دستمزد کل ("+u+")","طرف حساب")
-  val or=o.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.invoiceNumber,x.modelName,x.calculatedUnits.toString(),x.calculatedTotal.toString(),x.customerName)}
+ fun shareInvoiceExcel(context:Context,orders:List<FurnitureOrder>,payments:List<PaymentRecord>,currencyUnit:String){
+  val f=File(context.cacheDir,"khayyaton_invoice_"+System.currentTimeMillis()+".xlsx")
+  val oh=listOf("ردیف","تاریخ","شماره فاکتور","مدل مبل","واحد","دستمزد کل ("+currencyUnit+")","طرف حساب")
+  val or=orders.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.invoiceNumber,x.modelName,x.calculatedUnits.toString(),x.calculatedTotal.toString(),x.customerName)}
   val ph=listOf("ردیف","تاریخ","طرف حساب","مبلغ دریافتی ("+u+")","نوع پرداخت","شماره پیگیری","شرح")
-  val pr=p.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.customerName,x.amount.toString(),x.paymentType,x.referenceNo,x.description)}
-  write(f,listOf("کارکرد" to sheet(oh,or,setOf(0,4,5)),"دریافتی‌ها" to sheet(ph,pr,setOf(0,3))));share(c,f,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","خروجی اکسل خیاطان")
+  val pr=payments.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.customerName,x.amount.toString(),x.paymentType,x.referenceNo,x.description)}
+  write(f,listOf("کارکرد" to sheet(oh,or,setOf(0,4,5)),"دریافتی‌ها" to sheet(ph,pr,setOf(0,3))));share(context,f,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","خروجی اکسل خیاطان")
  }
- fun shareAnalysisExcel(c:Context,o:List<FurnitureOrder>,p:List<PaymentRecord>,u:String){
-  val f=File(c.cacheDir,"khayyaton_analysis_"+System.currentTimeMillis()+".xlsx")
+ fun shareAnalysisExcel(context:Context,orders:List<FurnitureOrder>,payments:List<PaymentRecord>,currencyUnit:String){
+  val f=File(context.cacheDir,"khayyaton_analysis_"+System.currentTimeMillis()+".xlsx")
   val oh=listOf("ردیف","تاریخ","مدل مبل","واحد","دستمزد ("+u+")","طرف حساب")
-  val or=o.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.modelName,x.calculatedUnits.toString(),x.calculatedTotal.toString(),x.customerName)}
+  val or=orders.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.modelName,x.calculatedUnits.toString(),x.calculatedTotal.toString(),x.customerName)}
   val ph=listOf("ردیف","تاریخ","طرف حساب","دریافتی ("+u+")","نوع","پیگیری")
-  val pr=p.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.customerName,x.amount.toString(),x.paymentType,x.referenceNo)}
-  write(f,listOf("تحلیل کارگاه" to sheet(oh,or,setOf(0,3,4)),"دریافتی‌ها" to sheet(ph,pr,setOf(0,3))));share(c,f,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","خروجی اکسل آنالیز کارگاه")
+  val pr=payments.mapIndexed{i,x->listOf((i+1).toString(),x.dateJalali,x.customerName,x.amount.toString(),x.paymentType,x.referenceNo)}
+  write(f,listOf("تحلیل کارگاه" to sheet(oh,or,setOf(0,3,4)),"دریافتی‌ها" to sheet(ph,pr,setOf(0,3))));share(context,f,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","خروجی اکسل آنالیز کارگاه")
  }
  private fun share(c:Context,f:File,m:String,t:String){val u=FileProvider.getUriForFile(c,c.packageName+".fileprovider",f);val i=Intent(Intent.ACTION_SEND).apply{type=m;putExtra(Intent.EXTRA_STREAM,u);putExtra(Intent.EXTRA_SUBJECT,t);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)};c.startActivity(Intent.createChooser(i,t).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}
 }
