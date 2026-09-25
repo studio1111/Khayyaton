@@ -56,7 +56,7 @@ data class UserSubscription(
             val target = when (status) {
                 SubscriptionStatus.SUBSCRIBED -> expiresAt ?: 0L
                 SubscriptionStatus.ADMIN_GRANTED -> Long.MAX_VALUE
-                SubscriptionStatus.TRIAL_ACTIVE,
+                SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt
                 SubscriptionStatus.TRIAL_EXPIRED -> 0L
                 else -> 0L
             }
