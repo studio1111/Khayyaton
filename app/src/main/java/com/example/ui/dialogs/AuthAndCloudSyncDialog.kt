@@ -620,7 +620,7 @@ fun AuthAndCloudSyncDialog(
                                         if (res.isSuccess) {
                                             successMessage = "لینک بازیابی رمز عبور به ایمیل شما ارسال شد."
                                         } else {
-                                            errorMessage = res.exceptionOrNull()?.message ?: "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
+                                            errorMessage = "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
                                         }
                                     }
                                     return@Button
@@ -660,7 +660,7 @@ fun AuthAndCloudSyncDialog(
                                         onUserChanged(user)
                                         successMessage = if (mode == AuthScreenMode.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد و وارد شدید."
                                     } else {
-                                        errorMessage = res.exceptionOrNull()?.message ?: "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
+                                        errorMessage = "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
                                     }
                                 }
                             },
