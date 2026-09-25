@@ -53,8 +53,16 @@ fun PaymentDialog(
     var amountStr by remember {
         mutableStateOf((initialPayment?.amount ?: 5000000L).toString())
     }
-    var customerName by remember {
-        mutableStateOf(initialPayment?.customerName ?: customers.firstOrNull() ?: "")
+    val lastPayerSuggestion = remember(existingPayments) {
+        existingPayments.asSequence()
+            .sortedByDescending { it.createdAt }
+            .map { it.customerName.trim() }
+            .firstOrNull { it.isNotBlank() } ?: ""
+    }
+
+    // پرداخت‌کننده کاملاً مستقل از مشتری فاکتور است.
+    var customerName by remember(initialPayment, lastPayerSuggestion) {
+        mutableStateOf(initialPayment?.customerName ?: lastPayerSuggestion)
     }
     var bankName by remember {
         mutableStateOf(initialPayment?.bankName ?: "")
@@ -251,7 +259,12 @@ fun PaymentDialog(
                             value = customerName,
                             onValueChange = { customerName = it },
                             label = { Text("پرداخت‌کننده", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
-                            placeholder = { Text("نام پرداخت‌کننده", fontSize = 10.sp) },
+                            placeholder = {
+                                Text(
+                                    if (lastPayerSuggestion.isNotBlank()) "پیشنهاد: $lastPayerSuggestion" else "نام پرداخت‌کننده",
+                                    fontSize = 10.sp
+                                )
+                            },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1.2f)
