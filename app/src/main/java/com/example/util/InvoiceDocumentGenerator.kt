@@ -258,7 +258,6 @@ object InvoiceDocumentGenerator {
 
             context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری فاکتور HTML"))
         } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
@@ -570,7 +569,6 @@ object InvoiceDocumentGenerator {
 
             context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری صورت‌حساب PDF"))
         } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 }
