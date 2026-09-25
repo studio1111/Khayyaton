@@ -7,8 +7,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.example.data.AppDatabase
 import com.example.data.WorkshopRepository
 import com.example.ui.KhayyatonApp
@@ -24,16 +22,7 @@ class MainActivity : ComponentActivity() {
         // App Check must be initialized before any Firebase service is used.
         val firebaseApp = FirebaseApp.initializeApp(applicationContext)
         if (firebaseApp != null) {
-            val appCheck = FirebaseAppCheck.getInstance()
-            if (BuildConfig.DEBUG) {
-                appCheck.installAppCheckProviderFactory(
-                    DebugAppCheckProviderFactory.getInstance()
-                )
-            } else {
-                appCheck.installAppCheckProviderFactory(
-                    PlayIntegrityAppCheckProviderFactory.getInstance()
-                )
-            }
+            AppCheckProviderInstaller.install(FirebaseAppCheck.getInstance())
         }
 
         com.example.data.firebase.FirebaseService.initialize(applicationContext)
