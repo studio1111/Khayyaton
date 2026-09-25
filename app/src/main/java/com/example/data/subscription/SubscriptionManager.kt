@@ -28,12 +28,11 @@ import kotlinx.coroutines.withContext
  * مدیریت اشتراک‌های کافه‌بازار و دوره آزمایشی ۳ روزه خیاطان
  *
  * کلید عمومی RSA بازار:
- * TODO: مقدار YOUR_BAZAAR_RSA_PUBLIC_KEY را با کلید RSA دریافت شده از پیشخوان توسعه‌دهندگان کافه‌بازار جایگزین کنید.
  */
 object SubscriptionManager {
     private const val TAG = "SubscriptionManager"
 
-    // TODO: کلید RSA اختصاصی برنامه در پیشخوان کافه‌بازار را در اینجا قرار دهید
+    // کلید عمومی RSA اختصاصی برنامه در پیشخوان کافه‌بازار.
     const val BAZAAR_RSA_PUBLIC_KEY = "MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwCabwVc2p7UqBqZFyMleXiuGT8fHE/obwon3f859+kYRWU5kWqGadTCqEH5JOWALZ7XP0SzynhJ2We24MITaQy0ai6QPEihSgfjYgk5rtpce7ZuB3bwP+4iZcpNKo/HMS+CPRNOPGO87XbZZcDk4DQHgb8vL/PySfLkvu2T7GtPqc6Yicfk/ym2qzb/57ANFP76WiGQHTl/znFKhFj+BSc9wqnldfXMM3SwrNh+YSECAwEAAQ=="
 
     private const val PREFS_NAME = "khayyaton_prefs"
@@ -312,7 +311,7 @@ object SubscriptionManager {
                     val errorMsg = "ارتباط با کافه‌بازار برقرار نشد. لطفاً از نصب بودن و به‌روز بودن کافه‌بازار و اتصال اینترنت اطمینان حاصل کنید."
                     Log.e(TAG, errorMsg, throwable)
                     _operationMessage.value = errorMsg
-                    onResult(Result.failure(throwable))
+                    onResult(Result.failure(Exception(errorMsg)))
                 }
                 purchaseSucceed { purchaseInfo: PurchaseInfo ->
                     Log.d(TAG, "Purchase succeeded: ${purchaseInfo.orderId}")
@@ -338,7 +337,7 @@ object SubscriptionManager {
             val errorMsg = "خطایی در فرآیند پرداخت رخ داد. لطفاً دوباره تلاش کنید."
             Log.e(TAG, errorMsg, e)
             _operationMessage.value = errorMsg
-            onResult(Result.failure(e))
+            onResult(Result.failure(Exception(errorMsg)))
         }
     }
 
