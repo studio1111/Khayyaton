@@ -1,8 +1,6 @@
 name: Build Release AAB and APK
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 concurrency:
   group: khayyaton-production-release
