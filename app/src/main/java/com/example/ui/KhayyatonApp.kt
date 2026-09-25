@@ -158,9 +158,17 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                     if (viewModel.hasPremiumAccess()) {
                         action()
                     } else {
+                        val accessMessage = when (subscriptionState.status) {
+                            com.example.model.SubscriptionStatus.TRIAL_EXPIRED ->
+                                "دوره آزمایشی ۳ روزه شما به پایان رسیده است. لطفاً برای ادامه استفاده از امکانات، اشتراک تهیه فرمایید."
+                            com.example.model.SubscriptionStatus.EXPIRED ->
+                                "اشتراک شما منقضی شده است. لطفاً برای ادامه استفاده از امکانات، اشتراک خود را تمدید یا اشتراک جدید تهیه فرمایید."
+                            else ->
+                                "برای استفاده از این بخش، حساب کاربری شما اشتراک فعال ندارد. لطفاً وضعیت اشتراک را بررسی کنید."
+                        }
                         android.widget.Toast.makeText(
                             context,
-                            "دوره آزمایشی ۳ روزه شما به پایان رسیده است. لطفاً برای ثبت سفارش و استفاده از امکانات، اشتراک تهیه فرمایید.",
+                            accessMessage,
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                         viewModel.isSubscriptionDialogOpen.value = true
