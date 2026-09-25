@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import android.util.Patterns
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -499,6 +501,11 @@ fun GlassyAuthScreen(
                                 return@Button
                             }
 
+                            if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+                                errorMessage = "آدرس ایمیل وارد شده نامعتبر است."
+                                return@Button
+                            }
+
                             if (activeTab == GlassAuthTab.FORGOT_PASSWORD) {
                                 isLoading = true
                                 coroutineScope.launch {
@@ -513,8 +520,13 @@ fun GlassyAuthScreen(
                                 return@Button
                             }
 
+                            if (password.isBlank()) {
+                                errorMessage = "لطفاً کلمه عبور را وارد نمایید."
+                                return@Button
+                            }
+
                             if (password.length < 6) {
-                                errorMessage = "رمز عبور باید حداقل ۶ کاراکتر باشد."
+                                errorMessage = "کلمه عبور باید حداقل ۶ کاراکتر باشد."
                                 return@Button
                             }
 

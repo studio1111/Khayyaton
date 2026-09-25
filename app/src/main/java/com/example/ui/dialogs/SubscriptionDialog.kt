@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.subscription.SubscriptionManager
 import com.example.model.SubscriptionPlan
 import com.example.model.SubscriptionStatus
+import com.example.ui.theme.Amber600
 import com.example.ui.theme.Emerald600
 import com.example.ui.theme.Rose600
 import com.example.util.PersianUtils
@@ -46,7 +47,6 @@ fun SubscriptionDialog(
     val subscription by SubscriptionManager.subscriptionState.collectAsStateWithLifecycle()
     val isLoading by SubscriptionManager.isLoading.collectAsStateWithLifecycle()
     val operationMessage by SubscriptionManager.operationMessage.collectAsStateWithLifecycle()
-    val bazaarPrices by SubscriptionManager.skuDetails.collectAsStateWithLifecycle()
 
     LaunchedEffect(operationMessage) {
         operationMessage?.let { msg ->
@@ -131,9 +131,37 @@ fun SubscriptionDialog(
                     // Status Card
                     SubscriptionStatusBanner(subscription = subscription)
 
+                    // نمایش وضعیت Trial واقعی حساب کاربری
+                    if (subscription.status == SubscriptionStatus.TRIAL_ACTIVE) {
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Amber600.copy(alpha = 0.10f)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                Amber600.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(Icons.Outlined.Timer, contentDescription = null, tint = Amber600)
+                                Text(
+                                    text = "نسخه آزمایشی ۳ روزه شما فعال است. ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت دیگر تا پایان این دوره باقی مانده است.",
+                                    fontSize = 11.sp,
+                                    lineHeight = 18.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                     // Description text
                     Text(
-                        text = "اشتراک‌های فعال کافه‌بازار:",
+                        text = "طرح‌های اشتراک کافه‌بازار (پرداخت امن درون‌برنامه‌ای):",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -145,7 +173,6 @@ fun SubscriptionDialog(
                             plan = plan,
                             isCurrentPlan = subscription.activeProductId == plan.productId && subscription.status == SubscriptionStatus.SUBSCRIBED,
                             isLoading = isLoading,
-                            bazaarPrice = bazaarPrices[plan.productId]?.price,
                             onPurchase = {
                                 if (activity != null) {
                                     SubscriptionManager.purchaseSubscription(activity, plan) { result ->
@@ -237,14 +264,22 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 "دسترسی کامل به برنامه فعال است (${PersianUtils.toPersianDigits(subscription.remainingDays)} روز باقی مانده)"
             )
         }
-        SubscriptionStatus.TRIAL_ACTIVE,
+        SubscriptionStatus.TRIAL_ACTIVE -> {
+            Tuple5(
+                Amber600.copy(alpha = 0.12f),
+                Amber600.copy(alpha = 0.45f),
+                Icons.Outlined.Timer,
+                "نسخه آزمایشی کافه‌بازار فعال است",
+                "${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت از دوره رایگان باقی مانده است"
+            )
+        }
         SubscriptionStatus.TRIAL_EXPIRED -> {
             Tuple5(
                 Rose600.copy(alpha = 0.12f),
                 Rose600.copy(alpha = 0.45f),
                 Icons.Outlined.Warning,
-                "اشتراک فعال نیست",
-                "برای ثبت فاکتور و ادامه استفاده از برنامه، لطفاً یکی از اشتراک‌های کافه‌بازار را فعال کنید."
+                "دوره آزمایشی کافه‌بازار به پایان رسیده است",
+                "برای ثبت فاکتور و ادامه استفاده از برنامه، لطفاً یکی از بسته‌های اشتراک را فعال کنید."
             )
         }
         SubscriptionStatus.EXPIRED -> {
@@ -282,7 +317,7 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (subscription.status == SubscriptionStatus.SUBSCRIBED) Emerald600 else Rose600,
+                tint = if (subscription.status == SubscriptionStatus.SUBSCRIBED) Emerald600 else if (subscription.status == SubscriptionStatus.TRIAL_ACTIVE) Amber600 else Rose600,
                 modifier = Modifier.size(28.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
@@ -309,7 +344,6 @@ private fun PlanCard(
     plan: SubscriptionPlan,
     isCurrentPlan: Boolean,
     isLoading: Boolean,
-    bazaarPrice: String?,
     onPurchase: () -> Unit
 ) {
     val isHighlighted = plan.tagFa != null
@@ -367,7 +401,7 @@ private fun PlanCard(
                 }
 
                 Text(
-                    text = PersianUtils.toPersianDigits(bazaarPrice ?: plan.priceFormatted),
+                    text = PersianUtils.toPersianDigits(plan.priceFormatted),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.primary
@@ -406,7 +440,7 @@ private fun PlanCard(
                         modifier = Modifier.height(36.dp)
                     ) {
                         Text(
-                            text = "پرداخت و فعال‌سازی",
+                            text = "خرید و فعال‌سازی",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )

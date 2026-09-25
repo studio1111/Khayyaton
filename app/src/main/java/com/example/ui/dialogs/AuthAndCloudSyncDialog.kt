@@ -1,5 +1,7 @@
 package com.example.ui.dialogs
 
+import android.util.Patterns
+
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -605,6 +607,11 @@ fun AuthAndCloudSyncDialog(
                                     return@Button
                                 }
 
+                                if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+                                    errorMessage = "آدرس ایمیل وارد شده نامعتبر است."
+                                    return@Button
+                                }
+
                                 if (mode == AuthScreenMode.FORGOT_PASSWORD) {
                                     isLoading = true
                                     coroutineScope.launch {
@@ -613,14 +620,19 @@ fun AuthAndCloudSyncDialog(
                                         if (res.isSuccess) {
                                             successMessage = "لینک بازیابی رمز عبور به ایمیل شما ارسال شد."
                                         } else {
-                                            errorMessage = res.exceptionOrNull()?.message ?: "خطا در ارسال ایمیل بازیابی"
+                                            errorMessage = res.exceptionOrNull()?.message ?: "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
                                         }
                                     }
                                     return@Button
                                 }
 
+                                if (password.isBlank()) {
+                                    errorMessage = "لطفاً کلمه عبور را وارد نمایید."
+                                    return@Button
+                                }
+
                                 if (password.length < 6) {
-                                    errorMessage = "رمز عبور باید حداقل ۶ کاراکتر باشد."
+                                    errorMessage = "کلمه عبور باید حداقل ۶ کاراکتر باشد."
                                     return@Button
                                 }
 
@@ -648,7 +660,7 @@ fun AuthAndCloudSyncDialog(
                                         onUserChanged(user)
                                         successMessage = if (mode == AuthScreenMode.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد و وارد شدید."
                                     } else {
-                                        errorMessage = res.exceptionOrNull()?.message ?: "عملیات ناموفق بود."
+                                        errorMessage = res.exceptionOrNull()?.message ?: "عملیات انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
                                     }
                                 }
                             },

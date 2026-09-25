@@ -88,24 +88,15 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
     val coroutineScope = rememberCoroutineScope()
 
     val context = androidx.compose.ui.platform.LocalContext.current
-    val sharedPrefs = remember {
-        context.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
-    }
 
-    var hasCompletedFirstLaunchAuth by remember {
-        mutableStateOf(sharedPrefs.getBoolean("has_completed_first_auth", false))
-    }
-
-    // If user hasn't completed authentication with email/username and is not logged in, show GlassyAuthScreen (no offline skip)
-    if (!hasCompletedFirstLaunchAuth && currentUser == null) {
+    // احراز هویت واقعی Firebase مرجع وضعیت ورود است؛ پرچم محلی نباید ورود را دور بزند.
+    if (currentUser == null) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             KhayyatonTheme(themeMode = themeMode) {
                 GlassyAuthScreen(
                     isFirstLaunch = true,
                     onAuthSuccess = { user, username, workshopName ->
                         viewModel.onUserLoggedIn(user, username, workshopName)
-                        sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
-                        hasCompletedFirstLaunchAuth = true
                     }
                 )
             }
@@ -152,9 +143,17 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                     if (viewModel.hasPremiumAccess()) {
                         action()
                     } else {
+                        val accessMessage = when (subscriptionState.status) {
+                            com.example.model.SubscriptionStatus.TRIAL_EXPIRED ->
+                                "دوره آزمایشی ۳ روزه شما به پایان رسیده است. لطفاً برای ادامه استفاده از امکانات، اشتراک تهیه فرمایید."
+                            com.example.model.SubscriptionStatus.EXPIRED ->
+                                "اشتراک شما منقضی شده است. لطفاً برای ادامه استفاده از امکانات، اشتراک خود را تمدید یا اشتراک جدید تهیه فرمایید."
+                            else ->
+                                "برای استفاده از این بخش، حساب کاربری شما اشتراک فعال ندارد. لطفاً وضعیت اشتراک را بررسی کنید."
+                        }
                         android.widget.Toast.makeText(
                             context,
-                            "دوره آزمایشی ۳ روزه شما به پایان رسیده است. لطفاً برای ثبت سفارش و استفاده از امکانات، اشتراک تهیه فرمایید.",
+                            accessMessage,
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                         viewModel.isSubscriptionDialogOpen.value = true
