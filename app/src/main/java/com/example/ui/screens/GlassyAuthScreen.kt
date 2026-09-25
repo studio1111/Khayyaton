@@ -553,7 +553,7 @@ fun GlassyAuthScreen(
                                     successMessage = if (activeTab == GlassAuthTab.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد."
                                     onAuthSuccess(finalUser, username.trim(), workshopName.trim())
                                 } else {
-                                    errorMessage = res.exceptionOrNull()?.message ?: "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
+                                    errorMessage = "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
                                 }
                             }
                         },
