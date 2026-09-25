@@ -131,7 +131,7 @@ fun SubscriptionDialog(
                     // Status Card
                     SubscriptionStatusBanner(subscription = subscription)
 
-                    // نمایش وضعیت Trial واقعی حساب کاربری
+                    // نمایش وضعیت دوره آزمایشی داخلی حساب کاربری
                     if (subscription.status == SubscriptionStatus.TRIAL_ACTIVE) {
                         Card(
                             shape = RoundedCornerShape(14.dp),
@@ -279,7 +279,7 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Amber600.copy(alpha = 0.45f),
                 Icons.Outlined.Timer,
                 "نسخه آزمایشی ۷ روزه خیاطان",
-                "دوره آزمایشی ۷ روزه از زمان ساخت حساب Firebase محاسبه می‌شود؛ ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت باقی مانده است"
+                "دوره آزمایشی ۷ روزه از زمان ایجاد حساب محاسبه می‌شود؛ ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت باقی مانده است"
             )
         }
         SubscriptionStatus.TRIAL_EXPIRED -> {
