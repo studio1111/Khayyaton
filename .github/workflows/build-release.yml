@@ -1,6 +1,9 @@
 name: Build Release AAB and APK
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
+
 
 concurrency:
   group: khayyaton-production-release
@@ -87,7 +90,7 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "release-${GITHUB_RUN_NUMBER}" --target "${GITHUB_SHA}" --title "Khayyaton Release ${GITHUB_RUN_NUMBER}" --notes "Production release built from commit ${GITHUB_SHA}. Includes signed AAB, signed APK, and complete source ZIP." "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB" "app/build/outputs/apk/release/app-release.apk#Khayyaton APK" "Khayyaton-Source-${GITHUB_SHA::7}.zip#Khayyaton Source ZIP"
+        run: gh release create "release-${GITHUB_RUN_NUMBER}" --target "${GITHUB_SHA}" --title "Khayyaton Release ${GITHUB_RUN_NUMBER}" --notes "Production release built from commit ${GITHUB_SHA}. Includes signed AAB, signed APK, and complete source ZIP." "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB" "app/build/outputs/apk/release/app-release.apk#Khayyaton APK" "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"
 
       - name: Verify release identity
         if: always()
