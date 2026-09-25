@@ -215,12 +215,20 @@ fun PaymentCardItem(
                         .background(Emerald600.copy(alpha = 0.2f))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Text(
-                        text = "دریافتی",
-                        color = PaymentNeonGreen,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color.Black.copy(alpha = 0.35f))
+                            .border(1.dp, PaymentNeonGreen.copy(alpha = 0.8f), RoundedCornerShape(7.dp))
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "دریافتی",
+                            color = PaymentNeonGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
                 }
             }
 
