@@ -73,7 +73,7 @@ fun BackupDialog(
                     Toast.makeText(context, "فایل انتخاب شده خالی است.", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "خطا در خواندن فایل: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "خواندن فایل پشتیبان انجام نشد. فایل انتخاب‌شده معتبر نیست یا قابل دسترسی نیست.", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -479,7 +479,7 @@ fun BackupDialog(
                                 onDataRestored()
                                                                 Toast.makeText(context, restoreResultMsg, Toast.LENGTH_LONG).show()
                             } catch (e: Exception) {
-                                Toast.makeText(context, "خطا در ساختار فایل بکاپ: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "ساختار فایل پشتیبان معتبر نیست. لطفاً یک فایل پشتیبان سالم از همین برنامه انتخاب کنید.", Toast.LENGTH_LONG).show()
                             } finally {
                                 isRestoring = false
                                 pendingJsonContent = null
