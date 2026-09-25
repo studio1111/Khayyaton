@@ -105,21 +105,6 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            KhayyatonTheme(themeMode = themeMode) {
-                GlassyAuthScreen(
-                    isFirstLaunch = true,
-                    onAuthSuccess = { user, username, workshopName ->
-                        viewModel.onUserLoggedIn(user, username, workshopName)
-                        sharedPrefs.edit().putBoolean("has_completed_first_auth", true).apply()
-                        hasCompletedFirstLaunchAuth = true
-                    }
-                )
-            }
-        }
-        return
-    }
-
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         KhayyatonTheme(themeMode = themeMode) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
