@@ -67,7 +67,7 @@ object FirebaseService {
         get() = try {
             FirebaseAuth.getInstance()
         } catch (e: Exception) {
-            Log.w(TAG, "Firebase Auth not available: ${e.message}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Firebase Auth not available", e)
             null
         }
 
@@ -75,7 +75,7 @@ object FirebaseService {
         get() = try {
             FirebaseFirestore.getInstance()
         } catch (e: Exception) {
-            Log.w(TAG, "Firebase Firestore not available: ${e.message}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Firebase Firestore not available", e)
             null
         }
 
