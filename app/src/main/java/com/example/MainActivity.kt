@@ -45,11 +45,11 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            var showSplash by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+            val showSplash = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
 
-            if (showSplash) {
+            if (showSplash.value) {
                 SplashScreen(
-                    onSplashFinished = { showSplash = false }
+                    onSplashFinished = { showSplash.value = false }
                 )
             } else {
                 KhayyatonApp(viewModel = viewModel)
