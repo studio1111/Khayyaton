@@ -1239,7 +1239,7 @@ private fun WorkAndPaymentsTableCard(
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("نام پرداخت‌کننده / مشتری", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Start)
+                Text("نام پرداخت‌کننده", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Start)
                 Text("تعداد اسناد", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(0.9f), textAlign = TextAlign.Center)
                 Text("بانک / درگاه", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.1f), textAlign = TextAlign.Center)
                 Text("مجموع واریزی ($currencyUnit)", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.5f), textAlign = TextAlign.End)
