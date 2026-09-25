@@ -278,7 +278,7 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Amber600.copy(alpha = 0.12f),
                 Amber600.copy(alpha = 0.45f),
                 Icons.Outlined.Timer,
-                "نسخه آزمایشی داخلی خیاطان فعال است",
+                "نسخه آزمایشی ۷ روزه خیاطان",
                 "دوره آزمایشی ۷ روزه از زمان ساخت حساب Firebase محاسبه می‌شود؛ ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت باقی مانده است"
             )
         }
