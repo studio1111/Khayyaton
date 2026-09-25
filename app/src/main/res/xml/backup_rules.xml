@@ -1,13 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Workshop records and account state are restored through authenticated Firebase sync
+         or the app's explicit backup/restore feature. Do not copy local state across accounts. -->
+    <exclude domain="database" path="khayyaton_workshop.db" />
+    <exclude domain="sharedpref" path="khayyaton_prefs.xml" />
 </full-backup-content>
