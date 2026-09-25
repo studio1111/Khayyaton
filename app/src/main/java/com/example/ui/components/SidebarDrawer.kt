@@ -256,6 +256,7 @@ fun SidebarDrawer(
             ) {
                 // Section 1: Primary Action Items
                 val subBadge = when (subscriptionState?.status) {
+                    com.example.model.SubscriptionStatus.ADMIN_GRANTED -> "مالک"
                     com.example.model.SubscriptionStatus.SUBSCRIBED -> "ویژه"
                     com.example.model.SubscriptionStatus.TRIAL_ACTIVE -> "آزمایشی (${com.example.util.PersianUtils.toPersianDigits(subscriptionState.remainingDays)} روز)"
                     com.example.model.SubscriptionStatus.TRIAL_EXPIRED -> "منقضی شده"
