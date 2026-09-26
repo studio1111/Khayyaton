@@ -108,9 +108,13 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             if (savedUser.isNotBlank()) customUsername.value = savedUser
 
             val savedWsId = repository.getSavedActiveWorkshopId()
+            val user = FirebaseService.getCurrentUser()
             repository.deduplicateWorkshops()
             val cleanWorkshops = repository.getAllWorkshopsSync()
-            val effectiveWorkshops = if (cleanWorkshops.isEmpty()) {
+
+            // Do not create a placeholder before an authenticated account
+            // has had a chance to restore its cloud data.
+            val effectiveWorkshops = if (cleanWorkshops.isEmpty() && user == null) {
                 repository.ensureDefaultWorkshop()
                 repository.getAllWorkshopsSync()
             } else {
@@ -121,7 +125,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 if (savedWsId > 0L && effectiveWorkshops.any { it.id == savedWsId }) {
                     savedWsId
                 } else {
-                    effectiveWorkshops.firstOrNull()?.id ?: 1L
+                    effectiveWorkshops.firstOrNull()?.id ?: 0L
                 }
             repository.saveActiveWorkshopId(activeWorkshopId.value)
 
@@ -138,7 +142,6 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 .getOrNull()?.let { calendarType.value = it }
             currencyUnit.value = repository.getSavedCurrencyUnit()
 
-            val user = FirebaseService.getCurrentUser()
             currentUser.value = user
             SubscriptionManager.syncSubscriptionWithFirebase()
 
@@ -167,11 +170,20 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 repository.deduplicateOrders()
                 repository.deduplicatePayments()
 
-                if (switchingUser || (localUid == null && localOrders.isEmpty() && localPayments.isEmpty() && localPresets.isEmpty() && currentWorkshops.isEmpty())) {
-                    performAutoSync(user, shouldDownload = true)
-                } else {
-                    performAutoSync(user, shouldDownload = false)
-                }
+                val onlyPlaceholderWorkshop =
+                    localOrders.isEmpty() &&
+                    localPayments.isEmpty() &&
+                    localPresets.isEmpty() &&
+                    currentWorkshops.size == 1 &&
+                    currentWorkshops.first().name.trim().lowercase() in setOf("کارگاه اصلی", "کارگاه")
+
+                val shouldDownload =
+                    switchingUser ||
+                    localUid == null ||
+                    (localOrders.isEmpty() && localPayments.isEmpty() && localPresets.isEmpty() && currentWorkshops.isEmpty()) ||
+                    onlyPlaceholderWorkshop
+
+                performAutoSync(user, shouldDownload = shouldDownload)
 
                 if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
                     customUsername.value = user.displayName
@@ -569,11 +581,10 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             repository.deleteWorkshopAndAllData(workshop.id)
             repository.deduplicateWorkshops()
             val remaining = repository.getAllWorkshopsSync()
-            val nextActive = if (remaining.isNotEmpty()) {
-                remaining.first().id
-            } else {
-                repository.ensureDefaultWorkshop()
-            }
+            val nextActive = remaining.firstOrNull()?.id ?: 0L
+
+            // Deleting the final/main workshop is intentional. Never silently
+            // recreate a workshop after deletion.
             activeWorkshopId.value = nextActive
             repository.saveActiveWorkshopId(nextActive)
             clearFilters()
@@ -811,7 +822,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 val restoredActiveId = when {
                     savedId > 0L && effectiveWorkshops.any { it.id == savedId } -> savedId
                     effectiveWorkshops.isNotEmpty() -> effectiveWorkshops.first().id
-                    else -> 1L
+                    else -> 0L
                 }
                 activeWorkshopId.value = restoredActiveId
                 repository.saveActiveWorkshopId(restoredActiveId)
