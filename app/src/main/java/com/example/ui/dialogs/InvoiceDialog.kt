@@ -432,6 +432,9 @@ fun InvoiceDialog(
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
 
                     // Section Title 2: Payments Table
                     if (customerPayments.isNotEmpty()) {
