@@ -15,9 +15,10 @@ object ExcelExportUtil {
  private fun cell(r:String,v:String,st:Int=0)="<c r=\"" + r + "\" t=\"inlineStr\" s=\"" + st + "\"><is><t>" + esc(v) + "</t></is></c>"
  private fun num(r:String,v:Long)="<c r=\"" + r + "\" t=\"n\" s=\"2\"><v>" + v + "</v></c>"
  private fun sheet(h:List<String>,rows:List<List<String>>,nums:Set<Int>):String{
-  val all=listOf(h)+rows
+  val safeRows=if(rows.isEmpty()) listOf(List(h.size){i->if(i==0)"داده‌ای برای نمایش ثبت نشده است" else ""}) else rows
+  val all=listOf(h)+safeRows
   val data=buildString{all.forEachIndexed{ri,row->append("<row r=\"" + (ri+1) + "\">");row.forEachIndexed{ci,v->val ref=col(ci)+(ri+1);if(ri>0&&ci in nums){val n=v.replace(",","").replace("٬","").replace(" ","").toLongOrNull();append(if(n!=null)num(ref,n) else cell(ref,v))}else append(cell(ref,v,if(ri==0)1 else 0))};append("</row>")}}
-  val widths=h.indices.joinToString(""){i->val m=(listOf(h[i])+rows.mapNotNull{it.getOrNull(i)}).maxOfOrNull{it.length}?:10;"<col min=\"" +(i+1)+"\" max=\"" +(i+1)+"\" width=\"" +(m.coerceIn(10,30)+3)+"\"/>"}
+  val widths=h.indices.joinToString(""){i->val m=(listOf(h[i])+safeRows.mapNotNull{it.getOrNull(i)}).maxOfOrNull{it.length}?:10;"<col min=\"" +(i+1)+"\" max=\"" +(i+1)+"\" width=\"" +(m.coerceIn(10,30)+3)+"\"/>"}
   return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetViews><sheetView rightToLeft=\"1\" workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" state=\"frozen\"/></sheetView></sheetViews><cols>"+widths+"</cols><sheetData>"+data+"</sheetData><autoFilter ref=\"A1:"+col(h.lastIndex)+all.size+"\"/></worksheet>"
  }
  private fun wb(names:List<String>)="<?xml version=\"1.0\" encoding=\"UTF-8\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>"+names.mapIndexed{i,n->"<sheet name=\"" + esc(n) + "\" sheetId=\"" +(i+1)+"\" r:id=\"rId"+(i+1)+"\"/>"}.joinToString("")+"</sheets></workbook>"
