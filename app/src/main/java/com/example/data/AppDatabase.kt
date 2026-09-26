@@ -253,7 +253,75 @@ class WorkshopRepository(
         workshopDao.getWorkshopById(id)
 
     suspend fun ensureDefaultWorkshop(): Long {
-        return workshopDao.getAllWorkshopsSync().firstOrNull()?.id ?: 0L
+        val existing = workshopDao.getAllWorkshopsSync()
+        if (existing.isNotEmpty()) {
+            return existing.first().id
+        }
+        val defaultWorkshop = Workshop(
+            id = 1L,
+            name = "کارگاه اصلی",
+            createdAt = System.currentTimeMillis()
+        )
+        return workshopDao.insertWorkshop(defaultWorkshop)
+    }
+
+    suspend fun deduplicateWorkshops() {
+        val all = workshopDao.getAllWorkshopsSync()
+        if (all.size <= 1) return
+
+        val seenNames = mutableMapOf<String, Long>()
+        val defaultWorkshops = mutableListOf<Workshop>()
+        val toDelete = mutableListOf<Workshop>()
+
+        for (ws in all) {
+            val normName = ws.name.trim().lowercase(java.util.Locale.ROOT)
+            val isDefaultName = normName == "کارگاه اصلی" || normName == "کارگاه"
+
+            if (isDefaultName) {
+                defaultWorkshops.add(ws)
+            } else {
+                val existingMasterId = seenNames[normName]
+                if (existingMasterId != null) {
+                    toDelete.add(ws)
+                } else {
+                    seenNames[normName] = ws.id
+                }
+            }
+        }
+
+        // Ensure default workshops NEVER exist more than one:
+        if (defaultWorkshops.size > 1) {
+            for (i in 1 until defaultWorkshops.size) {
+                toDelete.add(defaultWorkshops[i])
+            }
+        }
+
+        for (dup in toDelete) {
+            val normName = dup.name.trim().lowercase(java.util.Locale.ROOT)
+            val targetId = if (normName in listOf("کارگاه اصلی", "کارگاه")) {
+                defaultWorkshops.first().id
+            } else {
+                seenNames[normName] ?: all.first().id
+            }
+
+            if (dup.id != targetId) {
+                val dupOrders = orderDao.getOrdersByWorkshopSync(dup.id)
+                for (ord in dupOrders) {
+                    orderDao.updateOrder(ord.copy(workshopId = targetId))
+                }
+                val dupPayments = paymentDao.getPaymentsByWorkshopSync(dup.id)
+                for (pay in dupPayments) {
+                    paymentDao.updatePayment(pay.copy(workshopId = targetId))
+                }
+                val dupPresets = modelPresetDao.getPresetsByWorkshopSync(dup.id)
+                for (pre in dupPresets) {
+                    modelPresetDao.updatePreset(pre.copy(workshopId = targetId))
+                }
+
+                if (getLocalAccountUid() != null) recordCloudDeletion("workshops", dup.syncId)
+                workshopDao.deleteWorkshopById(dup.id)
+            }
+        }
     }
 
     suspend fun saveWorkshop(workshop: Workshop): Long {
@@ -467,7 +535,7 @@ class WorkshopRepository(
             }
 
             if (match != null) {
-                orderDao.updateOrder(normalizedOrder.copy(id = match.id))
+                orderDao.updateOrder(normalizedOrder.copy(id = match.id, syncId = match.syncId))
             } else {
                 orderDao.insertOrder(normalizedOrder)
             }
@@ -514,7 +582,7 @@ class WorkshopRepository(
             }
 
             if (match != null) {
-                paymentDao.updatePayment(normalizedPayment.copy(id = match.id))
+                paymentDao.updatePayment(normalizedPayment.copy(id = match.id, syncId = match.syncId))
             } else {
                 paymentDao.insertPayment(normalizedPayment)
             }
@@ -569,9 +637,8 @@ class WorkshopRepository(
 
     suspend fun deduplicateOrders() {
         val all = orderDao.getAllOrdersSync()
-        val seenOrderNum = mutableSetOf<String>()
-        val seenInvoiceNum = mutableSetOf<String>()
-        val seenContent = mutableSetOf<String>()
+        val seenExact = mutableSetOf<String>()
+        val seenRapidSubmits = mutableMapOf<String, Long>()
         val toDelete = mutableListOf<FurnitureOrder>()
 
         for (ord in all) {
@@ -582,20 +649,19 @@ class WorkshopRepository(
             val normTotal = ord.calculatedTotal
             val normDate = com.example.util.PersianUtils.toEnglishDigits(ord.dateJalali.trim())
 
-            val keyOrderNum = "${wsId}_${ord.orderNumber}"
-            val keyInv = if (normInv.isNotBlank() && normInv != "0") "${wsId}_$normInv" else null
-            val keyContent = "${wsId}_${normCust}_${normModel}_${normTotal}_$normDate"
+            // Exact identical identity key: same workshop, order number, and invoice number
+            val exactKey = "${wsId}_${ord.orderNumber}_$normInv"
+            val rapidKey = "${wsId}_${normCust}_${normModel}_${normTotal}_$normDate"
 
-            val isDuplicate = (keyOrderNum in seenOrderNum) ||
-                    (keyInv != null && keyInv in seenInvoiceNum) ||
-                    (normCust.isNotBlank() && keyContent in seenContent)
+            val lastRapidTime = seenRapidSubmits[rapidKey]
+            val isRapidDuplicate = lastRapidTime != null && Math.abs(ord.createdAt - lastRapidTime) < 10000L
+            val isExactDuplicate = exactKey in seenExact
 
-            if (isDuplicate) {
+            if (isExactDuplicate || (normCust.isNotBlank() && isRapidDuplicate)) {
                 toDelete.add(ord)
             } else {
-                seenOrderNum.add(keyOrderNum)
-                if (keyInv != null) seenInvoiceNum.add(keyInv)
-                if (normCust.isNotBlank()) seenContent.add(keyContent)
+                seenExact.add(exactKey)
+                if (normCust.isNotBlank()) seenRapidSubmits[rapidKey] = ord.createdAt
             }
         }
         for (ord in toDelete) {
@@ -606,9 +672,8 @@ class WorkshopRepository(
 
     suspend fun deduplicatePayments() {
         val all = paymentDao.getAllPaymentsSync()
-        val seenPayNum = mutableSetOf<String>()
-        val seenRefNo = mutableSetOf<String>()
-        val seenContent = mutableSetOf<String>()
+        val seenExact = mutableSetOf<String>()
+        val seenRapidSubmits = mutableMapOf<String, Long>()
         val toDelete = mutableListOf<PaymentRecord>()
 
         for (pay in all) {
@@ -618,20 +683,18 @@ class WorkshopRepository(
             val normAmt = pay.amount
             val normDate = com.example.util.PersianUtils.toEnglishDigits(pay.dateJalali.trim())
 
-            val keyPayNum = "${wsId}_${pay.paymentNumber}"
-            val keyRef = if (normRef.isNotBlank()) "${wsId}_$normRef" else null
-            val keyContent = "${wsId}_${normCust}_${normAmt}_$normDate"
+            val exactKey = "${wsId}_${pay.paymentNumber}_$normRef"
+            val rapidKey = "${wsId}_${normCust}_${normAmt}_$normDate"
 
-            val isDuplicate = (keyPayNum in seenPayNum) ||
-                    (keyRef != null && keyRef in seenRefNo) ||
-                    (normCust.isNotBlank() && keyContent in seenContent)
+            val lastRapidTime = seenRapidSubmits[rapidKey]
+            val isRapidDuplicate = lastRapidTime != null && Math.abs(pay.createdAt - lastRapidTime) < 10000L
+            val isExactDuplicate = exactKey in seenExact
 
-            if (isDuplicate) {
+            if (isExactDuplicate || (normCust.isNotBlank() && isRapidDuplicate)) {
                 toDelete.add(pay)
             } else {
-                seenPayNum.add(keyPayNum)
-                if (keyRef != null) seenRefNo.add(keyRef)
-                if (normCust.isNotBlank()) seenContent.add(keyContent)
+                seenExact.add(exactKey)
+                if (normCust.isNotBlank()) seenRapidSubmits[rapidKey] = pay.createdAt
             }
         }
         for (pay in toDelete) {

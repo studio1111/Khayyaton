@@ -46,7 +46,7 @@ object FirebaseService {
                 if (BuildConfig.DEBUG) Log.d(TAG, "Firebase already initialized with ${apps.size} apps")
             }
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.e(TAG, "Error initializing Firebase: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.w(TAG, "Error initializing Firebase: ${e.message}")
             try {
                 val options = FirebaseOptions.Builder()
                     .setApplicationId("1:15543905804:android:8fc6393c86598be4310829")
@@ -58,7 +58,7 @@ object FirebaseService {
                 FirebaseApp.initializeApp(context, options)
                 Log.d(TAG, "Firebase recovered with explicit options")
             } catch (ex: Exception) {
-                if (BuildConfig.DEBUG) Log.e(TAG, "Firebase fallback initialization failed: ${ex.message}", ex)
+                if (BuildConfig.DEBUG) Log.w(TAG, "Firebase fallback initialization failed: ${ex.message}")
             }
         }
     }
@@ -95,22 +95,37 @@ object FirebaseService {
     ): Result<FirebaseUserDto> {
         val fbAuth = auth ?: return Result.failure(Exception("سرویس احراز هویت فایربیس راه‌اندازی نشده است."))
         return try {
-            val result = fbAuth.signInWithEmailAndPassword(email.trim(), pass).await()
+            val cleanEmail = com.example.util.PersianUtils.toEnglishDigits(email.trim()).lowercase()
+            val result = fbAuth.signInWithEmailAndPassword(cleanEmail, pass).await()
             val user = result.user
             if (user != null) {
                 val enteredUsername = username?.trim().orEmpty()
-                if (enteredUsername.isNotBlank()) {
-                    val db = firestore
-                    if (db != null) {
-                        val stored = db.collection("users").document(user.uid).get().await()
-                            .getString("username").orEmpty().trim()
-                        if (stored.isNotBlank() && !stored.equals(enteredUsername, ignoreCase = true)) {
+                var resolvedDisplayName = user.displayName?.trim().orEmpty()
+                val db = firestore
+                if (db != null) {
+                    val userDoc = db.collection("users").document(user.uid).get().await()
+                    val storedUsername = userDoc.getString("username").orEmpty().trim()
+                    if (enteredUsername.isNotBlank()) {
+                        if (storedUsername.isNotBlank() && !storedUsername.equals(enteredUsername, ignoreCase = true)) {
                             fbAuth.signOut()
                             return Result.failure(Exception("نام کاربری یا ایمیل اشتباه است."))
                         }
                     }
+                    if (resolvedDisplayName.isBlank() && storedUsername.isNotBlank()) {
+                        resolvedDisplayName = storedUsername
+                        runCatching {
+                            user.updateProfile(
+                                com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                                    .setDisplayName(storedUsername)
+                                    .build()
+                            ).await()
+                        }
+                    }
                 }
-                Result.success(FirebaseUserDto(user.uid, user.email ?: email, user.displayName))
+                if (resolvedDisplayName.isBlank() && enteredUsername.isNotBlank()) {
+                    resolvedDisplayName = enteredUsername
+                }
+                Result.success(FirebaseUserDto(user.uid, user.email ?: cleanEmail, resolvedDisplayName.ifBlank { null }))
             } else {
                 Result.failure(Exception("ورود ناموفق بود."))
             }
@@ -119,14 +134,14 @@ object FirebaseService {
         }
     }
 
-
     suspend fun registerWithEmail(email: String, pass: String): Result<FirebaseUserDto> {
         val fbAuth = auth ?: return Result.failure(Exception("سرویس فایربیس راه‌اندازی نشده است. فایل google-services.json را بررسی کنید."))
         return try {
-            val result = fbAuth.createUserWithEmailAndPassword(email.trim(), pass).await()
+            val cleanEmail = com.example.util.PersianUtils.toEnglishDigits(email.trim()).lowercase()
+            val result = fbAuth.createUserWithEmailAndPassword(cleanEmail, pass).await()
             val user = result.user
             if (user != null) {
-                Result.success(FirebaseUserDto(user.uid, user.email ?: email, user.displayName))
+                Result.success(FirebaseUserDto(user.uid, user.email ?: cleanEmail, user.displayName))
             } else {
                 Result.failure(Exception("ثبت‌نام ناموفق بود."))
             }
@@ -147,7 +162,8 @@ object FirebaseService {
     ): Result<FirebaseUserDto> {
         val fbAuth = auth ?: return Result.failure(Exception("سرویس فایربیس راه‌اندازی نشده است. فایل google-services.json را بررسی کنید."))
         val db = firestore ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
-        val normalizedUsername = username.trim().lowercase()
+        val trimmedUsername = username.trim()
+        val normalizedUsername = com.example.util.PersianUtils.toEnglishDigits(trimmedUsername).lowercase()
 
         if (normalizedUsername.isBlank()) {
             return Result.failure(Exception("لطفاً نام کاربری را وارد کنید."))
@@ -156,8 +172,9 @@ object FirebaseService {
             return Result.failure(Exception("نام کاربری باید ۳ تا ۳۲ نویسه و فقط شامل حروف، اعداد، نقطه، خط تیره یا زیرخط باشد."))
         }
 
+        val cleanEmail = com.example.util.PersianUtils.toEnglishDigits(email.trim()).lowercase()
         return try {
-            val result = fbAuth.createUserWithEmailAndPassword(email.trim(), pass).await()
+            val result = fbAuth.createUserWithEmailAndPassword(cleanEmail, pass).await()
             val user = result.user ?: return Result.failure(Exception("ثبت‌نام ناموفق بود."))
             val usernameRef = db.collection("usernames").document(normalizedUsername)
             val userRef = db.collection("users").document(user.uid)
@@ -169,7 +186,7 @@ object FirebaseService {
                     transaction.set(usernameRef, mapOf("uid" to user.uid))
                     transaction.set(
                         userRef,
-                        mapOf("username" to username.trim(), "email" to (user.email ?: email)),
+                        mapOf("username" to trimmedUsername, "email" to (user.email ?: cleanEmail)),
                         SetOptions.merge()
                     )
                 }.await()
@@ -181,10 +198,19 @@ object FirebaseService {
                 throw reservationError
             }
 
-            Result.success(FirebaseUserDto(user.uid, user.email ?: email, username.trim()))
+            runCatching {
+                user.updateProfile(
+                    com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                        .setDisplayName(trimmedUsername)
+                        .build()
+                ).await()
+            }
+
+            Result.success(FirebaseUserDto(user.uid, user.email ?: cleanEmail, trimmedUsername))
         } catch (e: Exception) {
             Result.failure(Exception(parseCloudError(e)))
-        }    }
+        }
+    }
 
     suspend fun sendPasswordResetEmail(email: String): Result<Unit> {
         val fbAuth = auth ?: return Result.failure(Exception("سرویس فایربیس در دسترس نیست."))
@@ -217,6 +243,19 @@ object FirebaseService {
             ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
 
         return try {
+            try {
+                user.getIdToken(false).await()
+            } catch (tokenEx: Exception) {
+                Log.w(TAG, "Token refresh failed before upload: ${tokenEx.message}")
+                try {
+                    user.reload().await()
+                    user.getIdToken(true).await()
+                } catch (reloadEx: Exception) {
+                    Log.w(TAG, "User session expired before upload: ${reloadEx.message}")
+                    return Result.failure(Exception("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد حساب خود شوید."))
+                }
+            }
+
             val userDoc = db.collection("users").document(user.uid)
             val maxBatchSize = 400
 
@@ -452,8 +491,9 @@ object FirebaseService {
                 )
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error uploading to Firestore", e)
-            Result.failure(Exception(parseCloudError(e)))
+            val friendlyMsg = parseCloudError(e)
+            Log.w(TAG, "Cloud upload failed: ${e.message}")
+            Result.failure(Exception(friendlyMsg))
         }
     }
 
@@ -467,6 +507,19 @@ object FirebaseService {
             ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
 
         return try {
+            try {
+                user.getIdToken(false).await()
+            } catch (tokenEx: Exception) {
+                Log.w(TAG, "Token refresh failed before download: ${tokenEx.message}")
+                try {
+                    user.reload().await()
+                    user.getIdToken(true).await()
+                } catch (reloadEx: Exception) {
+                    Log.w(TAG, "User session expired before download: ${reloadEx.message}")
+                    return Result.failure(Exception("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد حساب خود شوید."))
+                }
+            }
+
             val userDoc = db.collection("users").document(user.uid)
 
             val deletionSnapshot = userDoc.collection("deletions").get().await()
@@ -649,8 +702,9 @@ object FirebaseService {
                 )
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error downloading from Firestore", e)
-            Result.failure(Exception(parseCloudError(e)))
+            val friendlyMsg = parseCloudError(e)
+            Log.w(TAG, "Cloud download failed: ${e.message}")
+            Result.failure(Exception(friendlyMsg))
         }
     }
 
@@ -664,6 +718,15 @@ object FirebaseService {
     private fun parseCloudError(e: Exception): String {
         val msg = e.message.orEmpty()
         val lowerMsg = msg.lowercase()
+
+        if (e is com.google.firebase.firestore.FirebaseFirestoreException) {
+            if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                return "دسترسی لازم برای این عملیات وجود ندارد. لطفاً دوباره وارد حساب کاربری خود شوید."
+            }
+            if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE) {
+                return "سرویس ابری در دسترس نیست. لطفاً اتصال اینترنت را بررسی کنید."
+            }
+        }
 
         // Authentication errors must be handled before generic HTTP/403 parsing.
         // Firebase can return a generic credentials error, and a generic 403 message

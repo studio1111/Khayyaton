@@ -314,10 +314,12 @@ fun UnitRulesDialog(
                                         return@Button
                                     }
                                     val numVal = PersianUtils.toEnglishDigits(keyTrimmed).replace("/", ".").toDoubleOrNull() ?: 0.0
+                                    val existingRule = rules.find { it.id == editingRuleId }
 
                                     onSaveRule(
                                         UnitConversionRule(
                                             id = editingRuleId ?: 0L,
+                                            syncId = existingRule?.syncId ?: java.util.UUID.randomUUID().toString(),
                                             pieceKey = keyTrimmed,
                                             pieceCount = numVal,
                                             calculatedUnits = unitVal,

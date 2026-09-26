@@ -534,6 +534,9 @@ fun PaymentDialog(
                             if (currentAmount <= 0) return@Button
                             val pay = PaymentRecord(
                                 id = initialPayment?.id ?: 0L,
+                                workshopId = initialPayment?.workshopId ?: 1L,
+                                workshopSyncId = initialPayment?.workshopSyncId ?: "",
+                                syncId = initialPayment?.syncId ?: java.util.UUID.randomUUID().toString(),
                                 paymentNumber = initialPayment?.paymentNumber ?: nextPaymentNumber,
                                 amount = currentAmount,
                                 dateJalali = dateJalali,
@@ -544,6 +547,8 @@ fun PaymentDialog(
                                 referenceNo = referenceNo.trim(),
                                 bankName = bankName.trim(),
                                 cardNumber = cardNumber.trim(),
+                                relatedOrderId = initialPayment?.relatedOrderId,
+                                relatedOrderSyncId = initialPayment?.relatedOrderSyncId ?: "",
                                 createdAt = initialPayment?.createdAt ?: System.currentTimeMillis()
                             )
                             onSave(pay)

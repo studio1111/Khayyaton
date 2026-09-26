@@ -597,17 +597,20 @@ fun AuthAndCloudSyncDialog(
                                 errorMessage = null
                                 successMessage = null
 
-                                if (dialogUsername.isBlank() && mode != AuthScreenMode.FORGOT_PASSWORD) {
+                                val cleanUsername = dialogUsername.trim()
+                                val cleanEmail = PersianUtils.toEnglishDigits(email.trim()).lowercase()
+
+                                if (mode == AuthScreenMode.SIGN_UP && cleanUsername.isBlank()) {
                                     errorMessage = "لطفاً نام کاربری خود را وارد نمایید."
                                     return@Button
                                 }
 
-                                if (email.isBlank()) {
+                                if (cleanEmail.isBlank()) {
                                     errorMessage = "لطفاً آدرس ایمیل خود را وارد نمایید."
                                     return@Button
                                 }
 
-                                if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+                                if (!Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
                                     errorMessage = "آدرس ایمیل وارد شده نامعتبر است."
                                     return@Button
                                 }
@@ -615,12 +618,12 @@ fun AuthAndCloudSyncDialog(
                                 if (mode == AuthScreenMode.FORGOT_PASSWORD) {
                                     isLoading = true
                                     coroutineScope.launch {
-                                        val res = FirebaseService.sendPasswordResetEmail(email)
+                                        val res = FirebaseService.sendPasswordResetEmail(cleanEmail)
                                         isLoading = false
                                         if (res.isSuccess) {
                                             successMessage = "لینک بازیابی رمز عبور به ایمیل شما ارسال شد."
                                         } else {
-                                            errorMessage = "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
+                                            errorMessage = res.exceptionOrNull()?.message ?: "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
                                         }
                                     }
                                     return@Button
@@ -644,15 +647,16 @@ fun AuthAndCloudSyncDialog(
                                 isLoading = true
                                 coroutineScope.launch {
                                     val res = if (mode == AuthScreenMode.SIGN_IN) {
-                                        FirebaseService.signInWithEmail(email, password, dialogUsername.trim())
+                                        FirebaseService.signInWithEmail(cleanEmail, password, cleanUsername.ifBlank { null })
                                     } else {
-                                        FirebaseService.registerWithEmailAndUsername(dialogUsername.trim(), email, password)
+                                        FirebaseService.registerWithEmailAndUsername(cleanUsername, cleanEmail, password)
                                     }
                                     isLoading = false
                                     if (res.isSuccess) {
                                         val user = res.getOrNull()
-                                        if (dialogUsername.isNotBlank()) {
-                                            onUpdateCustomUsername(dialogUsername.trim())
+                                        val resolvedName = user?.displayName?.ifBlank { cleanUsername } ?: cleanUsername
+                                        if (resolvedName.isNotBlank()) {
+                                            onUpdateCustomUsername(resolvedName)
                                         }
                                         if (dialogWorkshopName.isNotBlank()) {
                                             onUpdateWorkshopName(dialogWorkshopName.trim())
@@ -660,7 +664,7 @@ fun AuthAndCloudSyncDialog(
                                         onUserChanged(user)
                                         successMessage = if (mode == AuthScreenMode.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد و وارد شدید."
                                     } else {
-                                        errorMessage = "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
+                                        errorMessage = res.exceptionOrNull()?.message ?: "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
                                     }
                                 }
                             },

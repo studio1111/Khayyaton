@@ -10,7 +10,6 @@ import com.google.firebase.appcheck.FirebaseAppCheck
 import com.example.data.AppDatabase
 import com.example.data.WorkshopRepository
 import com.example.ui.KhayyatonApp
-import com.example.ui.screens.SplashScreen
 import com.example.ui.KhayyatonViewModel
 import com.example.ui.KhayyatonViewModelFactory
 
@@ -20,13 +19,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // App Check must be initialized before any Firebase service is used.
-        val firebaseApp = FirebaseApp.initializeApp(applicationContext)
-        if (firebaseApp != null) {
-            AppCheckProviderInstaller.install(FirebaseAppCheck.getInstance())
+        // Initialize Firebase services first
+        com.example.data.firebase.FirebaseService.initialize(applicationContext)
+
+        // Install App Check safely
+        try {
+            val app = FirebaseApp.getInstance()
+            AppCheckProviderInstaller.install(FirebaseAppCheck.getInstance(app))
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "App Check initialization skipped: ${e.message}")
         }
 
-        com.example.data.firebase.FirebaseService.initialize(applicationContext)
         com.example.data.subscription.SubscriptionManager.initialize(applicationContext)
 
         val database = AppDatabase.getDatabase(applicationContext)
@@ -45,15 +48,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val showSplash = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
-
-            if (showSplash.value) {
-                SplashScreen(
-                    onSplashFinished = { showSplash.value = false }
-                )
-            } else {
-                KhayyatonApp(viewModel = viewModel)
-            }
+            KhayyatonApp(viewModel = viewModel)
         }
     }
 

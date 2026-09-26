@@ -330,27 +330,29 @@ fun GlassyAuthScreen(
                         }
                     }
 
-                    // Username field (shown on Sign Up and Sign In to ensure username is known)
-                    OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it; errorMessage = null },
-                        label = { Text("نام کاربری") },
-                        placeholder = { Text("مثلاً: علی رضایی") },
-                        leadingIcon = {
-                            Icon(Icons.Outlined.AccountCircle, contentDescription = null, tint = NeonGreen)
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = glassTextFieldColors(),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Text,
-                            imeAction = ImeAction.Next
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // Username field (shown on Sign Up and Sign In, hidden on Forgot Password)
+                    if (activeTab != GlassAuthTab.FORGOT_PASSWORD) {
+                        OutlinedTextField(
+                            value = username,
+                            onValueChange = { username = it; errorMessage = null },
+                            label = { Text(if (activeTab == GlassAuthTab.SIGN_UP) "نام کاربری (اجباری)" else "نام کاربری (اختیاری)") },
+                            placeholder = { Text("مثلاً: علی رضایی") },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.AccountCircle, contentDescription = null, tint = NeonGreen)
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = glassTextFieldColors(),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     // Workshop name field (shown on Sign Up)
                     if (activeTab == GlassAuthTab.SIGN_UP) {
@@ -491,17 +493,20 @@ fun GlassyAuthScreen(
                             errorMessage = null
                             successMessage = null
 
-                            if (username.isBlank() && activeTab != GlassAuthTab.FORGOT_PASSWORD) {
+                            val cleanUsername = username.trim()
+                            val cleanEmail = com.example.util.PersianUtils.toEnglishDigits(email.trim()).lowercase()
+
+                            if (activeTab == GlassAuthTab.SIGN_UP && cleanUsername.isBlank()) {
                                 errorMessage = "لطفاً نام کاربری خود را وارد نمایید."
                                 return@Button
                             }
 
-                            if (email.isBlank()) {
+                            if (cleanEmail.isBlank()) {
                                 errorMessage = "لطفاً آدرس ایمیل خود را وارد نمایید."
                                 return@Button
                             }
 
-                            if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+                            if (!Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
                                 errorMessage = "آدرس ایمیل وارد شده نامعتبر است."
                                 return@Button
                             }
@@ -509,12 +514,12 @@ fun GlassyAuthScreen(
                             if (activeTab == GlassAuthTab.FORGOT_PASSWORD) {
                                 isLoading = true
                                 coroutineScope.launch {
-                                    val res = FirebaseService.sendPasswordResetEmail(email)
+                                    val res = FirebaseService.sendPasswordResetEmail(cleanEmail)
                                     isLoading = false
                                     if (res.isSuccess) {
                                         successMessage = "لینک بازیابی رمز عبور به ایمیل شما ارسال گردید."
                                     } else {
-                                        errorMessage = "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
+                                        errorMessage = res.exceptionOrNull()?.message ?: "ارسال ایمیل بازیابی انجام نشد. لطفاً دوباره تلاش کنید."
                                     }
                                 }
                                 return@Button
@@ -538,22 +543,23 @@ fun GlassyAuthScreen(
                             isLoading = true
                             coroutineScope.launch {
                                 val res = if (activeTab == GlassAuthTab.SIGN_IN) {
-                                    FirebaseService.signInWithEmail(email, password, username.trim())
+                                    FirebaseService.signInWithEmail(cleanEmail, password, cleanUsername.ifBlank { null })
                                 } else {
-                                    FirebaseService.registerWithEmailAndUsername(username.trim(), email, password)
+                                    FirebaseService.registerWithEmailAndUsername(cleanUsername, cleanEmail, password)
                                 }
                                 isLoading = false
                                 if (res.isSuccess) {
                                     val user = res.getOrNull()!!
-                                    val finalUser = if (username.isNotBlank() && user.displayName.isNullOrBlank()) {
-                                        user.copy(displayName = username.trim())
+                                    val finalUser = if (cleanUsername.isNotBlank() && user.displayName.isNullOrBlank()) {
+                                        user.copy(displayName = cleanUsername)
                                     } else {
                                         user
                                     }
+                                    val resolvedName = finalUser.displayName?.ifBlank { cleanUsername } ?: cleanUsername
                                     successMessage = if (activeTab == GlassAuthTab.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد."
-                                    onAuthSuccess(finalUser, username.trim(), workshopName.trim())
+                                    onAuthSuccess(finalUser, resolvedName, workshopName.trim())
                                 } else {
-                                    errorMessage = "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
+                                    errorMessage = res.exceptionOrNull()?.message ?: "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
                                 }
                             }
                         },

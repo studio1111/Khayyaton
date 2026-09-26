@@ -37,7 +37,16 @@ class CloudSyncWorker(
                 repository = repository
             )
 
-            if (result.isSuccess) Result.success() else Result.retry()
+            if (result.isSuccess) {
+                Result.success()
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message.orEmpty()
+                if (errorMsg.contains("منقضی") || errorMsg.contains("دسترسی") || errorMsg.contains("وارد حساب")) {
+                    Result.failure()
+                } else {
+                    Result.retry()
+                }
+            }
         } catch (_: Exception) {
             Result.retry()
         }

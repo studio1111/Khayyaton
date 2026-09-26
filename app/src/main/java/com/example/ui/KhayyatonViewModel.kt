@@ -108,12 +108,20 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             if (savedUser.isNotBlank()) customUsername.value = savedUser
 
             val savedWsId = repository.getSavedActiveWorkshopId()
-            val allWorkshops = repository.getAllWorkshopsSync()
+            repository.deduplicateWorkshops()
+            val cleanWorkshops = repository.getAllWorkshopsSync()
+            val effectiveWorkshops = if (cleanWorkshops.isEmpty()) {
+                repository.ensureDefaultWorkshop()
+                repository.getAllWorkshopsSync()
+            } else {
+                cleanWorkshops
+            }
+
             activeWorkshopId.value =
-                if (savedWsId > 0L && allWorkshops.any { it.id == savedWsId }) {
+                if (savedWsId > 0L && effectiveWorkshops.any { it.id == savedWsId }) {
                     savedWsId
                 } else {
-                    allWorkshops.firstOrNull()?.id ?: 0L
+                    effectiveWorkshops.firstOrNull()?.id ?: 1L
                 }
             repository.saveActiveWorkshopId(activeWorkshopId.value)
 
@@ -419,6 +427,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             val newNum = getNextOrderNumber()
             val duplicated = order.copy(
                 id = 0L,
+                syncId = java.util.UUID.randomUUID().toString(),
                 workshopId = activeWorkshopId.value,
                 orderNumber = newNum,
                 invoiceNumber = newNum.toString(),
@@ -558,8 +567,13 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun deleteWorkshop(workshop: com.example.model.Workshop) {
         viewModelScope.launch {
             repository.deleteWorkshopAndAllData(workshop.id)
+            repository.deduplicateWorkshops()
             val remaining = repository.getAllWorkshopsSync()
-            val nextActive = remaining.firstOrNull()?.id ?: 0L
+            val nextActive = if (remaining.isNotEmpty()) {
+                remaining.first().id
+            } else {
+                repository.ensureDefaultWorkshop()
+            }
             activeWorkshopId.value = nextActive
             repository.saveActiveWorkshopId(nextActive)
             clearFilters()
@@ -717,14 +731,39 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             activeWorkshopId.value = resolvedActiveId
             repository.saveActiveWorkshopId(resolvedActiveId)
 
-            // The workshop name entered during first registration is used only for
-            // a genuinely new local/cloud account, never to rename an existing one.
-            if (!workshopName.isNullOrBlank() &&
-                localWorkshops.isEmpty() &&
-                repository.getAllWorkshopsSync().isEmpty()
-            ) {
-                createWorkshop(workshopName.trim())
+            repository.deduplicateWorkshops()
+            val currentWorkshops = repository.getAllWorkshopsSync()
+            val totalOrders = repository.getAllOrdersSync().size
+            val totalPayments = repository.getAllPaymentsSync().size
+
+            // Apply the workshop name entered during registration if provided
+            if (!workshopName.isNullOrBlank()) {
+                val trimmedWsName = workshopName.trim()
+                if (currentWorkshops.isEmpty()) {
+                    createWorkshop(trimmedWsName)
+                } else if (currentWorkshops.size == 1 && (currentWorkshops.first().name == "کارگاه اصلی" || currentWorkshops.first().name == "کارگاه") && totalOrders == 0 && totalPayments == 0) {
+                    renameWorkshop(currentWorkshops.first().id, trimmedWsName)
+                } else if (!currentWorkshops.any { it.name.trim().equals(trimmedWsName, ignoreCase = true) }) {
+                    createWorkshop(trimmedWsName)
+                }
+            } else {
+                // If user did not choose a name or is newly entering the app:
+                // Only create a default workshop if there is NO OTHER WORKSHOP.
+                if (currentWorkshops.isEmpty()) {
+                    createWorkshop("کارگاه اصلی")
+                }
             }
+
+            repository.deduplicateWorkshops()
+            val finalWorkshops = repository.getAllWorkshopsSync()
+            val finalSavedId = repository.getSavedActiveWorkshopId()
+            val finalActiveId = when {
+                finalSavedId > 0L && finalWorkshops.any { it.id == finalSavedId } -> finalSavedId
+                finalWorkshops.isNotEmpty() -> finalWorkshops.first().id
+                else -> 1L
+            }
+            activeWorkshopId.value = finalActiveId
+            repository.saveActiveWorkshopId(finalActiveId)
         }
     }
 
@@ -752,16 +791,27 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             if (shouldDownload) {
                 val downloadRes = FirebaseService.downloadFromCloud(repository)
                 if (downloadRes.isFailure) {
-                    autoSyncStatusMessage.value = "بازیابی ابری انجام نشد؛ اطلاعات محلی دست‌نخورده باقی ماند."
+                    val errorMsg = downloadRes.exceptionOrNull()?.message
+                    autoSyncStatusMessage.value = errorMsg ?: "بازیابی ابری انجام نشد؛ اطلاعات محلی دست‌نخورده باقی ماند."
+                    if (errorMsg?.contains("دوباره وارد") == true || errorMsg?.contains("منقضی") == true) {
+                        currentUser.value = FirebaseService.getCurrentUser()
+                    }
                     return
                 }
 
+                repository.deduplicateWorkshops()
                 val restoredWorkshops = repository.getAllWorkshopsSync()
+                val effectiveWorkshops = if (restoredWorkshops.isEmpty()) {
+                    repository.ensureDefaultWorkshop()
+                    repository.getAllWorkshopsSync()
+                } else {
+                    restoredWorkshops
+                }
                 val savedId = repository.getSavedActiveWorkshopId()
                 val restoredActiveId = when {
-                    savedId > 0L && restoredWorkshops.any { it.id == savedId } -> savedId
-                    restoredWorkshops.isNotEmpty() -> restoredWorkshops.first().id
-                    else -> 0L
+                    savedId > 0L && effectiveWorkshops.any { it.id == savedId } -> savedId
+                    effectiveWorkshops.isNotEmpty() -> effectiveWorkshops.first().id
+                    else -> 1L
                 }
                 activeWorkshopId.value = restoredActiveId
                 repository.saveActiveWorkshopId(restoredActiveId)
@@ -781,7 +831,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 currentUnitRules.isNotEmpty() ||
                 currentWorkshops.isNotEmpty()
             ) {
-                FirebaseService.uploadAllToCloud(
+                val uploadRes = FirebaseService.uploadAllToCloud(
                     orders = currentOrders,
                     payments = currentPayments,
                     presets = currentPresets,
@@ -789,7 +839,11 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                     workshops = currentWorkshops,
                     repository = repository
                 )
-                autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
+                if (uploadRes.isSuccess) {
+                    autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی شد."
+                } else {
+                    autoSyncStatusMessage.value = uploadRes.exceptionOrNull()?.message ?: "همگام‌سازی ابری انجام نشد."
+                }
             }
         } catch (e: Exception) {
             autoSyncStatusMessage.value = "همگام‌سازی ابری در دسترس نیست."
