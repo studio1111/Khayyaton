@@ -335,8 +335,69 @@ fun InvoiceDialog(
                                             .padding(horizontal = 8.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Box(,                                            modifier = Modifier,                                                .width(3.dp),                                                .height(34.dp),                                                .clip(RoundedCornerShape(2.dp)),                                                .background(orderColor),                                        ),                                        Spacer(modifier = Modifier.width(3.dp)),                                        Text(text = PersianUtils.toPersianDigits(ord.orderNumber), fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(0.75f), textAlign = TextAlign.Center),                                        Text(text = PersianUtils.toPersianDigits(ord.dateJalali), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1.05f), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis),                                        Text(text = PersianUtils.toPersianDigits(ord.invoiceNumber), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(0.95f), textAlign = TextAlign.Center),                                        Text(text = ord.modelName, fontSize = if (ord.modelName.length > 14) 8.5.sp else 9.5.sp, fontWeight = FontWeight.Black, color = orderColor, modifier = Modifier.weight(1.15f), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis),                                        Text(text = "${PersianUtils.toPersianDigits(ord.countFormula)} (${PersianUtils.formatNumberWithCommas(ord.calculatedUnits)})", fontSize = 8.8.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.05f), textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis),                                        Text(text = PersianUtils.formatNumberWithCommas(ord.calculatedTotal), fontSize = 10.sp, fontWeight = FontWeight.Black, color = Emerald600, modifier = Modifier.weight(1.1f), textAlign = TextAlign.Center)
-                                            }
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .height(34.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(orderColor)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = PersianUtils.toPersianDigits(ord.orderNumber),
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(0.75f),
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(
+                                            text = PersianUtils.toPersianDigits(ord.dateJalali),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(1.05f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = PersianUtils.toPersianDigits(ord.invoiceNumber),
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(0.95f),
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(
+                                            text = ord.modelName,
+                                            fontSize = if (ord.modelName.length > 14) 8.5.sp else 9.5.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = orderColor,
+                                            modifier = Modifier.weight(1.15f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${PersianUtils.toPersianDigits(ord.countFormula)} (${PersianUtils.formatNumberWithCommas(ord.calculatedUnits)})",
+                                            fontSize = 8.8.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1.05f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = PersianUtils.formatNumberWithCommas(ord.calculatedTotal),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = Emerald600,
+                                            modifier = Modifier.weight(1.1f),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
 
                                             // Full expandable descriptions row (Fabric & Notes)
                                             if (ord.fabricName.isNotBlank() || ord.notes.isNotBlank() || (targetCustomer.isBlank() && ord.customerName.isNotBlank())) {
