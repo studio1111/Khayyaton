@@ -964,7 +964,7 @@ private fun WorkVsReceivedChartCard(
                 ) {
                     items.forEach { item ->
                         Text(
-                            text = item.label.take(6),
+                            text = item.label,
                             fontSize = 8.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = primaryTextColor,
@@ -1116,6 +1116,33 @@ private fun ModelsDistributionChartCard(
 }
 
 // =============================================================================
+@Composable
+private fun TableHeaderCell(
+    text: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = accent.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(8.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.45f)),
+        modifier = modifier
+    ) {
+        Text(
+            text = text,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Black,
+            color = accent,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 3.dp, vertical = 5.dp),
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 // TABLE 1: جدول کارکرد، دریافتی‌ها و پرداخت‌کننده‌ها
 // =============================================================================
 @Composable
@@ -1140,9 +1167,9 @@ private fun WorkAndPaymentsTableCard(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor),
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.width(820.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             // Table Header Title
             Row(
                 modifier = Modifier
@@ -1167,14 +1194,13 @@ private fun WorkAndPaymentsTableCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(tableHeaderBg.copy(alpha = 0.6f))
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 3.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Text("بازه زمانی", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Start)
-                Text("فاکتور / کارکرد", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.4f), textAlign = TextAlign.Center)
-                Text("دریافتی / واریزی", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.4f), textAlign = TextAlign.Center)
-                Text("تراز مانده ($currencyUnit)", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.3f), textAlign = TextAlign.End)
+                TableHeaderCell("بازه زمانی", Color(0xFF2563EB), Modifier.weight(1.15f))
+                TableHeaderCell("فاکتور / کارکرد", Color(0xFF7C3AED), Modifier.weight(1.25f))
+                TableHeaderCell("دریافتی / واریزی", Color(0xFF059669), Modifier.weight(1.25f))
+                TableHeaderCell("تراز مانده", Color(0xFFD97706), Modifier.weight(1.15f))
             }
             HorizontalDivider(thickness = 1.dp, color = borderColor)
 
@@ -1239,10 +1265,10 @@ private fun WorkAndPaymentsTableCard(
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("نام پرداخت‌کننده", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Start)
-                Text("تعداد اسناد", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(0.9f), textAlign = TextAlign.Center)
-                Text("بانک / درگاه", fontSize = 9.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.1f), textAlign = TextAlign.Center)
-                Text("مجموع واریزی ($currencyUnit)", fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = primaryTextColor, modifier = Modifier.weight(1.5f), textAlign = TextAlign.End)
+                TableHeaderCell("نام پرداخت‌کننده", Color(0xFF0EA5E9), Modifier.weight(1.35f))
+                TableHeaderCell("تعداد اسناد", Color(0xFF8B5CF6), Modifier.weight(0.9f))
+                TableHeaderCell("بانک / درگاه", Color(0xFF10B981), Modifier.weight(1.1f))
+                TableHeaderCell("مجموع واریزی", Color(0xFFF59E0B), Modifier.weight(1.35f))
             }
             HorizontalDivider(thickness = 0.8.dp, color = borderColor)
 
