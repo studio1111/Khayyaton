@@ -36,6 +36,18 @@ import com.example.util.ExcelExportUtil
 import com.example.util.PersianUtils
 
 @Composable
+private fun InvoiceHeaderCell(text: String, accent: Color, modifier: Modifier = Modifier) {
+    Surface(
+        color = accent.copy(alpha = 0.13f),
+        shape = RoundedCornerShape(7.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.45f)),
+        modifier = modifier
+    ) {
+        Text(text = text, fontSize = 8.5.sp, fontWeight = FontWeight.Black, color = accent, modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 5.dp), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
 fun InvoiceDialog(
     isOpen: Boolean,
     selectedOrder: FurnitureOrder?,
@@ -280,9 +292,9 @@ fun InvoiceDialog(
                         shape = RoundedCornerShape(12.dp),
                         border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
                         color = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.horizontalScroll(tableHorizontalScroll)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.width(760.dp)) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             // Table Header Row
                             Row(
                                 modifier = Modifier
@@ -292,10 +304,12 @@ fun InvoiceDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("ردیف / تاریخ / فاکتور", fontSize = 10.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
-                                Text("مدل مبل", fontSize = 10.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                                Text("اجزا و واحد", fontSize = 10.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                                Text("دستمزد کل ($currencyUnit)", fontSize = 10.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                InvoiceHeaderCell("ردیف", Color(0xFF2563EB), Modifier.weight(0.75f))
+                                InvoiceHeaderCell("تاریخ", Color(0xFF7C3AED), Modifier.weight(1.05f))
+                                InvoiceHeaderCell("فاکتور", Color(0xFFDB2777), Modifier.weight(0.95f))
+                                InvoiceHeaderCell("مدل مبل", Color(0xFF0891B2), Modifier.weight(1.15f))
+                                InvoiceHeaderCell("اجزا و واحد", Color(0xFFD97706), Modifier.weight(1.05f))
+                                InvoiceHeaderCell("دستمزد", Color(0xFF059669), Modifier.weight(1.1f))
                             }
 
                             HorizontalDivider(thickness = 1.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
@@ -321,54 +335,7 @@ fun InvoiceDialog(
                                             .padding(horizontal = 8.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Left color indicator bar for row
-                                        Box(
-                                            modifier = Modifier
-                                                .width(4.dp)
-                                                .height(28.dp)
-                                                .clip(RoundedCornerShape(2.dp))
-                                                .background(orderColor)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-
-                                        Column(modifier = Modifier.fillMaxWidth()) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = "${idx + 1}. ${PersianUtils.toPersianDigits(ord.dateJalali.takeLast(8))} #${PersianUtils.toPersianDigits(ord.invoiceNumber)}",
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Black,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    modifier = Modifier.weight(1f),
-                                                    textAlign = TextAlign.Start
-                                                )
-                                                Text(
-                                                    text = ord.modelName,
-                                                    fontSize = if (ord.modelName.length > 14) 9.5.sp else 11.sp,
-                                                    fontWeight = FontWeight.Black,
-                                                    color = orderColor,
-                                                    modifier = Modifier.weight(1f),
-                                                    textAlign = TextAlign.Center
-                                                )
-                                                Text(
-                                                    text = "${PersianUtils.toPersianDigits(ord.countFormula)} (${PersianUtils.formatNumberWithCommas(ord.calculatedUnits)})",
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.weight(1f),
-                                                    textAlign = TextAlign.Center
-                                                )
-                                                Text(
-                                                    text = PersianUtils.formatNumberWithCommas(ord.calculatedTotal),
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.Black,
-                                                    color = Emerald600,
-                                                    modifier = Modifier.weight(1f),
-                                                    textAlign = TextAlign.End
-                                                )
+                                        Box(,                                            modifier = Modifier,                                                .width(3.dp),                                                .height(34.dp),                                                .clip(RoundedCornerShape(2.dp)),                                                .background(orderColor),                                        ),                                        Spacer(modifier = Modifier.width(3.dp)),                                        Text(text = PersianUtils.toPersianDigits(ord.orderNumber), fontSize = 9.5.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(0.75f), textAlign = TextAlign.Center),                                        Text(text = PersianUtils.toPersianDigits(ord.dateJalali), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1.05f), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis),                                        Text(text = PersianUtils.toPersianDigits(ord.invoiceNumber), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(0.95f), textAlign = TextAlign.Center),                                        Text(text = ord.modelName, fontSize = if (ord.modelName.length > 14) 8.5.sp else 9.5.sp, fontWeight = FontWeight.Black, color = orderColor, modifier = Modifier.weight(1.15f), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis),                                        Text(text = "${PersianUtils.toPersianDigits(ord.countFormula)} (${PersianUtils.formatNumberWithCommas(ord.calculatedUnits)})", fontSize = 8.8.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.05f), textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis),                                        Text(text = PersianUtils.formatNumberWithCommas(ord.calculatedTotal), fontSize = 10.sp, fontWeight = FontWeight.Black, color = Emerald600, modifier = Modifier.weight(1.1f), textAlign = TextAlign.Center)
                                             }
 
                                             // Full expandable descriptions row (Fabric & Notes)
@@ -424,9 +391,9 @@ fun InvoiceDialog(
                             shape = RoundedCornerShape(12.dp),
                             border = androidx.compose.foundation.BorderStroke(1.5.dp, Emerald600.copy(alpha = 0.4f)),
                             color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.horizontalScroll(tableHorizontalScroll)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.width(760.dp)) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
                                 // Payment Table Header
                                 Row(
                                     modifier = Modifier
