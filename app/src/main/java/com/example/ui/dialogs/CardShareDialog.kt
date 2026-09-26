@@ -35,6 +35,8 @@ private val CardCellBorder = Color.White.copy(alpha = 0.15f)
 private val CardGoldBorder = Color(0xFFD4A017)
 private val LabelGrayText = Color(0xFFCBD5E1)
 private val ValueWhiteText = Color(0xFFFFFFFF)
+private val PaymentCardPreviewBg = Color(0xFF10271D)
+private val PaymentNeonGreenPreview = Color(0xFF39FF88)
 
 @Composable
 fun CardShareDialog(
@@ -437,7 +439,7 @@ fun CardShareDialog(
                     } else if (payment != null) {
                         // Payment Card Preview
                         Surface(
-                            color = Color(0xFF131826),
+                            color = PaymentCardPreviewBg,
                             shape = RoundedCornerShape(24.dp),
                             border = androidx.compose.foundation.BorderStroke(2.5.dp, CardGoldBorder),
                             shadowElevation = 4.dp,
@@ -732,9 +734,9 @@ fun CardShareDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val shareCaption = if (order != null) {
-                            CardImageSharer.buildOrderCardText(order)
+                            "نوع کارت: کارکرد\n" + CardImageSharer.buildOrderCardText(order)
                         } else if (payment != null) {
-                            CardImageSharer.buildPaymentCardText(payment, currencyUnit)
+                            "نوع کارت: دریافتی\n" + CardImageSharer.buildPaymentCardText(payment, currencyUnit)
                         } else ""
 
                         val fileNamePrefix = if (order != null) {
