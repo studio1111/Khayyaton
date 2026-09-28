@@ -105,6 +105,20 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------------
+    // Trusted owner allowlist
+    // -----------------------------------------------------------------------
+
+    // This collection is intentionally read-only from Android clients.
+    // Owner records are created/disabled manually by a trusted Firebase
+    // administrator. Each signed-in user can read only its own record.
+    // This supports multiple owners without requiring Blaze/Cloud Functions.
+    match /admin/owners/members/{uid} {
+      allow get: if ownsUser(uid);
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // -----------------------------------------------------------------------
     // Account root
     // -----------------------------------------------------------------------
 
