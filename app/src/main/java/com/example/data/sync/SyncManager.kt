@@ -193,6 +193,19 @@ class SyncManager(
 
             if (database.deletedIdDao().contains(collection, syncId)) continue
 
+            // A workshop tombstone also invalidates all child records. This
+            // prevents stale order/payment/preset snapshots from resurrecting
+            // data after the parent workshop was deleted elsewhere.
+            if (collection == "orders" || collection == "payments" || collection == "presets") {
+                val workshopSyncId = doc.getString("workshopSyncId").orEmpty()
+                if (
+                    workshopSyncId.isNotBlank() &&
+                    database.deletedIdDao().contains("workshops", workshopSyncId)
+                ) {
+                    continue
+                }
+            }
+
             val parsed = parseDocument(collection, doc)
             if (parsed != null) {
                 when (parsed) {
