@@ -10,6 +10,7 @@ import com.example.data.sync.DeletedIdEntity
 import com.example.data.sync.UploadQueueEntity
 import com.example.data.sync.PendingDeleteEntity
 import com.example.model.Workshop
+import com.example.data.sync.RecordSyncStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -67,6 +68,152 @@ class OfflineFirstDataLayerTest {
             db.close()
         }
     }
+    @Test
+    fun `confirmed deletion remains as a tombstone`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val repository = com.example.data.WorkshopRepository(
+                context = context,
+                database = db,
+                orderDao = db.orderDao(),
+                paymentDao = db.paymentDao(),
+                modelPresetDao = db.modelPresetDao(),
+                unitRuleDao = db.unitRuleDao(),
+                workshopDao = db.workshopDao()
+            )
+            val deletion = com.example.data.WorkshopRepository.PendingCloudDeletion("orders", "order-1")
+            repository.recordCloudDeletion("orders", "order-1")
+            assertTrue(repository.getPendingCloudDeletions().contains(deletion))
+
+            repository.clearCloudDeletions(listOf(deletion))
+
+            assertTrue(db.deletedIdDao().contains("orders", "order-1"))
+            assertTrue(repository.getPendingCloudDeletions().isEmpty())
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun `older cloud version never overwrites newer pending local version`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val repository = com.example.data.WorkshopRepository(
+                context = context,
+                database = db,
+                orderDao = db.orderDao(),
+                paymentDao = db.paymentDao(),
+                modelPresetDao = db.modelPresetDao(),
+                unitRuleDao = db.unitRuleDao(),
+                workshopDao = db.workshopDao()
+            )
+
+            val syncId = "workshop-lww"
+            repository.replaceAllData(
+                workshops = listOf(
+                    Workshop(
+                        id = 1L,
+                        syncId = syncId,
+                        name = "نسخه محلی",
+                        updatedAt = 200L,
+                        syncStatus = RecordSyncStatus.PENDING
+                    )
+                ),
+                orders = emptyList(),
+                payments = emptyList(),
+                presets = emptyList(),
+                unitRules = emptyList()
+            )
+
+            repository.mergeCloudData(
+                cloudWorkshops = listOf(
+                    Workshop(
+                        id = 99L,
+                        syncId = syncId,
+                        name = "نسخه قدیمی ابری",
+                        updatedAt = 100L,
+                        syncStatus = RecordSyncStatus.SYNCED
+                    )
+                ),
+                cloudOrders = emptyList(),
+                cloudPayments = emptyList(),
+                cloudPresets = emptyList(),
+                cloudUnitRules = emptyList()
+            )
+
+            val current = db.workshopDao().getWorkshopBySyncId(syncId)
+            assertEquals("نسخه محلی", current?.name)
+            assertEquals(RecordSyncStatus.PENDING, current?.syncStatus)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun `newer cloud version replaces older local version`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val repository = com.example.data.WorkshopRepository(
+                context = context,
+                database = db,
+                orderDao = db.orderDao(),
+                paymentDao = db.paymentDao(),
+                modelPresetDao = db.modelPresetDao(),
+                unitRuleDao = db.unitRuleDao(),
+                workshopDao = db.workshopDao()
+            )
+
+            val syncId = "workshop-lww-remote"
+            repository.replaceAllData(
+                workshops = listOf(
+                    Workshop(
+                        id = 1L,
+                        syncId = syncId,
+                        name = "نسخه قدیمی محلی",
+                        updatedAt = 100L,
+                        syncStatus = RecordSyncStatus.SYNCED
+                    )
+                ),
+                orders = emptyList(),
+                payments = emptyList(),
+                presets = emptyList(),
+                unitRules = emptyList()
+            )
+
+            repository.mergeCloudData(
+                cloudWorkshops = listOf(
+                    Workshop(
+                        id = 50L,
+                        syncId = syncId,
+                        name = "نسخه جدید ابری",
+                        updatedAt = 200L,
+                        syncStatus = RecordSyncStatus.SYNCED
+                    )
+                ),
+                cloudOrders = emptyList(),
+                cloudPayments = emptyList(),
+                cloudPresets = emptyList(),
+                cloudUnitRules = emptyList()
+            )
+
+            val current = db.workshopDao().getWorkshopBySyncId(syncId)
+            assertEquals("نسخه جدید ابری", current?.name)
+            assertEquals(RecordSyncStatus.SYNCED, current?.syncStatus)
+            assertEquals(1, db.workshopDao().getAllWorkshopsSync().size)
+        } finally {
+            db.close()
+        }
+    }
+
     @Test
     fun `cloud upsert and tombstone prevent duplicates and resurrection`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
