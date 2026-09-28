@@ -647,11 +647,10 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     /**
-     * Automatic sync and restore when a user enters email/signs in or registers.
-     * Restores existing cloud data if available, then syncs local state to Firebase.
+     * Account login starts exactly one account-scoped WorkManager sync.
+     * Room remains the only source used by the UI.
      */
     fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
-        currentUser    fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
         currentUser.value = user
         SubscriptionManager.syncSubscriptionWithFirebase()
         SubscriptionManager.refreshSubscriptionFromBazaar()
@@ -682,8 +681,8 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 updateCustomUsername(chosenName)
             }
 
-            // A workshop is created only when the user explicitly supplied a name.
-            // There is no automatic "کارگاه اصلی" creation on login or restore.
+            // A workshop is created only when a name was explicitly supplied
+            // by the user during registration. No automatic default workshop.
             if (!workshopName.isNullOrBlank()) {
                 val trimmed = workshopName.trim()
                 val existing = repository.getAllWorkshopsSync()
@@ -706,6 +705,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun onUserLoggedOut() {
         val context = repository.getApplicationContext()
         val uid = FirebaseService.currentUser()?.uid ?: repository.getLocalAccountUid()
+
         if (uid != null && context != null) {
             SyncWorkScheduler.cancel(context, uid)
         }
@@ -720,7 +720,13 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             repository.clearSyncState()
             repository.clearLocalAccountUid()
             repository.saveActiveWorkshopId(0L)
-                private suspend fun performAutoSync(user: FirebaseUserDto, shouldDownload: Boolean = false) {
+            activeWorkshopId.value = 0L
+            customUsername.value = ""
+            clearFilters()
+        }
+    }
+
+    private suspend fun performAutoSync(user: FirebaseUserDto) {
         if (FirebaseService.currentUser()?.uid != user.uid) return
         val context = repository.getApplicationContext() ?: return
 
@@ -735,8 +741,6 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         val context = repository.getApplicationContext() ?: return
         SyncWorkScheduler.enqueue(context, user.uid)
     }
-
-}
 
 class KhayyatonViewModelFactory(private val repository: WorkshopRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
