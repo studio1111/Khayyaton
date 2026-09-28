@@ -257,9 +257,16 @@ object FirebaseService {
         }
 
         return try {
-            val restored = downloadFromCloud(repository)
-            if (restored.isFailure) return restored
-            uploadPendingToCloud(repository)
+            // IMPORTANT: push durable local changes first.
+            // If we pull first, an empty/stale cloud snapshot can race with the
+            // local pending state and make a newly entered record look already
+            // reconciled before it has ever been uploaded.
+            val uploaded = uploadPendingToCloud(repository)
+            if (uploaded.isFailure) return uploaded
+
+            // After local changes are safely committed (or reconciled by LWW),
+            // pull the authoritative cloud state back into Room.
+            downloadFromCloud(repository)
         } catch (e: Exception) {
             Log.w(TAG, "Account sync failed: " + e.message, e)
             Result.failure(Exception(parseCloudError(e)))
