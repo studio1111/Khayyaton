@@ -67,27 +67,39 @@ class SyncManager(
                     val authenticatedUid = firebaseUser.uid.orEmpty()
                     if (authenticatedUid.isBlank()) return@launch
 
-                    val previousUid = repository.ensureLocalAccount(authenticatedUid)
-                    if (previousUid != null) {
-                        SyncWorkScheduler.cancel(context, previousUid)
-                    }
+                    try {
+                        val previousUid = repository.ensureLocalAccount(authenticatedUid)
+                        if (previousUid != null) {
+                            SyncWorkScheduler.cancel(context, previousUid)
+                        }
 
-                    // Attach listeners only after account isolation is complete.
-                    restartListeners()
-                    syncNow()
+                        // Attach listeners only after account isolation is complete.
+                        restartListeners()
+                        syncNow()
+                    } catch (e: PendingAccountSwitchException) {
+                        android.util.Log.w("SyncManager", "Account switch blocked until pending data is synchronized.", e)
+                        detachListeners()
+                        FirebaseService.signOut()
+                    }
                 }
             }
         }
         auth.addAuthStateListener(authListener!!)
         auth.currentUser?.let { current ->
             scope.launch {
-                val previousUid = repository.ensureLocalAccount(current.uid)
-                val context = repository.getApplicationContext()
-                if (previousUid != null && context != null) {
-                    SyncWorkScheduler.cancel(context, previousUid)
+                try {
+                    val previousUid = repository.ensureLocalAccount(current.uid)
+                    val context = repository.getApplicationContext()
+                    if (previousUid != null && context != null) {
+                        SyncWorkScheduler.cancel(context, previousUid)
+                    }
+                    restartListeners()
+                    syncNow()
+                } catch (e: PendingAccountSwitchException) {
+                    android.util.Log.w("SyncManager", "Initial account switch blocked until pending data is synchronized.", e)
+                    detachListeners()
+                    FirebaseService.signOut()
                 }
-                restartListeners()
-                syncNow()
             }
         }
     }
