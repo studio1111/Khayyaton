@@ -72,8 +72,6 @@ class SyncManager(
                         repository.clearAccountLocalState()
                     }
 
-                    val authenticatedUid = firebaseUser.uid.orEmpty()
-                    if (authenticatedUid.isBlank()) return@launch
                     repository.saveLocalAccountUid(authenticatedUid)
 
                     // Attach listeners only after account isolation is complete.
