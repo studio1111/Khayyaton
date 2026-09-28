@@ -226,7 +226,7 @@ fun WorkshopsDialog(
 
                     // Workshop items list
                     items(workshops, key = { it.id }) { ws ->
-                        val isActive = ws.id == (activeWorkshop?.id ?: 1L)
+                        val isActive = activeWorkshop?.id == ws.id
 
                         Surface(
                             shape = RoundedCornerShape(16.dp),
