@@ -28,7 +28,7 @@ data class Workshop(
 data class FurnitureOrder(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val workshopId: Long = 1L,
+    val workshopId: Long = 0L,
     val workshopSyncId: String = "",
     val syncId: String = java.util.UUID.randomUUID().toString(),
     val orderNumber: Long,
