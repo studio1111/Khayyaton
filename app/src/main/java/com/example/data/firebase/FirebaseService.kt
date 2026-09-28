@@ -687,7 +687,11 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
-                if (isDeleted("orders", syncId, doc.id)) return@mapNotNull null
+                val workshopSyncId = data["workshopSyncId"] as? String ?: ""
+                if (
+                    isDeleted("orders", syncId, doc.id) ||
+                    deletedRecords.any { it.collection == "workshops" && it.syncId == workshopSyncId }
+                ) return@mapNotNull null
                 FurnitureOrder(
                     id = id,
                     syncId = syncId,
@@ -722,7 +726,11 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
-                if (isDeleted("payments", syncId, doc.id)) return@mapNotNull null
+                val workshopSyncId = data["workshopSyncId"] as? String ?: ""
+                if (
+                    isDeleted("payments", syncId, doc.id) ||
+                    deletedRecords.any { it.collection == "workshops" && it.syncId == workshopSyncId }
+                ) return@mapNotNull null
                 PaymentRecord(
                     id = id,
                     syncId = syncId,
@@ -753,7 +761,11 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
-                if (isDeleted("presets", syncId, doc.id)) return@mapNotNull null
+                val workshopSyncId = data["workshopSyncId"] as? String ?: ""
+                if (
+                    isDeleted("presets", syncId, doc.id) ||
+                    deletedRecords.any { it.collection == "workshops" && it.syncId == workshopSyncId }
+                ) return@mapNotNull null
                 val name = data["name"] as? String ?: return@mapNotNull null
                 ModelPreset(
                     id = id,
