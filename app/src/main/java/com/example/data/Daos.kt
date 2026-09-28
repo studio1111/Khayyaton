@@ -21,6 +21,12 @@ interface WorkshopDao {
     @Query("SELECT * FROM workshops WHERE syncId = :syncId LIMIT 1")
     suspend fun getWorkshopBySyncId(syncId: String): Workshop?
 
+    @Query("SELECT * FROM workshops WHERE syncStatus IN ('PENDING', 'FAILED')")
+    suspend fun getPendingSync(): List<Workshop>
+
+    @Query("UPDATE workshops SET syncStatus = :status WHERE syncId = :syncId")
+    suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWorkshop(workshop: Workshop): Long
 
@@ -87,6 +93,12 @@ interface OrderDao {
     @Query("SELECT * FROM furniture_orders WHERE syncId = :syncId LIMIT 1")
     suspend fun getOrderBySyncId(syncId: String): FurnitureOrder?
 
+    @Query("SELECT * FROM furniture_orders WHERE syncStatus IN ('PENDING', 'FAILED')")
+    suspend fun getPendingSync(): List<FurnitureOrder>
+
+    @Query("UPDATE furniture_orders SET syncStatus = :status WHERE syncId = :syncId")
+    suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
+
     @Query("DELETE FROM furniture_orders WHERE syncId = :syncId")
     suspend fun deleteOrderBySyncId(syncId: String)
 
@@ -128,6 +140,12 @@ interface PaymentDao {
 
     @Query("SELECT * FROM payment_records WHERE syncId = :syncId LIMIT 1")
     suspend fun getPaymentBySyncId(syncId: String): PaymentRecord?
+
+    @Query("SELECT * FROM payment_records WHERE syncStatus IN ('PENDING', 'FAILED')")
+    suspend fun getPendingSync(): List<PaymentRecord>
+
+    @Query("UPDATE payment_records SET syncStatus = :status WHERE syncId = :syncId")
+    suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
 
     @Query("DELETE FROM payment_records WHERE syncId = :syncId")
     suspend fun deletePaymentBySyncId(syncId: String)
@@ -186,6 +204,12 @@ interface ModelPresetDao {
     @Query("SELECT * FROM model_presets WHERE syncId = :syncId LIMIT 1")
     suspend fun getPresetBySyncId(syncId: String): ModelPreset?
 
+    @Query("SELECT * FROM model_presets WHERE syncStatus IN ('PENDING', 'FAILED')")
+    suspend fun getPendingSync(): List<ModelPreset>
+
+    @Query("UPDATE model_presets SET syncStatus = :status WHERE syncId = :syncId")
+    suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
+
     @Query("DELETE FROM model_presets WHERE syncId = :syncId")
     suspend fun deletePresetBySyncId(syncId: String)
 
@@ -218,6 +242,12 @@ interface UnitRuleDao {
 
     @Query("SELECT * FROM unit_conversion_rules WHERE syncId = :syncId LIMIT 1")
     suspend fun getRuleBySyncId(syncId: String): com.example.model.UnitConversionRule?
+
+    @Query("SELECT * FROM unit_conversion_rules WHERE syncStatus IN ('PENDING', 'FAILED')")
+    suspend fun getPendingSync(): List<com.example.model.UnitConversionRule>
+
+    @Query("UPDATE unit_conversion_rules SET syncStatus = :status WHERE syncId = :syncId")
+    suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
 
     @Query("DELETE FROM unit_conversion_rules")
     suspend fun clearAll()
