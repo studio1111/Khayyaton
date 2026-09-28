@@ -207,27 +207,40 @@ object SubscriptionManager {
     }
 
     /**
-     * مالک فقط از طریق Firebase Authentication Custom Claims قابل فعال شدن است.
-     * هیچ فیلد قابل ویرایش در Firestore یا حافظه محلی نقش مالک را تعیین نمی‌کند.
-     * پشتیبانی از هر دو نام claim برای مهاجرت امن: role=owner یا admin=true.
+     * تشخیص مالک دو مسیر امن دارد:
+     * 1) Custom Claim از Firebase Authentication، در صورت وجود.
+     * 2) سند فقط‌خواندنی /admin/owners/{uid} که فقط از خارج برنامه (Firebase Console)
+     *    قابل ایجاد یا تغییر است. این مسیر برای پروژه بدون Blaze استفاده می‌شود.
+     * هیچ فیلد قابل ویرایش توسط کاربر عادی در /users نقش مالک را تعیین نمی‌کند.
      */
-    private suspend fun refreshOwnerClaim(user: com.google.firebase.auth.FirebaseUser): Boolean {
+    private suspend fun isOwnerByFirestore(user: com.google.firebase.auth.FirebaseUser): Boolean {
         return try {
-            val token = user.getIdToken(false).await()
+            val db = com.google.firebase.data.firebase.FirebaseService.firestoreInstance()
+                ?: return false
+            val snapshot = db.collection("admin").document("owners")
+                .collection("members").document(user.uid).get().await()
+            snapshot.exists() && snapshot.getBoolean("enabled") == true
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Could not read Firestore owner record", e)
+            false
+        }
+    }
+
+    private suspend fun hasOwnerClaim(user: com.google.firebase.auth.FirebaseUser, forceRefresh: Boolean): Boolean {
+        return try {
+            val token = user.getIdToken(forceRefresh).await()
             val claims = token.claims
-            val owner = claims["role"] == "owner" || claims["admin"] == true
-            _ownerAccess.value = owner
-            owner
+            claims["role"] == "owner" || claims["admin"] == true
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.w(TAG, "Could not read Firebase owner claim", e)
-            _ownerAccess.value = false
             false
         }
     }
 
     /**
-     * وضعیت مالک را مجبور به تازه‌سازی می‌کند. برای تغییر claim در Firebase
-     * یک بار getIdToken(true) لازم است تا توکن جدید دریافت شود.
+     * وضعیت مالک را از منبع مورد اعتماد تازه می‌کند.
+     * برای پروژه بدون Blaze، مالک از طریق Firestore Console در مسیر
+     * /admin/owners/members/{uid} فعال می‌شود.
      */
     suspend fun refreshOwnerAccess(): Boolean {
         val user = FirebaseAuth.getInstance().currentUser ?: run {
@@ -235,18 +248,19 @@ object SubscriptionManager {
             return false
         }
         return try {
-            val token = user.getIdToken(true).await()
-            val claims = token.claims
-            val owner = claims["role"] == "owner" || claims["admin"] == true
+            val owner = hasOwnerClaim(user, forceRefresh = true) || isOwnerByFirestore(user)
             _ownerAccess.value = owner
             if (owner) {
-                val granted = UserSubscription(status = SubscriptionStatus.ADMIN_GRANTED, updatedAt = System.currentTimeMillis())
+                val granted = UserSubscription(
+                    status = SubscriptionStatus.ADMIN_GRANTED,
+                    updatedAt = System.currentTimeMillis()
+                )
                 _subscriptionState.value = granted
                 cacheSubscription(granted)
             }
             owner
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Could not force-refresh Firebase owner claim", e)
+            if (BuildConfig.DEBUG) Log.w(TAG, "Could not refresh owner access", e)
             _ownerAccess.value = false
             false
         }
