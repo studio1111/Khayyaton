@@ -1105,8 +1105,10 @@ class WorkshopRepository(
     }
 
     suspend fun deleteUnitRule(rule: UnitConversionRule) {
+        // The four base conversion rules are permanent defaults for every account.
+        if (isMandatoryDefaultUnitRule(rule)) return
+
         database.withTransaction {
-            markDefaultUnitRuleDeleted(rule)
             unitRuleDao.deleteRule(rule)
             recordCloudDeletion("unitRules", rule.syncId)
         }
@@ -1115,7 +1117,8 @@ class WorkshopRepository(
     suspend fun deleteUnitRuleById(id: Long) {
         database.withTransaction {
             val existing = unitRuleDao.getAllRulesSync().firstOrNull { it.id == id }
-            existing?.let { markDefaultUnitRuleDeleted(it) }
+            if (existing != null && isMandatoryDefaultUnitRule(existing)) return@withTransaction
+
             unitRuleDao.deleteRuleById(id)
             existing?.syncId?.let { recordCloudDeletion("unitRules", it) }
         }
@@ -1138,6 +1141,14 @@ class WorkshopRepository(
 
     private fun deletedDefaultUnitRules(): MutableSet<String> =
         prefs?.getStringSet(deletedDefaultUnitRulesKey(), emptySet()).orEmpty().toMutableSet()
+
+    private fun isMandatoryDefaultUnitRule(rule: UnitConversionRule): Boolean {
+        val raw = rule.pieceKey.ifBlank {
+            if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
+        }
+        val key = normalizeUnitKey(raw)
+        return defaultUnitRules.any { it.key == key }
+    }
 
     private fun markDefaultUnitRuleDeleted(rule: UnitConversionRule) {
         val raw = rule.pieceKey.ifBlank {
