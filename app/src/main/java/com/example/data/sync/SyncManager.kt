@@ -249,6 +249,8 @@ class SyncManager(
 
     private fun parseDocument(collection: String, doc: com.google.firebase.firestore.DocumentSnapshot): Any? {
         val data = doc.data ?: return null
+        val syncId = (data["syncId"] as? String ?: doc.id).trim()
+        if (syncId.isBlank()) return null
         val updatedAt = doc.getTimestamp("updatedAt")?.toDate()?.time
             ?: doc.getLong("updatedAt")
             ?: System.currentTimeMillis()
@@ -257,22 +259,26 @@ class SyncManager(
         return when (collection) {
             "workshops" -> Workshop(
                 id = data["id"].numberLong(),
-                syncId = data["syncId"] as? String ?: doc.id,
-                name = data["name"] as? String ?: "کارگاه",
+                syncId = syncId,
+                name = (data["name"] as? String)?.trim().orEmpty().takeIf { it.isNotBlank() } ?: return null,
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
                 syncStatus = status
             )
-            "orders" -> FurnitureOrder(
+            "orders" -> {
+                val workshopId = data["workshopId"].numberLong()
+                val workshopSyncId = (data["workshopSyncId"] as? String).orEmpty().trim()
+                if (workshopId <= 0L || workshopSyncId.isBlank()) return null
+                FurnitureOrder(
                 id = data["id"].numberLong(),
-                workshopId = data["workshopId"].numberLong(),
-                workshopSyncId = data["workshopSyncId"] as? String ?: "",
-                syncId = data["syncId"] as? String ?: doc.id,
+                workshopId = workshopId,
+                workshopSyncId = workshopSyncId,
+                syncId = syncId,
                 orderNumber = data["orderNumber"].numberLong(1L),
                 invoiceNumber = data["invoiceNumber"] as? String ?: "",
                 modelName = data["modelName"] as? String ?: "",
                 pricePerSet = data["pricePerSet"].numberLong(),
-                unitsPerSet = data["unitsPerSet"].numberDouble(6.0),
+                unitsPerSet = data["unitsPerSet"].numberDouble(),
                 countFormula = data["countFormula"] as? String ?: "",
                 calculatedUnits = data["calculatedUnits"].numberDouble(),
                 calculatedTotal = data["calculatedTotal"].numberLong(),
@@ -283,16 +289,21 @@ class SyncManager(
                 fabricName = data["fabricName"] as? String ?: "",
                 workshopInvoiceNumber = data["workshopInvoiceNumber"] as? String ?: "",
                 notes = data["notes"] as? String ?: "",
-                colorCode = data["colorCode"] as? String ?: "#2563EB",
+                colorCode = data["colorCode"] as? String ?: "",
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
                 syncStatus = status
-            )
-            "payments" -> PaymentRecord(
+                )
+            }
+            "payments" -> {
+                val workshopId = data["workshopId"].numberLong()
+                val workshopSyncId = (data["workshopSyncId"] as? String).orEmpty().trim()
+                if (workshopId <= 0L || workshopSyncId.isBlank()) return null
+                PaymentRecord(
                 id = data["id"].numberLong(),
-                workshopId = data["workshopId"].numberLong(),
-                workshopSyncId = data["workshopSyncId"] as? String ?: "",
-                syncId = data["syncId"] as? String ?: doc.id,
+                workshopId = workshopId,
+                workshopSyncId = workshopSyncId,
+                syncId = syncId,
                 paymentNumber = data["paymentNumber"].numberLong(1L),
                 amount = data["amount"].numberLong(),
                 dateJalali = data["dateJalali"] as? String ?: "",
@@ -308,23 +319,29 @@ class SyncManager(
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
                 syncStatus = status
-            )
-            "presets" -> ModelPreset(
+                )
+            }
+            "presets" -> {
+                val workshopId = data["workshopId"].numberLong()
+                val workshopSyncId = (data["workshopSyncId"] as? String).orEmpty().trim()
+                if (workshopId <= 0L || workshopSyncId.isBlank()) return null
+                ModelPreset(
                 id = data["id"].numberLong(),
-                workshopId = data["workshopId"].numberLong(),
-                workshopSyncId = data["workshopSyncId"] as? String ?: "",
-                syncId = data["syncId"] as? String ?: doc.id,
+                workshopId = workshopId,
+                workshopSyncId = workshopSyncId,
+                syncId = syncId,
                 name = data["name"] as? String ?: "",
-                defaultPricePerSet = data["defaultPricePerSet"].numberLong(2000000L),
-                defaultUnitsPerSet = data["defaultUnitsPerSet"].numberDouble(6.0),
-                colorCode = data["colorCode"] as? String ?: "#2563EB",
+                defaultPricePerSet = data["defaultPricePerSet"].numberLong(),
+                defaultUnitsPerSet = data["defaultUnitsPerSet"].numberDouble(),
+                colorCode = data["colorCode"] as? String ?: "",
                 description = data["description"] as? String ?: "",
                 updatedAt = updatedAt,
                 syncStatus = status
-            )
+                )
+            }
             "unitRules" -> UnitConversionRule(
                 id = data["id"].numberLong(),
-                syncId = data["syncId"] as? String ?: doc.id,
+                syncId = syncId,
                 pieceKey = data["pieceKey"] as? String ?: "",
                 pieceCount = data["pieceCount"].numberDouble(),
                 calculatedUnits = data["calculatedUnits"].numberDouble(),
