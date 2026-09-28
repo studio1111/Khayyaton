@@ -616,6 +616,7 @@ class WorkshopRepository(
             ?.remove("local_account_uid")
             ?.remove("cloud_sync_ready_uid")
             ?.remove(cloudSyncReadyKey(currentUid))
+            ?.remove("custom_username")
             ?.putLong("active_workshop_id", 0L)
             ?.apply()
     }
