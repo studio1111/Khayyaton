@@ -1221,10 +1221,43 @@ class WorkshopRepository(
     }
 
     suspend fun saveUnitRule(rule: UnitConversionRule) {
+        val now = System.currentTimeMillis()
+        val existingBySync = unitRuleDao.getRuleBySyncId(rule.syncId)
+        val existingById = if (rule.id != 0L) {
+            unitRuleDao.getAllRulesSync().firstOrNull { it.id == rule.id }
+        } else {
+            null
+        }
+
+        // Mandatory base rules are immutable: their exact key and conversion
+        // value can never be changed or disabled through any save path.
+        val mandatorySource = existingBySync?.takeIf { isMandatoryDefaultUnitRule(it) }
+            ?: existingById?.takeIf { isMandatoryDefaultUnitRule(it) }
+
+        if (mandatorySource != null) {
+            val canonical = defaultUnitRules.first { it.key == normalizeUnitKey(
+                mandatorySource.pieceKey.ifBlank {
+                    if (mandatorySource.pieceCount % 1.0 == 0.0) mandatorySource.pieceCount.toInt().toString()
+                    else mandatorySource.pieceCount.toString()
+                }
+            ) }
+            unitRuleDao.updateRule(
+                mandatorySource.copy(
+                    pieceKey = canonical.key,
+                    pieceCount = canonical.key.toDouble(),
+                    calculatedUnits = canonical.calculatedUnits,
+                    isEnabled = true,
+                    updatedAt = now,
+                    syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                )
+            )
+            return
+        }
+
         val syncId = rule.syncId.ifBlank { java.util.UUID.randomUUID().toString() }
         val pendingRule = rule.copy(
             syncId = syncId,
-            updatedAt = System.currentTimeMillis(),
+            updatedAt = now,
             syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
         )
         val rawKey = rule.pieceKey.ifBlank {
@@ -1232,37 +1265,43 @@ class WorkshopRepository(
         }
         val norm = normalizeUnitKey(rawKey)
 
-        val existingBySync = unitRuleDao.getRuleBySyncId(syncId)
-        if (existingBySync != null) {
-            unitRuleDao.updateRule(pendingRule.copy(id = existingBySync.id))
-            return
-        }
-
         val duplicate = if (rule.id == 0L) {
-            unitRuleDao.getAllRulesSync().firstOrNull {
-                normalizeUnitKey(
-                    it.pieceKey.ifBlank {
-                        if (it.pieceCount % 1.0 == 0.0) it.pieceCount.toInt().toString() else it.pieceCount.toString()
-                    }
-                ) == norm
-            }
+            unitRuleDao.getAllRulesSync().firstOrNull { normalizeUnitKey(
+                it.pieceKey.ifBlank {
+                    if (it.pieceCount % 1.0 == 0.0) it.pieceCount.toInt().toString() else it.pieceCount.toString()
+                }
+            ) == norm }
         } else {
             null
         }
 
         if (duplicate != null) {
-            // A new local rule reuses the existing canonical identity instead
-            // of creating a second cloud document for the same logical rule.
-            unitRuleDao.updateRule(
-                duplicate.copy(
-                    pieceKey = pendingRule.pieceKey,
-                    pieceCount = pendingRule.pieceCount,
-                    calculatedUnits = pendingRule.calculatedUnits,
-                    isEnabled = pendingRule.isEnabled,
-                    updatedAt = pendingRule.updatedAt,
-                    syncStatus = pendingRule.syncStatus
+            val duplicateCanonical = defaultUnitRules.firstOrNull { it.key == normalizeUnitKey(ruleKey(duplicate)) }
+            if (duplicateCanonical != null) {
+                unitRuleDao.updateRule(
+                    duplicate.copy(
+                        pieceKey = duplicateCanonical.key,
+                        pieceCount = duplicateCanonical.key.toDouble(),
+                        calculatedUnits = duplicateCanonical.calculatedUnits,
+                        isEnabled = true,
+                        updatedAt = now,
+                        syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                    )
                 )
-            )
+            } else {
+                // A new local rule reuses the existing canonical identity instead
+                // of creating a second cloud document for the same logical rule.
+                unitRuleDao.updateRule(
+                    duplicate.copy(
+                        pieceKey = pendingRule.pieceKey,
+                        pieceCount = pendingRule.pieceCount,
+                        calculatedUnits = pendingRule.calculatedUnits,
+                        isEnabled = pendingRule.isEnabled,
+                        updatedAt = pendingRule.updatedAt,
+                        syncStatus = pendingRule.syncStatus
+                    )
+                )
+            }
         } else if (rule.id == 0L) {
             unitRuleDao.insertRule(pendingRule)
         } else {
