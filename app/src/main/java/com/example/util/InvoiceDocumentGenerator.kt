@@ -299,6 +299,8 @@ object InvoiceDocumentGenerator {
             val totalWork = orders.sumOf { it.calculatedTotal }
             val totalPaid = payments.sumOf { it.amount }
             val balance = totalWork - totalPaid
+            val safeCurrencyUnit = escapeHtml(currencyUnit)
+            val safeTargetCustomer = escapeHtml(targetCustomer)
 
             val doc = PdfDocument()
             val pageWidth = 595 // A4 standard width (pt)
