@@ -687,7 +687,9 @@ object FirebaseService {
                     syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
-            val fallbackWorkshopId = restoredWorkshops.firstOrNull()?.id ?: 0L
+            // A cloud child record must carry its own workshop identity.
+            // Never attach malformed/legacy data to the first workshop implicitly.
+            val fallbackWorkshopId = 0L
 
             val ordersSnapshot = if (requireServer) {
                 userDoc.collection("orders")
