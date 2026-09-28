@@ -415,8 +415,12 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                 onUserChanged = { user ->
                     if (user != null) {
                         viewModel.onUserLoggedIn(user)
+                        // After login/account switching, go directly to the app.
+                        // Do not leave the Firebase cloud-account page open at entry.
+                        viewModel.isAuthDialogOpen.value = false
                     } else {
                         viewModel.onUserLoggedOut()
+                        viewModel.isAuthDialogOpen.value = false
                     }
                 },
                 onDismiss = { viewModel.isAuthDialogOpen.value = false }

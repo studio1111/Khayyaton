@@ -60,7 +60,7 @@ val COLOR_PALETTE = listOf(
     ColorOption("cream", "کرم نسکافه‌ای", "#A8A29E", Color(0xFFA8A29E)),
     ColorOption("charcoal", "ذغالی نوک‌مدادی", "#334155", Color(0xFF334155)),
     ColorOption("slate", "طوسی ماتیس", "#475569", Color(0xFF475569)),
-    ColorOption("black", "مشکی چرم", "#18181B", Color(0xFF18181B))
+    ColorOption("yellow", "زرد طلایی", "#EAB308", Color(0xFFEAB308))
 )
 
 val JALALI_MONTH_NAMES = listOf(

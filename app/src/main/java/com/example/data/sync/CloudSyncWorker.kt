@@ -15,7 +15,13 @@ class CloudSyncWorker(
     override suspend fun doWork(): Result {
         return try {
             FirebaseService.initialize(applicationContext)
-            val user = FirebaseService.getCurrentUser() ?: return Result.success()
+
+            val expectedUid = inputData.getString("uid").orEmpty()
+            val user = FirebaseService.currentUser()
+            if (user == null) return Result.success()
+            if (expectedUid.isNotBlank() && user.uid != expectedUid) {
+                return Result.success()
+            }
 
             val database = AppDatabase.getDatabase(applicationContext)
             val repository = WorkshopRepository(
@@ -28,31 +34,17 @@ class CloudSyncWorker(
                 workshopDao = database.workshopDao()
             )
 
-            // Background work can start during the login lifecycle. Restore
-            // the authenticated account first so an empty/default local snapshot
-            // can never overwrite or mask the cloud account.
-            if (!repository.isCloudSyncReady(user.uid)) {
-                val restore = FirebaseService.downloadFromCloud(repository)
-                if (restore.isFailure) {
-                    return Result.retry()
-                }
-                repository.markCloudSyncReady(user.uid)
-            }
-
-            val result = FirebaseService.uploadAllToCloud(
-                orders = repository.getAllOrdersSync(),
-                payments = repository.getAllPaymentsSync(),
-                presets = repository.getAllPresetsSync(),
-                unitRules = repository.getAllUnitRulesSync(),
-                workshops = repository.getAllWorkshopsSync(),
-                repository = repository
-            )
-
+            val result = FirebaseService.syncAccount(repository)
             if (result.isSuccess) {
                 Result.success()
             } else {
                 val errorMsg = result.exceptionOrNull()?.message.orEmpty()
-                if (errorMsg.contains("منقضی") || errorMsg.contains("دسترسی") || errorMsg.contains("وارد حساب")) {
+                if (
+                    errorMsg.contains("منقضی") ||
+                    errorMsg.contains("دسترسی لازم") ||
+                    errorMsg.contains("وارد حساب") ||
+                    errorMsg.contains("احراز هویت")
+                ) {
                     Result.failure()
                 } else {
                     Result.retry()

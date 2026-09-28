@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.util.concurrent.CopyOnWriteArrayList
 
 class SyncManager(
@@ -33,11 +32,10 @@ class SyncManager(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectivity = ConnectivityMonitor(context)
-    // Firebase Storage در نسخه رایگان استفاده نمی‌شود؛ فایل‌ها فقط به‌صورت محلی نگهداری می‌شوند.
+    // Legacy file-queue tables are retained only for schema compatibility and are not active sync work.
     private val listeners = CopyOnWriteArrayList<com.google.firebase.firestore.ListenerRegistration>()
     private var authListener: FirebaseAuth.AuthStateListener? = null
     private var observeJob: Job? = null
-    private var syncJob: Job? = null
 
     private val _pendingCount = MutableStateFlow(0)
     val pendingCount: StateFlow<Int> = _pendingCount.asStateFlow()
@@ -57,15 +55,38 @@ class SyncManager(
         authListener = FirebaseAuth.AuthStateListener { user ->
             if (user == null) {
                 detachListeners()
+                scope.launch {
+                    repository.clearAccountLocalState()
+                }
             } else {
-                restartListeners()
-                syncNow()
+                val firebaseUser = user
+                scope.launch {
+                    val context = repository.getApplicationContext() ?: return@launch
+                    val authenticatedUid = firebaseUser.uid.orEmpty()
+                    if (authenticatedUid.isBlank()) return@launch
+
+                    val previousUid = repository.ensureLocalAccount(authenticatedUid)
+                    if (previousUid != null) {
+                        SyncWorkScheduler.cancel(context, previousUid)
+                    }
+
+                    // Attach listeners only after account isolation is complete.
+                    restartListeners()
+                    syncNow()
+                }
             }
         }
         auth.addAuthStateListener(authListener!!)
-        if (auth.currentUser != null) {
-            restartListeners()
-            syncNow()
+        auth.currentUser?.let { current ->
+            scope.launch {
+                val previousUid = repository.ensureLocalAccount(current.uid)
+                val context = repository.getApplicationContext()
+                if (previousUid != null && context != null) {
+                    SyncWorkScheduler.cancel(context, previousUid)
+                }
+                restartListeners()
+                syncNow()
+            }
         }
     }
 
@@ -74,50 +95,25 @@ class SyncManager(
         authListener = null
         detachListeners()
         observeJob?.cancel()
-        syncJob?.cancel()
         connectivity.stop()
         scope.cancel()
     }
 
     fun syncNow() {
-        if (!connectivity.isOnline.value) return
-        syncJob?.cancel()
-        syncJob = scope.launch {
-            val user = FirebaseService.currentUser() ?: return@launch
-
-            // Never upload a local snapshot for a new/changed account until its
-            // Firestore data has been restored successfully. This closes the
-            // login/upload race that could make online data appear to disappear.
-            if (!repository.isCloudSyncReady(user.uid)) {
-                val restore = FirebaseService.downloadFromCloud(repository)
-                if (restore.isFailure) return@launch
-                repository.markCloudSyncReady(user.uid)
-            }
-
-            // همگام‌سازی اصلی فقط با Firestore انجام می‌شود و به Storage وابسته نیست.
-            val result = FirebaseService.uploadAllToCloud(
-                orders = repository.getAllOrdersSync(),
-                payments = repository.getAllPaymentsSync(),
-                presets = repository.getAllPresetsSync(),
-                unitRules = repository.getAllUnitRulesSync(),
-                workshops = repository.getAllWorkshopsSync(),
-                repository = repository
-            )
-            if (result.isSuccess) {
-                attachListenersIfNeeded()
-            }
-        }
+        // WorkManager owns network waiting/retry. Enqueue even while offline so
+        // a pending local change survives process death and is flushed later.
+        val user = FirebaseService.currentUser() ?: return
+        val context = repository.getApplicationContext() ?: return
+        SyncWorkScheduler.enqueue(context, user.uid)
     }
 
     private fun observePendingCount() {
         scope.launch {
             combine(
-                database.uploadQueueDao().pendingCount(),
-                database.pendingDeleteDao().pendingCount(),
                 database.documentCacheDao().pendingWritesCount(),
-                database.deletedIdDao().countFlow()
-            ) { uploads, deletes, pendingWrites, tombstones ->
-                uploads + deletes + pendingWrites + tombstones
+                database.deletedIdDao().countPendingFlow()
+            ) { pendingWrites, tombstones ->
+                pendingWrites + tombstones
             }.collect { _pendingCount.value = it }
         }
     }
@@ -138,7 +134,7 @@ class SyncManager(
                     snapshot.payments.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
                     snapshot.presets.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
                     snapshot.rules.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED }
-                if (hasPending && connectivity.isOnline.value) syncNow()
+                if (hasPending) syncNow()
             }
         }
     }
@@ -194,11 +190,23 @@ class SyncManager(
                 repository.applyCloudDeletions(
                     listOf(WorkshopRepository.PendingCloudDeletion(collection, syncId))
                 )
-                database.deletedIdDao().delete(collection, syncId)
                 continue
             }
 
             if (database.deletedIdDao().contains(collection, syncId)) continue
+
+            // A workshop tombstone also invalidates all child records. This
+            // prevents stale order/payment/preset snapshots from resurrecting
+            // data after the parent workshop was deleted elsewhere.
+            if (collection == "orders" || collection == "payments" || collection == "presets") {
+                val workshopSyncId = doc.getString("workshopSyncId").orEmpty()
+                if (
+                    workshopSyncId.isNotBlank() &&
+                    database.deletedIdDao().contains("workshops", workshopSyncId)
+                ) {
+                    continue
+                }
+            }
 
             val parsed = parseDocument(collection, doc)
             if (parsed != null) {
@@ -227,9 +235,7 @@ class SyncManager(
                 name = data["name"] as? String ?: "کارگاه",
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             "orders" -> FurnitureOrder(
                 id = data["id"].numberLong(),
@@ -254,9 +260,7 @@ class SyncManager(
                 colorCode = data["colorCode"] as? String ?: "#2563EB",
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             "payments" -> PaymentRecord(
                 id = data["id"].numberLong(),
@@ -277,9 +281,7 @@ class SyncManager(
                 relatedOrderSyncId = data["relatedOrderSyncId"] as? String ?: "",
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             "presets" -> ModelPreset(
                 id = data["id"].numberLong(),
@@ -292,9 +294,7 @@ class SyncManager(
                 colorCode = data["colorCode"] as? String ?: "#2563EB",
                 description = data["description"] as? String ?: "",
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             "unitRules" -> UnitConversionRule(
                 id = data["id"].numberLong(),
@@ -304,9 +304,7 @@ class SyncManager(
                 calculatedUnits = data["calculatedUnits"].numberDouble(),
                 isEnabled = data["isEnabled"] as? Boolean ?: true,
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             else -> null
         }

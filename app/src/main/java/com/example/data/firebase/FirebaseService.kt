@@ -20,7 +20,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.PersistentCacheSettings
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 
 object FirebaseService {
@@ -37,8 +36,7 @@ object FirebaseService {
                         .setApplicationId("1:15543905804:android:8fc6393c86598be4310829")
                         .setApiKey("AIzaSyAmLQ7SPiYxhMvquyV01xYD8MZZjezknoY")
                         .setProjectId("khayyaton-26abc")
-                        .setStorageBucket("khayyaton-26abc.firebasestorage.app")
-                        .setGcmSenderId("15543905804")
+                           .setGcmSenderId("15543905804")
                         .build()
                     FirebaseApp.initializeApp(context, options)
                     if (BuildConfig.DEBUG) Log.d(TAG, "Firebase initialized with explicit options")
@@ -64,7 +62,6 @@ object FirebaseService {
                     .setApplicationId("1:15543905804:android:8fc6393c86598be4310829")
                     .setApiKey("AIzaSyAmLQ7SPiYxhMvquyV01xYD8MZZjezknoY")
                     .setProjectId("khayyaton-26abc")
-                    .setStorageBucket("khayyaton-26abc.firebasestorage.app")
                     .setGcmSenderId("15543905804")
                     .build()
                 FirebaseApp.initializeApp(context, options)
@@ -91,16 +88,7 @@ object FirebaseService {
             null
         }
 
-    private val storage: FirebaseStorage?
-        get() = try {
-            FirebaseStorage.getInstance()
-        } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Firebase Storage not available", e)
-            null
-        }
-
     fun firestoreInstance(): FirebaseFirestore? = firestore
-    fun storageInstance(): FirebaseStorage? = storage
     fun authInstance(): FirebaseAuth = auth ?: FirebaseAuth.getInstance()
     fun currentUser(): FirebaseUser? = auth?.currentUser ?: FirebaseAuth.getInstance().currentUser
 
@@ -254,6 +242,31 @@ object FirebaseService {
     /**
      * Backup/Upload all local database records to Firebase Firestore under users/{uid}/
      */
+    /**
+     * One synchronization authority for the whole account.
+     *
+     * 1) Pull cloud state into Room using LWW/tombstones.
+     * 2) Push only durable local changes and deletions.
+     * 3) Never upload a whole local snapshot over an existing cloud account.
+     */
+    suspend fun syncAccount(repository: WorkshopRepository): Result<CloudSyncResult> {
+        val user = auth?.currentUser
+            ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
+        if (firestore == null) {
+            return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
+        }
+
+        return try {
+            val restored = downloadFromCloud(repository)
+            if (restored.isFailure) return restored
+            uploadPendingToCloud(repository)
+        } catch (e: Exception) {
+            Log.w(TAG, "Account sync failed: " + e.message, e)
+            Result.failure(Exception(parseCloudError(e)))
+        }
+    }
+
+    @Deprecated("Use syncAccount(repository)")
     suspend fun uploadAllToCloud(
         orders: List<FurnitureOrder>,
         payments: List<PaymentRecord>,
@@ -262,97 +275,43 @@ object FirebaseService {
         workshops: List<Workshop> = emptyList(),
         repository: WorkshopRepository? = null
     ): Result<CloudSyncResult> {
+        val repo = repository
+            ?: return Result.failure(Exception("موتور همگام‌سازی محلی در دسترس نیست."))
+        return uploadPendingToCloud(repo)
+    }
+
+    private suspend fun uploadPendingToCloud(repository: WorkshopRepository): Result<CloudSyncResult> {
         val user = auth?.currentUser
             ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
         val db = firestore
             ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
 
         return try {
-            try {
-                user.getIdToken(false).await()
-            } catch (tokenEx: Exception) {
-                Log.w(TAG, "Token refresh failed before upload: ${tokenEx.message}")
-                try {
-                    user.reload().await()
-                    user.getIdToken(true).await()
-                } catch (reloadEx: Exception) {
-                    Log.w(TAG, "User session expired before upload: ${reloadEx.message}")
-                    return Result.failure(Exception("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد حساب خود شوید."))
-                }
-            }
+            user.getIdToken(false).await()
 
             val userDoc = db.collection("users").document(user.uid)
             val maxBatchSize = 400
 
-            // Respect deletion tombstones from other devices so stale local
-            // copies cannot resurrect records that were intentionally deleted.
             val cloudDeletionSnapshot = userDoc.collection("deletions").get().await()
-            val blocked = cloudDeletionSnapshot.documents.mapNotNull { doc ->
+            val cloudBlocked = cloudDeletionSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val collection = data["collection"] as? String ?: return@mapNotNull null
                 val syncId = data["syncId"] as? String ?: return@mapNotNull null
-                "$collection|$syncId"
+                collection + "|" + syncId
             }.toSet()
 
-            fun allowed(collection: String, syncId: String): Boolean =
-                "$collection|$syncId" !in blocked
+            fun blocked(collection: String, syncId: String): Boolean =
+                (collection + "|" + syncId) in cloudBlocked
 
-            suspend fun batchSet(
-                collection: com.google.firebase.firestore.CollectionReference,
-                documents: List<Pair<String, Map<String, Any?>>>
-            ) {
-                var batch = db.batch()
-                var count = 0
+            val pendingDeletions = repository.getPendingCloudDeletions()
+            val confirmedDeletions = mutableListOf<WorkshopRepository.PendingCloudDeletion>()
 
-                for ((documentId, data) in documents) {
-                    batch.set(
-                        collection.document(documentId),
-                        data,
-                        SetOptions.merge()
-                    )
-                    count++
-
-                    if (count == maxBatchSize) {
-                        batch.commit().await()
-                        batch = db.batch()
-                        count = 0
-                    }
-                }
-
-                if (count > 0) batch.commit().await()
-            }
-
-            suspend fun deleteStale(
-                collection: com.google.firebase.firestore.CollectionReference,
-                keepIds: Set<String>
-            ) {
-                val snapshot = collection.get().await()
-                var batch = db.batch()
-                var count = 0
-
-                for (doc in snapshot.documents) {
-                    if (doc.id in keepIds) continue
-                    batch.delete(doc.reference)
-                    count++
-
-                    if (count == maxBatchSize) {
-                        batch.commit().await()
-                        batch = db.batch()
-                        count = 0
-                    }
-                }
-
-                if (count > 0) batch.commit().await()
-            }
-
-            // Propagate local deletions with durable tombstones.
-            val pendingDeletions = repository?.getPendingCloudDeletions().orEmpty()
             if (pendingDeletions.isNotEmpty()) {
-                var deletionBatch = db.batch()
-                var deletionCount = 0
+                var batch = db.batch()
+                var count = 0
 
                 for (deletion in pendingDeletions) {
-                    val collection = when (deletion.collection) {
+                    val collectionRef = when (deletion.collection) {
                         "workshops" -> userDoc.collection("workshops")
                         "orders" -> userDoc.collection("orders")
                         "payments" -> userDoc.collection("payments")
@@ -361,7 +320,7 @@ object FirebaseService {
                         else -> null
                     } ?: continue
 
-                    deletionBatch.delete(collection.document(deletion.syncId))
+                    batch.delete(collectionRef.document(deletion.syncId))
 
                     val legacyId = when {
                         deletion.syncId.startsWith("wrk_") -> deletion.syncId.removePrefix("wrk_")
@@ -371,142 +330,233 @@ object FirebaseService {
                         deletion.syncId.startsWith("rule_") -> deletion.syncId.removePrefix("rule_")
                         else -> null
                     }
+
                     if (!legacyId.isNullOrBlank()) {
-                        deletionBatch.delete(collection.document(legacyId))
+                        batch.delete(collectionRef.document(legacyId))
                     }
 
-                    deletionBatch.set(
-                        userDoc.collection("deletions").document("${deletion.collection}_${deletion.syncId}"),
+                    batch.set(
+                        userDoc.collection("deletions")
+                            .document(deletion.collection + "_" + deletion.syncId),
                         mapOf(
                             "collection" to deletion.collection,
                             "syncId" to deletion.syncId,
                             "deletedAt" to System.currentTimeMillis()
-                        )
+                        ),
+                        SetOptions.merge()
                     )
-                    deletionCount += 1
 
-                    if (deletionCount == maxBatchSize / 3) {
-                        deletionBatch.commit().await()
-                        deletionBatch = db.batch()
-                        deletionCount = 0
+                    confirmedDeletions += deletion
+                    count++
+
+                    if (count >= maxBatchSize / 2) {
+                        batch.commit().await()
+                        batch = db.batch()
+                        count = 0
                     }
                 }
 
-                if (deletionCount > 0) deletionBatch.commit().await()
-                repository?.clearCloudDeletions(pendingDeletions)
+                if (count > 0) batch.commit().await()
+                repository.clearCloudDeletions(confirmedDeletions)
             }
 
-            val workshopsCol = userDoc.collection("workshops")
-            val activeWorkshops = workshops.filter { allowed("workshops", it.syncId) }
-            val workshopDocs = activeWorkshops.map { workshop ->
-                "${workshop.syncId}" to mapOf(
-                    "id" to workshop.id,
-                    "syncId" to workshop.syncId,
-                    "name" to workshop.name,
-                    "createdAt" to workshop.createdAt,
-                    "updatedAt" to FieldValue.serverTimestamp()
+            var remoteWon = false
+
+            suspend fun push(
+                collection: String,
+                syncId: String,
+                updatedAt: Long,
+                data: Map<String, Any?>,
+                markSynced: suspend () -> Unit,
+                onBlocked: suspend () -> Unit
+            ) {
+                if (syncId.isBlank()) return
+                if (blocked(collection, syncId)) {
+                    onBlocked()
+                    return
+                }
+
+                val ref = userDoc.collection(collection).document(syncId)
+                val localWon = db.runTransaction { transaction ->
+                    val remote = transaction.get(ref)
+                    val remoteUpdatedAt = readUpdatedAt(remote.data)
+                    val wins = !remote.exists() || updatedAt >= remoteUpdatedAt
+                    if (wins) {
+                        transaction.set(ref, data, SetOptions.merge())
+                    }
+                    wins
+                }.await()
+
+                if (localWon) {
+                    markSynced()
+                } else {
+                    remoteWon = true
+                }
+            }
+
+            val pendingWorkshops = repository.workshopDao.getPendingSync()
+            for (workshop in pendingWorkshops) {
+                push(
+                    collection = "workshops",
+                    syncId = workshop.syncId,
+                    updatedAt = workshop.updatedAt,
+                    data = mapOf(
+                        "id" to workshop.id,
+                        "syncId" to workshop.syncId,
+                        "name" to workshop.name,
+                        "createdAt" to workshop.createdAt,
+                        "updatedAt" to workshop.updatedAt,
+                    ),
+                    markSynced = {
+                        repository.workshopDao.setSyncStatus(workshop.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                    },
+                    onBlocked = {
+                        repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("workshops", workshop.syncId)))
+                    }
                 )
             }
-            batchSet(workshopsCol, workshopDocs)
 
-            val ordersCol = userDoc.collection("orders")
-            val activeOrders = orders.filter { allowed("orders", it.syncId) }
-            val orderDocs = activeOrders.map { order ->
-                "${order.syncId}" to mapOf(
-                    "id" to order.id,
-                    "syncId" to order.syncId,
-                    "workshopId" to order.workshopId,
-                    "workshopSyncId" to order.workshopSyncId,
-                    "orderNumber" to order.orderNumber,
-                    "invoiceNumber" to order.invoiceNumber,
-                    "modelName" to order.modelName,
-                    "pricePerSet" to order.pricePerSet,
-                    "unitsPerSet" to order.unitsPerSet,
-                    "countFormula" to order.countFormula,
-                    "calculatedUnits" to order.calculatedUnits,
-                    "calculatedTotal" to order.calculatedTotal,
-                    "dateJalali" to order.dateJalali,
-                    "dateGregorian" to order.dateGregorian,
-                    "customerName" to order.customerName,
-                    "phone" to order.phone,
-                    "fabricName" to order.fabricName,
-                    "workshopInvoiceNumber" to order.workshopInvoiceNumber,
-                    "notes" to order.notes,
-                    "colorCode" to order.colorCode,
-                    "createdAt" to order.createdAt,
-                    "updatedAt" to FieldValue.serverTimestamp()
+            val pendingOrders = repository.orderDao.getPendingSync()
+            for (order in pendingOrders) {
+                push(
+                    collection = "orders",
+                    syncId = order.syncId,
+                    updatedAt = order.updatedAt,
+                    data = mapOf(
+                        "id" to order.id,
+                        "syncId" to order.syncId,
+                        "workshopId" to order.workshopId,
+                        "workshopSyncId" to order.workshopSyncId,
+                        "orderNumber" to order.orderNumber,
+                        "invoiceNumber" to order.invoiceNumber,
+                        "modelName" to order.modelName,
+                        "pricePerSet" to order.pricePerSet,
+                        "unitsPerSet" to order.unitsPerSet,
+                        "countFormula" to order.countFormula,
+                        "calculatedUnits" to order.calculatedUnits,
+                        "calculatedTotal" to order.calculatedTotal,
+                        "dateJalali" to order.dateJalali,
+                        "dateGregorian" to order.dateGregorian,
+                        "customerName" to order.customerName,
+                        "phone" to order.phone,
+                        "fabricName" to order.fabricName,
+                        "workshopInvoiceNumber" to order.workshopInvoiceNumber,
+                        "notes" to order.notes,
+                        "colorCode" to order.colorCode,
+                        "createdAt" to order.createdAt,
+                        "updatedAt" to order.updatedAt,
+                    ),
+                    markSynced = {
+                        repository.orderDao.setSyncStatus(order.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                    },
+                    onBlocked = {
+                        repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("orders", order.syncId)))
+                    }
                 )
             }
-            batchSet(ordersCol, orderDocs)
 
-            val paymentsCol = userDoc.collection("payments")
-            val activePayments = payments.filter { allowed("payments", it.syncId) }
-            val paymentDocs = activePayments.map { payment ->
-                "${payment.syncId}" to mapOf(
-                    "id" to payment.id,
-                    "syncId" to payment.syncId,
-                    "workshopId" to payment.workshopId,
-                    "workshopSyncId" to payment.workshopSyncId,
-                    "paymentNumber" to payment.paymentNumber,
-                    "amount" to payment.amount,
-                    "dateJalali" to payment.dateJalali,
-                    "dateGregorian" to payment.dateGregorian,
-                    "customerName" to payment.customerName,
-                    "description" to payment.description,
-                    "paymentType" to payment.paymentType,
-                    "referenceNo" to payment.referenceNo,
-                    "bankName" to payment.bankName,
-                    "cardNumber" to payment.cardNumber,
-                    "relatedOrderId" to payment.relatedOrderId,
-                    "relatedOrderSyncId" to payment.relatedOrderSyncId,
-                    "createdAt" to payment.createdAt,
-                    "updatedAt" to FieldValue.serverTimestamp()
+            val pendingPayments = repository.paymentDao.getPendingSync()
+            for (payment in pendingPayments) {
+                push(
+                    collection = "payments",
+                    syncId = payment.syncId,
+                    updatedAt = payment.updatedAt,
+                    data = mapOf(
+                        "id" to payment.id,
+                        "syncId" to payment.syncId,
+                        "workshopId" to payment.workshopId,
+                        "workshopSyncId" to payment.workshopSyncId,
+                        "paymentNumber" to payment.paymentNumber,
+                        "amount" to payment.amount,
+                        "dateJalali" to payment.dateJalali,
+                        "dateGregorian" to payment.dateGregorian,
+                        "customerName" to payment.customerName,
+                        "description" to payment.description,
+                        "paymentType" to payment.paymentType,
+                        "referenceNo" to payment.referenceNo,
+                        "bankName" to payment.bankName,
+                        "cardNumber" to payment.cardNumber,
+                        "relatedOrderId" to payment.relatedOrderId,
+                        "relatedOrderSyncId" to payment.relatedOrderSyncId,
+                        "createdAt" to payment.createdAt,
+                        "updatedAt" to payment.updatedAt,
+                    ),
+                    markSynced = {
+                        repository.paymentDao.setSyncStatus(payment.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                    },
+                    onBlocked = {
+                        repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("payments", payment.syncId)))
+                    }
                 )
             }
-            batchSet(paymentsCol, paymentDocs)
 
-            val presetsCol = userDoc.collection("presets")
-            val activePresets = presets.filter { allowed("presets", it.syncId) }
-            val presetDocs = activePresets.map { preset ->
-                "${preset.syncId}" to mapOf(
-                    "id" to preset.id,
-                    "syncId" to preset.syncId,
-                    "workshopId" to preset.workshopId,
-                    "workshopSyncId" to preset.workshopSyncId,
-                    "name" to preset.name,
-                    "defaultPricePerSet" to preset.defaultPricePerSet,
-                    "defaultUnitsPerSet" to preset.defaultUnitsPerSet,
-                    "colorCode" to preset.colorCode,
-                    "description" to preset.description,
-                    "updatedAt" to FieldValue.serverTimestamp()
+            val pendingPresets = repository.modelPresetDao.getPendingSync()
+            for (preset in pendingPresets) {
+                push(
+                    collection = "presets",
+                    syncId = preset.syncId,
+                    updatedAt = preset.updatedAt,
+                    data = mapOf(
+                        "id" to preset.id,
+                        "syncId" to preset.syncId,
+                        "workshopId" to preset.workshopId,
+                        "workshopSyncId" to preset.workshopSyncId,
+                        "name" to preset.name,
+                        "defaultPricePerSet" to preset.defaultPricePerSet,
+                        "defaultUnitsPerSet" to preset.defaultUnitsPerSet,
+                        "colorCode" to preset.colorCode,
+                        "description" to preset.description,
+                        "updatedAt" to preset.updatedAt,
+                    ),
+                    markSynced = {
+                        repository.modelPresetDao.setSyncStatus(preset.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                    },
+                    onBlocked = {
+                        repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("presets", preset.syncId)))
+                    }
                 )
             }
-            batchSet(presetsCol, presetDocs)
 
-            val rulesCol = userDoc.collection("unitRules")
-            val activeUnitRules = unitRules.filter { allowed("unitRules", it.syncId) }
-            val ruleDocs = activeUnitRules.map { rule ->
-                "${rule.syncId}" to mapOf(
-                    "id" to rule.id,
-                    "syncId" to rule.syncId,
-                    "pieceKey" to rule.pieceKey,
-                    "pieceCount" to rule.pieceCount,
-                    "calculatedUnits" to rule.calculatedUnits,
-                    "isEnabled" to rule.isEnabled,
-                    "updatedAt" to FieldValue.serverTimestamp()
+            val pendingRules = repository.unitRuleDao.getPendingSync()
+            for (rule in pendingRules) {
+                push(
+                    collection = "unitRules",
+                    syncId = rule.syncId,
+                    updatedAt = rule.updatedAt,
+                    data = mapOf(
+                        "id" to rule.id,
+                        "syncId" to rule.syncId,
+                        "pieceKey" to rule.pieceKey,
+                        "pieceCount" to rule.pieceCount,
+                        "calculatedUnits" to rule.calculatedUnits,
+                        "isEnabled" to rule.isEnabled,
+                        "updatedAt" to rule.updatedAt,
+                    ),
+                    markSynced = {
+                        repository.unitRuleDao.setSyncStatus(rule.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                    },
+                    onBlocked = {
+                        repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("unitRules", rule.syncId)))
+                    }
                 )
             }
-            batchSet(rulesCol, ruleDocs)
 
-            // Normal sync remains additive/update-only. Explicit user deletions are
-            // handled separately through durable tombstones above.
+            if (remoteWon) {
+                val restored = downloadFromCloud(repository)
+                if (restored.isFailure) return restored
+            }
+
+            val totalOrders = repository.getAllOrdersSync().size
+            val totalPayments = repository.getAllPaymentsSync().size
+            val totalPresets = repository.getAllPresetsSync().size
+            val totalRules = repository.getAllUnitRulesSync().size
 
             userDoc.set(
                 mapOf(
                     "email" to (user.email ?: ""),
                     "lastSyncAt" to System.currentTimeMillis(),
-                    "totalOrders" to orders.size,
-                    "totalPayments" to payments.size
+                    "totalOrders" to totalOrders,
+                    "totalPayments" to totalPayments
                 ),
                 SetOptions.merge()
             ).await()
@@ -514,19 +564,29 @@ object FirebaseService {
             Result.success(
                 CloudSyncResult(
                     success = true,
-                    ordersCount = activeOrders.size,
-                    paymentsCount = activePayments.size,
-                    presetsCount = activePresets.size,
-                    unitRulesCount = activeUnitRules.size
+                    ordersCount = totalOrders,
+                    paymentsCount = totalPayments,
+                    presetsCount = totalPresets,
+                    unitRulesCount = totalRules
                 )
             )
+        } catch (e: FirebaseAuthException) {
+            Result.failure(Exception(parseCloudError(e)))
         } catch (e: Exception) {
-            val friendlyMsg = parseCloudError(e)
-            Log.w(TAG, "Cloud upload failed: ${e.message}")
-            Result.failure(Exception(friendlyMsg))
+            Log.w(TAG, "Pending upload failed: " + e.message, e)
+            Result.failure(Exception(parseCloudError(e)))
         }
     }
 
+    private fun readUpdatedAt(data: Map<String, Any?>?): Long {
+        val value = data?.get("updatedAt") ?: return 0L
+        return when (value) {
+            is Number -> value.toLong()
+            is com.google.firebase.Timestamp -> value.toDate().time
+            is java.util.Date -> value.time
+            else -> 0L
+        }
+    }
     /**
      * Download and restore all records from Firebase Firestore to local Room Database
      */
@@ -591,7 +651,9 @@ object FirebaseService {
                     id = id,
                     syncId = syncId,
                     name = (data["name"] as? String).orEmpty().ifBlank { "کارگاه" },
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
             val fallbackWorkshopId = restoredWorkshops.firstOrNull()?.id ?: 1L
@@ -601,7 +663,11 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
-                if (isDeleted("orders", syncId, doc.id)) return@mapNotNull null
+                val workshopSyncId = data["workshopSyncId"] as? String ?: ""
+                if (
+                    isDeleted("orders", syncId, doc.id) ||
+                    deletedRecords.any { it.collection == "workshops" && it.syncId == workshopSyncId }
+                ) return@mapNotNull null
                 FurnitureOrder(
                     id = id,
                     syncId = syncId,
@@ -623,7 +689,9 @@ object FirebaseService {
                     workshopInvoiceNumber = data["workshopInvoiceNumber"] as? String ?: "",
                     notes = data["notes"] as? String ?: "",
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
 
@@ -632,7 +700,11 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
-                if (isDeleted("payments", syncId, doc.id)) return@mapNotNull null
+                val workshopSyncId = data["workshopSyncId"] as? String ?: ""
+                if (
+                    isDeleted("payments", syncId, doc.id) ||
+                    deletedRecords.any { it.collection == "workshops" && it.syncId == workshopSyncId }
+                ) return@mapNotNull null
                 PaymentRecord(
                     id = id,
                     syncId = syncId,
@@ -650,7 +722,9 @@ object FirebaseService {
                     cardNumber = data["cardNumber"] as? String ?: "",
                     relatedOrderId = (data["relatedOrderId"] as? Number)?.toLong(),
                     relatedOrderSyncId = data["relatedOrderSyncId"] as? String ?: "",
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
 
@@ -659,7 +733,11 @@ object FirebaseService {
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
                 val syncId = (data["syncId"] as? String).orEmpty().ifBlank { doc.id }
-                if (isDeleted("presets", syncId, doc.id)) return@mapNotNull null
+                val workshopSyncId = data["workshopSyncId"] as? String ?: ""
+                if (
+                    isDeleted("presets", syncId, doc.id) ||
+                    deletedRecords.any { it.collection == "workshops" && it.syncId == workshopSyncId }
+                ) return@mapNotNull null
                 val name = data["name"] as? String ?: return@mapNotNull null
                 ModelPreset(
                     id = id,
@@ -670,7 +748,9 @@ object FirebaseService {
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
                     defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
-                    description = data["description"] as? String ?: ""
+                    description = data["description"] as? String ?: "",
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
 
@@ -686,7 +766,9 @@ object FirebaseService {
                     pieceKey = data["pieceKey"] as? String ?: "",
                     pieceCount = (data["pieceCount"] as? Number)?.toDouble() ?: 0.0,
                     calculatedUnits = (data["calculatedUnits"] as? Number)?.toDouble() ?: 0.0,
-                    isEnabled = data["isEnabled"] as? Boolean ?: true
+                    isEnabled = data["isEnabled"] as? Boolean ?: true,
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
 

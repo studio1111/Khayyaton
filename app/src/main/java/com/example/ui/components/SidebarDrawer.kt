@@ -206,7 +206,7 @@ fun SidebarDrawer(
                             modifier = Modifier.size(13.dp)
                         )
                         Text(
-                            text = "کارگاه: ${activeWorkshop?.name ?: "کارگاه اصلی"}",
+                            text = "کارگاه: ${activeWorkshop?.name ?: "بدون کارگاه"}",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -272,7 +272,7 @@ fun SidebarDrawer(
                 DrawerItem(
                     icon = Icons.Outlined.Storefront,
                     title = "مدیریت کارگاه‌ها",
-                    badge = activeWorkshop?.name ?: "کارگاه اصلی",
+                    badge = activeWorkshop?.name ?: "بدون کارگاه",
                     onClick = { onOpenWorkshops(); onClose() }
                 )
                 DrawerItem(

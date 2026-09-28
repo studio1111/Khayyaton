@@ -36,24 +36,42 @@ service cloud.firestore {
       allow read, create, update: if isOwner(uid);
       allow delete: if false;
 
+      // New writes use the canonical client-generated syncId as the
+      // Firestore document ID. Legacy documents may still be read, but the
+      // new app cannot create/update a document under a mismatched ID.
+      function canonicalId(docId) {
+        return request.resource.data.syncId is string
+          && request.resource.data.syncId == docId;
+      }
+
       match /workshops/{docId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow delete: if isOwner(uid);
       }
 
       match /orders/{docId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow delete: if isOwner(uid);
       }
 
       match /payments/{docId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow delete: if isOwner(uid);
       }
 
       match /presets/{docId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow delete: if isOwner(uid);
       }
 
       match /unitRules/{docId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow delete: if isOwner(uid);
       }
 
       match /deletions/{docId} {

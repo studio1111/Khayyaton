@@ -131,34 +131,6 @@ fun SubscriptionDialog(
                     // Status Card
                     SubscriptionStatusBanner(subscription = subscription)
 
-                    // نمایش وضعیت دوره آزمایشی داخلی حساب کاربری
-                    if (subscription.status == SubscriptionStatus.TRIAL_ACTIVE) {
-                        Card(
-                            shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Amber600.copy(alpha = 0.10f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                Amber600.copy(alpha = 0.35f)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Icon(Icons.Outlined.Timer, contentDescription = null, tint = Amber600)
-                                Text(
-                                    text = "نسخه آزمایشی ۷ روزه خیاطان",
-                                    fontSize = 11.sp,
-                                    lineHeight = 18.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
                     // Description text
                     Text(
                         text = "اشتراک‌های برنامه (پرداخت امن درون‌برنامه‌ای):",

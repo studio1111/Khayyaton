@@ -52,7 +52,8 @@ data class DocumentCacheEntity(
 data class DeletedIdEntity(
     val collection: String,
     val documentId: String,
-    val deletedAt: Long
+    val deletedAt: Long,
+    val cloudSynced: Boolean = false
 )
 
 @Entity(
