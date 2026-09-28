@@ -18,6 +18,8 @@ import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.PersistentCacheSettings
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 
 object FirebaseService {
@@ -43,9 +45,18 @@ object FirebaseService {
                     if (BuildConfig.DEBUG) Log.d(TAG, "Firebase initialized with default app")
                 }
             } else {
-                if (BuildConfig.DEBUG) Log.d(TAG, "Firebase already initialized with ${apps.size} apps")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Firebase already initialized with \${apps.size} apps")
             }
-        } catch (e: Exception) {
+
+            // کش پایدار Firestore برای کار آفلاین با حداقل ۱۰۰ مگابایت فعال می‌شود.
+            runCatching {
+                val db = FirebaseFirestore.getInstance()
+                db.firestoreSettings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                    .setLocalCacheSettings(PersistentCacheSettings.newBuilder()
+                        .setSizeBytes(100L * 1024L * 1024L)
+                        .build())
+                    .build()
+            }.onFailure { if (BuildConfig.DEBUG) Log.w(TAG, "Firestore cache configuration failed", it) }        } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.w(TAG, "Error initializing Firebase: ${e.message}")
             try {
                 val options = FirebaseOptions.Builder()
@@ -78,6 +89,17 @@ object FirebaseService {
             if (BuildConfig.DEBUG) Log.w(TAG, "Firebase Firestore not available", e)
             null
         }
+
+    private val storage: FirebaseStorage?
+        get() = try {
+            FirebaseStorage.getInstance()
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Firebase Storage not available", e)
+            null
+        }
+
+    fun firestoreInstance(): FirebaseFirestore? = firestore
+    fun storageInstance(): FirebaseStorage? = storage
 
     fun getCurrentUser(): FirebaseUserDto? {
         val user = auth?.currentUser ?: return null
