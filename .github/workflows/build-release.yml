@@ -117,6 +117,13 @@ jobs:
           path: Khayyaton-SHA256-${{ github.sha }}.txt
           if-no-files-found: error
 
+      - name: Replace existing Release 1 if present
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "release-1" --yes --cleanup-tag || true
+
       - name: Publish GitHub Release 1
         env:
           GH_TOKEN: ${{ github.token }}
