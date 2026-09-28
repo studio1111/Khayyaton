@@ -17,8 +17,20 @@ interface DeletedIdDao {
     @Query("SELECT * FROM deleted_ids")
     suspend fun getAll(): List<DeletedIdEntity>
 
+    @Query("SELECT * FROM deleted_ids WHERE cloudSynced = 0")
+    suspend fun getPending(): List<DeletedIdEntity>
+
+    @Query("UPDATE deleted_ids SET cloudSynced = 1 WHERE collection = :collection AND documentId = :documentId")
+    suspend fun markCloudSynced(collection: String, documentId: String)
+
     @Query("DELETE FROM deleted_ids WHERE collection = :collection AND documentId = :documentId")
     suspend fun delete(collection: String, documentId: String)
+
+    @Query("DELETE FROM deleted_ids")
+    suspend fun clearAll()
+
+    @Query("SELECT COUNT(*) FROM deleted_ids WHERE cloudSynced = 0")
+    fun countPendingFlow(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM deleted_ids")
     fun countFlow(): Flow<Int>
@@ -31,6 +43,9 @@ interface UploadQueueDao {
 
     @Query("SELECT * FROM upload_queue WHERE status IN ('PENDING', 'FAILED') ORDER BY createdAt ASC")
     suspend fun pending(): List<UploadQueueEntity>
+
+    @Query("DELETE FROM upload_queue")
+    suspend fun clearAll()
 
     @Query("SELECT COUNT(*) FROM upload_queue WHERE status IN ('PENDING', 'UPLOADING', 'FAILED')")
     fun pendingCount(): Flow<Int>
@@ -52,6 +67,9 @@ interface PendingDeleteDao {
 
     @Query("SELECT * FROM pending_deletes WHERE status IN ('PENDING', 'FAILED') ORDER BY createdAt ASC")
     suspend fun pending(): List<PendingDeleteEntity>
+
+    @Query("DELETE FROM pending_deletes")
+    suspend fun clearAll()
 
     @Query("SELECT COUNT(*) FROM pending_deletes WHERE status IN ('PENDING', 'DELETING', 'FAILED')")
     fun pendingCount(): Flow<Int>
