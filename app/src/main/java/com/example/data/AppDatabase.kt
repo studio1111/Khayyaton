@@ -376,7 +376,7 @@ class WorkshopRepository(
 
     suspend fun saveWorkshop(workshop: Workshop): Long {
         val trimmed = workshop.name.trim()
-        val toSave = workshop.copy(name = if (trimmed.isBlank()) "کارگاه جدید" else trimmed)
+        val toSave = workshop.copy(name = if (trimmed.isBlank()) "کارگاه جدید" else trimmed, updatedAt = System.currentTimeMillis(), syncStatus = com.example.data.sync.RecordSyncStatus.PENDING)
         return if (toSave.id == 0L) {
             workshopDao.insertWorkshop(toSave)
         } else {
@@ -574,7 +574,7 @@ class WorkshopRepository(
         val workshopSyncId = order.workshopSyncId.ifBlank {
             workshopDao.getWorkshopById(order.workshopId)?.syncId.orEmpty()
         }
-        val normalizedOrder = order.copy(workshopSyncId = workshopSyncId)
+        val normalizedOrder = order.copy(workshopSyncId = workshopSyncId, updatedAt = System.currentTimeMillis(), syncStatus = com.example.data.sync.RecordSyncStatus.PENDING)
         if (normalizedOrder.id == 0L) {
             val existing = orderDao.getOrdersByWorkshopSync(normalizedOrder.workshopId)
             val normInv = com.example.util.PersianUtils.toEnglishDigits(normalizedOrder.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
@@ -605,6 +605,7 @@ class WorkshopRepository(
 
     suspend fun deleteOrder(order: FurnitureOrder) {
         orderDao.deleteOrder(order)
+        recordCloudDeletion("orders", order.syncId)
     }
 
     suspend fun deleteOrderById(id: Long) {
@@ -622,7 +623,9 @@ class WorkshopRepository(
         }
         val normalizedPayment = payment.copy(
             workshopSyncId = workshopSyncId,
-            relatedOrderSyncId = relatedOrderSyncId
+            relatedOrderSyncId = relatedOrderSyncId,
+            updatedAt = System.currentTimeMillis(),
+            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
         )
         if (normalizedPayment.id == 0L) {
             val existing = paymentDao.getPaymentsByWorkshopSync(normalizedPayment.workshopId)
@@ -652,6 +655,7 @@ class WorkshopRepository(
 
     suspend fun deletePayment(payment: PaymentRecord) {
         paymentDao.deletePayment(payment)
+        recordCloudDeletion("payments", payment.syncId)
     }
 
     suspend fun deletePaymentById(id: Long) {
@@ -766,7 +770,7 @@ class WorkshopRepository(
         val workshopSyncId = preset.workshopSyncId.ifBlank {
             workshopDao.getWorkshopById(preset.workshopId)?.syncId.orEmpty()
         }
-        val normalizedPreset = preset.copy(workshopSyncId = workshopSyncId)
+        val normalizedPreset = preset.copy(workshopSyncId = workshopSyncId, updatedAt = System.currentTimeMillis(), syncStatus = com.example.data.sync.RecordSyncStatus.PENDING)
         val trimmed = preset.name.trim()
         if (trimmed.isBlank()) return
         val existing = modelPresetDao.getPresetByNameAndWorkshop(trimmed, normalizedPreset.workshopId)
@@ -795,6 +799,7 @@ class WorkshopRepository(
     }
 
     suspend fun deletePresetByName(name: String) {
+        modelPresetDao.getPresetByName(name)?.let { recordCloudDeletion("presets", it.syncId) }
         modelPresetDao.deletePresetByName(name)
     }
 
@@ -805,29 +810,32 @@ class WorkshopRepository(
     }
 
     suspend fun saveUnitRule(rule: UnitConversionRule) {
+        val pendingRule = rule.copy(updatedAt = System.currentTimeMillis(), syncStatus = com.example.data.sync.RecordSyncStatus.PENDING)
         val rawKey = rule.pieceKey.ifBlank {
             if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
         }
         val norm = normalizeUnitKey(rawKey)
         val existing = unitRuleDao.getAllRulesSync()
         val duplicate = existing.find {
-            it.id != rule.id && normalizeUnitKey(it.pieceKey.ifBlank { if (it.pieceCount % 1.0 == 0.0) it.pieceCount.toInt().toString() else it.pieceCount.toString() }) == norm
+            it.id != pendingRule.id && normalizeUnitKey(it.pieceKey.ifBlank { if (it.pieceCount % 1.0 == 0.0) it.pieceCount.toInt().toString() else it.pieceCount.toString() }) == norm
         }
         if (duplicate != null) {
             // Update the existing rule to maintain single rule per piece count/title
             unitRuleDao.updateRule(
                 duplicate.copy(
-                    pieceKey = rule.pieceKey,
-                    pieceCount = rule.pieceCount,
-                    calculatedUnits = rule.calculatedUnits,
-                    isEnabled = rule.isEnabled
+                    pieceKey = pendingRule.pieceKey,
+                    pieceCount = pendingRule.pieceCount,
+                    calculatedUnits = pendingRule.calculatedUnits,
+                    isEnabled = pendingRule.isEnabled,
+                    updatedAt = pendingRule.updatedAt,
+                    syncStatus = pendingRule.syncStatus
                 )
             )
         } else {
             if (rule.id == 0L) {
-                unitRuleDao.insertRule(rule)
+                unitRuleDao.insertRule(pendingRule)
             } else {
-                unitRuleDao.updateRule(rule)
+                unitRuleDao.updateRule(pendingRule)
             }
         }
     }
