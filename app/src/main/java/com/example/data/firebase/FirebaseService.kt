@@ -62,7 +62,6 @@ object FirebaseService {
                     .setApplicationId("1:15543905804:android:8fc6393c86598be4310829")
                     .setApiKey("AIzaSyAmLQ7SPiYxhMvquyV01xYD8MZZjezknoY")
                     .setProjectId("khayyaton-26abc")
-                    .setStorageBucket("khayyaton-26abc.firebasestorage.app")
                     .setGcmSenderId("15543905804")
                     .build()
                 FirebaseApp.initializeApp(context, options)
@@ -407,8 +406,6 @@ object FirebaseService {
                         "name" to workshop.name,
                         "createdAt" to workshop.createdAt,
                         "updatedAt" to workshop.updatedAt,
-                        "fileUrl" to workshop.fileUrl,
-                        "storagePath" to workshop.storagePath
                     ),
                     markSynced = {
                         repository.workshopDao.setSyncStatus(workshop.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
@@ -448,8 +445,6 @@ object FirebaseService {
                         "colorCode" to order.colorCode,
                         "createdAt" to order.createdAt,
                         "updatedAt" to order.updatedAt,
-                        "fileUrl" to order.fileUrl,
-                        "storagePath" to order.storagePath
                     ),
                     markSynced = {
                         repository.orderDao.setSyncStatus(order.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
@@ -485,8 +480,6 @@ object FirebaseService {
                         "relatedOrderSyncId" to payment.relatedOrderSyncId,
                         "createdAt" to payment.createdAt,
                         "updatedAt" to payment.updatedAt,
-                        "fileUrl" to payment.fileUrl,
-                        "storagePath" to payment.storagePath
                     ),
                     markSynced = {
                         repository.paymentDao.setSyncStatus(payment.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
@@ -514,8 +507,6 @@ object FirebaseService {
                         "colorCode" to preset.colorCode,
                         "description" to preset.description,
                         "updatedAt" to preset.updatedAt,
-                        "fileUrl" to preset.fileUrl,
-                        "storagePath" to preset.storagePath
                     ),
                     markSynced = {
                         repository.modelPresetDao.setSyncStatus(preset.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
@@ -540,8 +531,6 @@ object FirebaseService {
                         "calculatedUnits" to rule.calculatedUnits,
                         "isEnabled" to rule.isEnabled,
                         "updatedAt" to rule.updatedAt,
-                        "fileUrl" to rule.fileUrl,
-                        "storagePath" to rule.storagePath
                     ),
                     markSynced = {
                         repository.unitRuleDao.setSyncStatus(rule.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
