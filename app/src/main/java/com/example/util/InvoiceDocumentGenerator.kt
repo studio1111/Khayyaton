@@ -281,9 +281,11 @@ object InvoiceDocumentGenerator {
             val pageWidth = 595 // A4 standard width (pt)
             val pageHeight = 842 // A4 standard height (pt)
 
-            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
-            val page = doc.startPage(pageInfo)
-            val canvas = page.canvas
+            var pageNumber = 1
+            var page = doc.startPage(
+                PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            )
+            var canvas = page.canvas
 
             // Paints
             val textPaint = Paint().apply {
@@ -338,6 +340,21 @@ object InvoiceDocumentGenerator {
                 isAntiAlias = true
             }
 
+            var currentY = 95f
+
+            fun startContinuationPage(title: String) {
+                doc.finishPage(page)
+                pageNumber++
+                page = doc.startPage(
+                    PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                )
+                canvas = page.canvas
+                currentY = 45f
+                boldPaint.textSize = 11f
+                canvas.drawText(title, 20f, currentY, boldPaint)
+                currentY += 14f
+            }
+
             // Top Header Banner
             canvas.drawRect(20f, 20f, (pageWidth - 20).toFloat(), 75f, Paint().apply {
                 color = Color.rgb(241, 245, 249)
@@ -354,36 +371,40 @@ object InvoiceDocumentGenerator {
             canvas.drawText(dateStr, (pageWidth - 170).toFloat(), 44f, boldPaint)
             canvas.drawText(custStr, (pageWidth - 170).toFloat(), 60f, boldPaint)
 
-            var currentY = 95f
-
             // Section 1: Orders Table Header with Date Column
             boldPaint.textSize = 10.5f
             canvas.drawText("جدول کارکرد و دریافتی ها (${PersianUtils.toPersianDigits(orders.size)} فاکتور)", 20f, currentY, boldPaint)
             currentY += 8f
 
             // Table Header Bar (Grid Lined with Date)
-            canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + 20f, headerBgPaint)
-            canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + 20f, borderPaint)
-            
-            // Vertical header divider lines: col positions including Date
             val colPositions = floatArrayOf(20f, 45f, 85f, 138f, 225f, 305f, 385f, 465f, (pageWidth - 20).toFloat())
-            for (colX in colPositions) {
-                canvas.drawLine(colX, currentY, colX, currentY + 20f, borderPaint)
+
+            fun drawOrderHeader() {
+                canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + 20f, headerBgPaint)
+                canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + 20f, borderPaint)
+                for (colX in colPositions) {
+                    canvas.drawLine(colX, currentY, colX, currentY + 20f, borderPaint)
+                }
+                canvas.drawText("ردیف", 23f, currentY + 14f, tableHeaderPaint)
+                canvas.drawText("تاریخ", 48f, currentY + 14f, tableHeaderPaint)
+                canvas.drawText("فاکتور", 88f, currentY + 14f, tableHeaderPaint)
+                canvas.drawText("مدل", 142f, currentY + 14f, tableHeaderPaint)
+                canvas.drawText("اجزا / واحد", 228f, currentY + 14f, tableHeaderPaint)
+                canvas.drawText("دستمزد دست", 308f, currentY + 14f, tableHeaderPaint)
+                canvas.drawText("مبلغ کل ($currencyUnit)", 388f, currentY + 14f, tableHeaderPaint)
+                canvas.drawText("مشخصات / توضیحات", 468f, currentY + 14f, tableHeaderPaint)
+                currentY += 20f
             }
 
-            canvas.drawText("ردیف", 23f, currentY + 14f, tableHeaderPaint)
-            canvas.drawText("تاریخ", 48f, currentY + 14f, tableHeaderPaint)
-            canvas.drawText("فاکتور", 88f, currentY + 14f, tableHeaderPaint)
-            canvas.drawText("مدل", 142f, currentY + 14f, tableHeaderPaint)
-            canvas.drawText("اجزا / واحد", 228f, currentY + 14f, tableHeaderPaint)
-            canvas.drawText("دستمزد دست", 308f, currentY + 14f, tableHeaderPaint)
-            canvas.drawText("مبلغ کل ($currencyUnit)", 388f, currentY + 14f, tableHeaderPaint)
-            canvas.drawText("مشخصات / توضیحات", 468f, currentY + 14f, tableHeaderPaint)
-            currentY += 20f
+            drawOrderHeader()
 
             // Orders Table Rows
-            orders.take(15).forEachIndexed { i, ord ->
+            orders.forEachIndexed { i, ord ->
                 val rowH = 19f
+                if (currentY + rowH > pageHeight - 35f) {
+                    startContinuationPage("ادامه جدول کارکرد")
+                    drawOrderHeader()
+                }
                 val modelColorHex = if (ord.colorCode.isNotBlank()) ord.colorCode else PersianUtils.getModelColor(ord.modelName)
                 val rowColorInt = try {
                     val parsed = PersianUtils.parseColor(modelColorHex)
@@ -454,20 +475,26 @@ object InvoiceDocumentGenerator {
 
                 val payColPositions = floatArrayOf(20f, 50f, 110f, 210f, 290f, 380f, 470f, (pageWidth - 20).toFloat())
 
-                canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + 20f, headerBgPaint)
-                canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + 20f, borderPaint)
-                for (colX in payColPositions) {
-                    canvas.drawLine(colX, currentY, colX, currentY + 20f, borderPaint)
+                fun drawPaymentHeader() {
+                    canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + 20f, headerBgPaint)
+                    canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + 20f, borderPaint)
+                    for (colX in payColPositions) {
+                        canvas.drawLine(colX, currentY, colX, currentY + 20f, borderPaint)
+                    }
+                    canvas.drawText("ردیف", 25f, currentY + 14f, tableHeaderPaint)
+                    canvas.drawText("تاریخ", 55f, currentY + 14f, tableHeaderPaint)
+                    canvas.drawText("پرداخت‌کننده", 115f, currentY + 14f, tableHeaderPaint)
+                    canvas.drawText("روش پرداخت", 215f, currentY + 14f, tableHeaderPaint)
+                    canvas.drawText("کد پیگیری", 295f, currentY + 14f, tableHeaderPaint)
+                    canvas.drawText("مبلغ ($currencyUnit)", 385f, currentY + 14f, tableHeaderPaint)
+                    canvas.drawText("بابت / توضیحات", 475f, currentY + 14f, tableHeaderPaint)
+                    currentY += 20f
                 }
 
-                canvas.drawText("ردیف", 25f, currentY + 14f, tableHeaderPaint)
-                canvas.drawText("تاریخ", 55f, currentY + 14f, tableHeaderPaint)
-                canvas.drawText("پرداخت‌کننده", 115f, currentY + 14f, tableHeaderPaint)
-                canvas.drawText("روش پرداخت", 215f, currentY + 14f, tableHeaderPaint)
-                canvas.drawText("کد پیگیری", 295f, currentY + 14f, tableHeaderPaint)
-                canvas.drawText("مبلغ ($currencyUnit)", 385f, currentY + 14f, tableHeaderPaint)
-                canvas.drawText("بابت / توضیحات", 475f, currentY + 14f, tableHeaderPaint)
-                currentY += 20f
+                if (currentY + 20f + 190f > pageHeight - 35f) {
+                    startContinuationPage("ادامه سوابق دریافتی‌ها")
+                }
+                drawPaymentHeader()
 
                 val payRowBg = Paint().apply {
                     color = Color.rgb(236, 253, 245)
@@ -478,8 +505,12 @@ object InvoiceDocumentGenerator {
                     style = Paint.Style.FILL
                 }
 
-                payments.take(10).forEachIndexed { i, pay ->
+                payments.forEachIndexed { i, pay ->
                     val rowH = 19f
+                    if (currentY + rowH > pageHeight - 35f) {
+                        startContinuationPage("ادامه سوابق دریافتی‌ها")
+                        drawPaymentHeader()
+                    }
                     if (i % 2 == 1) {
                         canvas.drawRect(20f, currentY, (pageWidth - 20).toFloat(), currentY + rowH, payRowBg)
                     }
@@ -516,6 +547,9 @@ object InvoiceDocumentGenerator {
             }
 
             // Financial Summary Block
+            if (currentY + 95f > pageHeight - 35f) {
+                startContinuationPage("خلاصه مالی")
+            }
             val summaryTop = currentY
             canvas.drawRoundRect(20f, summaryTop, (pageWidth - 20).toFloat(), summaryTop + 65f, 8f, 8f, Paint().apply {
                 color = Color.rgb(241, 245, 249)
