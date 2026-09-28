@@ -64,12 +64,17 @@ class SyncManager(
                     val context = repository.getApplicationContext() ?: return@launch
                     val localUid = repository.getLocalAccountUid()
 
-                    if (localUid != null && localUid != firebaseUser.uid) {
+                    val authenticatedUid = firebaseUser.uid.orEmpty()
+                    if (authenticatedUid.isBlank()) return@launch
+
+                    if (localUid != null && localUid != authenticatedUid) {
                         localUid.let { SyncWorkScheduler.cancel(context, it) }
                         repository.clearAccountLocalState()
                     }
 
-                    repository.saveLocalAccountUid(firebaseUser.uid)
+                    val authenticatedUid = firebaseUser.uid.orEmpty()
+                    if (authenticatedUid.isBlank()) return@launch
+                    repository.saveLocalAccountUid(authenticatedUid)
 
                     // Attach listeners only after account isolation is complete.
                     restartListeners()
