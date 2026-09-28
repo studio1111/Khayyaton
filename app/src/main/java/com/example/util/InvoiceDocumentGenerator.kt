@@ -23,6 +23,8 @@ object InvoiceDocumentGenerator {
             .replace(">", "&gt;")
             .replace("\"", "&quot;")
             .replace("'", "&#39;")
+    private fun safeFilePart(value: String): String =
+        value.replace(Regex("[\\/:*?\"<>|\\s]+"), "_").trim('_').take(40)
     /**
      * Generates a modern, clean, print-ready Persian RTL HTML invoice
      */
@@ -248,7 +250,8 @@ object InvoiceDocumentGenerator {
             val cacheDir = File(context.cacheDir, "invoices")
             if (!cacheDir.exists()) cacheDir.mkdirs()
 
-            val sanitizedCustomer = if (targetCustomer.isNotBlank()) "_${targetCustomer.replace(" ", "_")}" else ""
+            val safeCustomerFilePart = safeFilePart(targetCustomer)
+            val sanitizedCustomer = if (safeCustomerFilePart.isNotBlank()) "_$safeCustomerFilePart" else ""
             val file = File(cacheDir, "Khayyaton_Invoice${sanitizedCustomer}_${System.currentTimeMillis()}.html")
             file.writeText(htmlContent, Charsets.UTF_8)
 
