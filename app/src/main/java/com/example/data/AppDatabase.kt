@@ -20,6 +20,7 @@ import androidx.room.withTransaction
 import androidx.room.TypeConverters
 import com.example.data.sync.DeletedIdDao
 import com.example.data.sync.DocumentCacheDao
+import com.example.data.sync.DocumentCacheDao
 import com.example.data.sync.UploadQueueDao
 import com.example.data.sync.PendingDeleteDao
 import com.example.data.sync.SyncStatusConverters
@@ -174,7 +175,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun unitRuleDao(): UnitRuleDao
     abstract fun workshopDao(): WorkshopDao
     abstract fun deletedIdDao(): DeletedIdDao
-    // Legacy file queues are retained only for schema cleanup/migration compatibility.\n    abstract fun uploadQueueDao(): UploadQueueDao\n    abstract fun pendingDeleteDao(): PendingDeleteDao\n    abstract fun documentCacheDao(): DocumentCacheDao
+    // Legacy file queues are retained only for schema cleanup/migration compatibility.
+    abstract fun uploadQueueDao(): UploadQueueDao
+    abstract fun pendingDeleteDao(): PendingDeleteDao
+    abstract fun documentCacheDao(): DocumentCacheDao
 
     companion object {
         @Volatile
@@ -296,8 +300,7 @@ class WorkshopRepository(
                 modelPresetDao.getPendingSync().isNotEmpty() ||
                 unitRuleDao.getPendingSync().isNotEmpty()
         return pendingRecords ||
-            database.deletedIdDao().getPending().isNotEmpty() ||
-
+            database.deletedIdDao().getPending().isNotEmpty()
     }
 
     fun getApplicationContext(): android.content.Context? = context?.applicationContext
