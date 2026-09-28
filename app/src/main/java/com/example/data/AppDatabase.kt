@@ -253,6 +253,23 @@ class WorkshopRepository(
         prefs?.edit()?.remove("local_account_uid")?.apply()
     }
 
+    /**
+     * Prevents background sync from uploading local data before the current
+     * Firebase account has completed its initial cloud restore.
+     */
+    fun isCloudSyncReady(uid: String): Boolean =
+        uid.isNotBlank() && prefs?.getString("cloud_sync_ready_uid", null) == uid
+
+    fun markCloudSyncReady(uid: String) {
+        if (uid.isNotBlank()) {
+            prefs?.edit()?.putString("cloud_sync_ready_uid", uid)?.apply()
+        }
+    }
+
+    fun clearCloudSyncReady() {
+        prefs?.edit()?.remove("cloud_sync_ready_uid")?.apply()
+    }
+
     fun saveActiveWorkshopId(id: Long) {
         prefs?.edit()?.putLong("active_workshop_id", id)?.apply()
     }
