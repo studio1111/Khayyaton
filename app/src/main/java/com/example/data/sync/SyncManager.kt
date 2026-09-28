@@ -182,13 +182,16 @@ class SyncManager(
             val registration = userDoc.collection(collection)
                 .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                     if (error != null || snapshot == null) return@addSnapshotListener
-                    scope.launch { handleSnapshot(collection, snapshot) }
+                    scope.launch { handleSnapshot(user.uid, collection, snapshot) }
                 }
             listeners += registration
         }
     }
 
-    private suspend fun handleSnapshot(collection: String, snapshot: QuerySnapshot) {
+    private suspend fun handleSnapshot(listenerUid: String, collection: String, snapshot: QuerySnapshot) {
+        val currentUid = FirebaseService.currentUser()?.uid
+        if (currentUid != listenerUid || repository.getLocalAccountUid() != listenerUid) return
+
         for (change in snapshot.documentChanges) {
             val doc = change.document
             val syncId = (doc.getString("syncId") ?: doc.id).ifBlank { doc.id }
