@@ -460,7 +460,10 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 if (orderToSave.colorCode.isNotBlank()) {
                     repository.updateOrdersColorForModel(trimmedName, orderToSave.colorCode, wsId)
                 }
-                val existingPreset = modelPresets.value.find { it.name.trim().equals(trimmedName, ignoreCase = true) }
+                val existingPreset = modelPresets.value.find {
+                    it.workshopId == wsId &&
+                        it.name.trim().equals(trimmedName, ignoreCase = true)
+                }
                 if (existingPreset != null) {
                     repository.savePreset(
                         existingPreset.copy(
