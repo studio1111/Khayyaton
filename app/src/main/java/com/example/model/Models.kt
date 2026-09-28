@@ -3,6 +3,7 @@ package com.example.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Index
+import com.example.data.sync.RecordSyncStatus
 
 @Entity(
     tableName = "workshops",
@@ -13,7 +14,11 @@ data class Workshop(
     val id: Long = 0,
     val name: String,
     val syncId: String = java.util.UUID.randomUUID().toString(),
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val syncStatus: RecordSyncStatus = RecordSyncStatus.SYNCED,
+    val fileUrl: String? = null,
+    val storagePath: String? = null
 )
 
 @Entity(
@@ -42,7 +47,11 @@ data class FurnitureOrder(
     val workshopInvoiceNumber: String = "",
     val notes: String = "",
     val colorCode: String = "#2563EB",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val syncStatus: RecordSyncStatus = RecordSyncStatus.SYNCED,
+    val fileUrl: String? = null,
+    val storagePath: String? = null
 )
 
 @Entity(
@@ -67,7 +76,11 @@ data class PaymentRecord(
     val cardNumber: String = "",
     val relatedOrderId: Long? = null,
     val relatedOrderSyncId: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val syncStatus: RecordSyncStatus = RecordSyncStatus.SYNCED,
+    val fileUrl: String? = null,
+    val storagePath: String? = null
 )
 
 @Entity(
@@ -84,7 +97,11 @@ data class ModelPreset(
     val defaultPricePerSet: Long = 2000000L,
     val defaultUnitsPerSet: Double = 6.0,
     val colorCode: String = "#2563EB",
-    val description: String = ""
+    val description: String = "",
+    val updatedAt: Long = System.currentTimeMillis(),
+    val syncStatus: RecordSyncStatus = RecordSyncStatus.SYNCED,
+    val fileUrl: String? = null,
+    val storagePath: String? = null
 )
 
 @Entity(tableName = "unit_conversion_rules", indices = [Index(value = ["syncId"], unique = true)])
@@ -95,7 +112,11 @@ data class UnitConversionRule(
     val pieceKey: String = "",
     val pieceCount: Double = 0.0,
     val calculatedUnits: Double = 0.0,
-    val isEnabled: Boolean = true
+    val isEnabled: Boolean = true,
+    val updatedAt: Long = System.currentTimeMillis(),
+    val syncStatus: RecordSyncStatus = RecordSyncStatus.SYNCED,
+    val fileUrl: String? = null,
+    val storagePath: String? = null
 )
 
 enum class AppThemeMode(val titleFa: String) {
