@@ -336,7 +336,7 @@ fun AuthAndCloudSyncDialog(
                                             modifier = Modifier.size(15.dp)
                                         )
                                         Text(
-                                            text = activeWorkshop?.name ?: "کارگاه اصلی",
+                                            text = activeWorkshop?.name ?: "بدون کارگاه",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
