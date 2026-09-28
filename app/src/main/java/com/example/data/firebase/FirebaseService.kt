@@ -673,7 +673,11 @@ object FirebaseService {
                     id = id,
                     syncId = syncId,
                     name = (data["name"] as? String).orEmpty().ifBlank { "کارگاه" },
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
+                    fileUrl = data["fileUrl"] as? String,
+                    storagePath = data["storagePath"] as? String
                 )
             }
             val fallbackWorkshopId = restoredWorkshops.firstOrNull()?.id ?: 1L
@@ -705,7 +709,11 @@ object FirebaseService {
                     workshopInvoiceNumber = data["workshopInvoiceNumber"] as? String ?: "",
                     notes = data["notes"] as? String ?: "",
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
+                    fileUrl = data["fileUrl"] as? String,
+                    storagePath = data["storagePath"] as? String
                 )
             }
 
@@ -732,7 +740,11 @@ object FirebaseService {
                     cardNumber = data["cardNumber"] as? String ?: "",
                     relatedOrderId = (data["relatedOrderId"] as? Number)?.toLong(),
                     relatedOrderSyncId = data["relatedOrderSyncId"] as? String ?: "",
-                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
+                    fileUrl = data["fileUrl"] as? String,
+                    storagePath = data["storagePath"] as? String
                 )
             }
 
@@ -752,7 +764,11 @@ object FirebaseService {
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
                     defaultUnitsPerSet = (data["defaultUnitsPerSet"] as? Number)?.toDouble() ?: 6.0,
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
-                    description = data["description"] as? String ?: ""
+                    description = data["description"] as? String ?: "",
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
+                    fileUrl = data["fileUrl"] as? String,
+                    storagePath = data["storagePath"] as? String
                 )
             }
 
@@ -768,7 +784,11 @@ object FirebaseService {
                     pieceKey = data["pieceKey"] as? String ?: "",
                     pieceCount = (data["pieceCount"] as? Number)?.toDouble() ?: 0.0,
                     calculatedUnits = (data["calculatedUnits"] as? Number)?.toDouble() ?: 0.0,
-                    isEnabled = data["isEnabled"] as? Boolean ?: true
+                    isEnabled = data["isEnabled"] as? Boolean ?: true,
+                    updatedAt = readUpdatedAt(data),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
+                    fileUrl = data["fileUrl"] as? String,
+                    storagePath = data["storagePath"] as? String
                 )
             }
 
