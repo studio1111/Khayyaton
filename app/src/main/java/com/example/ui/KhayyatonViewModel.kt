@@ -673,6 +673,10 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
             repository.saveLocalAccountUid(user.uid)
 
+            // Every Firebase account gets the four mandatory base unit rules.
+            // Recreate only missing defaults, without removing any user-defined rules.
+            repository.insertDefaultUnitRulesIfEmpty()
+
             val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
                 ?: customUsername.value.takeIf { it.isNotBlank() }
                 ?: user.displayName?.takeIf { it.isNotBlank() }
