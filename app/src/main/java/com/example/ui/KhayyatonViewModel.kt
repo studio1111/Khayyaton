@@ -731,9 +731,9 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun triggerAutoUpload() {
-        val user = FirebaseService.currentUser() ?: currentUser.value ?: return
+        val uid = FirebaseService.currentUser()?.uid ?: currentUser.value?.uid ?: return
         val context = repository.getApplicationContext() ?: return
-        SyncWorkScheduler.enqueue(context, user.uid)
+        SyncWorkScheduler.enqueue(context, uid)
     }
 }
 
