@@ -682,6 +682,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             if (switchingUser) {
                 repository.clearAllDomainData()
                 repository.clearLocalAccountUid()
+                repository.clearCloudSyncReady()
                 repository.saveActiveWorkshopId(0L)
                 activeWorkshopId.value = 0L
                 customUsername.value = ""
@@ -724,6 +725,16 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                     previousUid == null ||
                     localDomainIsEmpty ||
                     activeWorkshopIsInvalid
+
+            if (shouldDownload || previousUid == null || localDomainIsEmpty || activeWorkshopIsInvalid) {
+                // A fresh/empty account must complete cloud restore before any
+                // background worker is allowed to upload its local snapshot.
+                repository.clearCloudSyncReady()
+            } else {
+                // This account already has an established local dataset. It is
+                // safe for background sync to upload pending local changes.
+                repository.markCloudSyncReady(user.uid)
+            }
 
             performAutoSync(user, shouldDownload = shouldDownload)
 
@@ -789,6 +800,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         viewModelScope.launch {
             repository.clearAllDomainData()
             repository.clearLocalAccountUid()
+            repository.clearCloudSyncReady()
             repository.saveActiveWorkshopId(0L)
             activeWorkshopId.value = 0L
             customUsername.value = ""
@@ -802,6 +814,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             if (shouldDownload) {
                 val downloadRes = FirebaseService.downloadFromCloud(repository)
                 if (downloadRes.isFailure) {
+                    repository.clearCloudSyncReady()
                     val errorMsg = downloadRes.exceptionOrNull()?.message
                     autoSyncStatusMessage.value = errorMsg ?: "بازیابی ابری انجام نشد؛ اطلاعات محلی دست‌نخورده باقی ماند."
                     if (errorMsg?.contains("دوباره وارد") == true || errorMsg?.contains("منقضی") == true) {
@@ -827,6 +840,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 activeWorkshopId.value = restoredActiveId
                 repository.saveActiveWorkshopId(restoredActiveId)
                 repository.insertDefaultUnitRulesIfEmpty()
+                repository.markCloudSyncReady(user.uid)
                 autoSyncStatusMessage.value = "اطلاعات با حساب ابری همگام‌سازی و بازیابی شد."
             }
 
