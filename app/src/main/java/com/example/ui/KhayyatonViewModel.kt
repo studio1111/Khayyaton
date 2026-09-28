@@ -1,5 +1,6 @@
 package com.example.ui
 
+import com.example.BuildConfig
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
