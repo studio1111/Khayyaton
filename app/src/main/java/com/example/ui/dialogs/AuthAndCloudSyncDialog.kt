@@ -646,6 +646,18 @@ fun AuthAndCloudSyncDialog(
 
                                 isLoading = true
                                 coroutineScope.launch {
+                                    if (FirebaseService.currentUser() != null && repository.hasPendingSyncWork()) {
+                                        isSyncing = true
+                                        val syncResult = FirebaseService.syncAccount(repository)
+                                        isSyncing = false
+                                        if (syncResult.isFailure || repository.hasPendingSyncWork()) {
+                                            isLoading = false
+                                            errorMessage = syncResult.exceptionOrNull()?.message
+                                                ?: "ابتدا باید اطلاعات حساب فعلی به طور کامل همگام شود."
+                                            return@launch
+                                        }
+                                    }
+
                                     val res = if (mode == AuthScreenMode.SIGN_IN) {
                                         FirebaseService.signInWithEmail(cleanEmail, password, cleanUsername.ifBlank { null })
                                     } else {
