@@ -267,7 +267,7 @@ object SubscriptionManager {
             loadCachedSubscription(user.uid)
             _isLoading.value = true
             try {
-                if (refreshOwnerClaim(user)) {
+                if (refreshOwnerAccess()) {
                     val ownerSubscription = UserSubscription(
                         status = SubscriptionStatus.ADMIN_GRANTED,
                         updatedAt = System.currentTimeMillis()
