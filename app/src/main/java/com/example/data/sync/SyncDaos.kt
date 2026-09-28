@@ -95,6 +95,12 @@ interface DocumentCacheDao {
     @Query("DELETE FROM documents_cache WHERE collection = :collection AND documentId = :documentId")
     suspend fun delete(collection: String, documentId: String)
 
+    @Query("SELECT * FROM documents_cache WHERE hasPendingWrites = 1")
+    fun pendingWrites(): Flow<List<DocumentCacheEntity>>
+
+    @Query("DELETE FROM documents_cache")
+    suspend fun clearAll()
+
     @Query("SELECT COUNT(*) FROM documents_cache WHERE hasPendingWrites = 1")
     fun pendingWritesCount(): Flow<Int>
 }
