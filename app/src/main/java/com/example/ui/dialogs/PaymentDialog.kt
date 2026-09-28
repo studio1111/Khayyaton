@@ -189,7 +189,7 @@ fun PaymentDialog(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = PersianUtils.formatCurrency(currentAmount, currencyUnit),
+                                text = PersianUtils.formatCurrency(currentAmount ?: 0L, currencyUnit),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Emerald600
