@@ -25,22 +25,22 @@ class StorageSyncManager(
         documentId: String,
         sourceFile: File
     ): String {
-        val id = UUID.randomUUID().toString()
+        val stableId = collection + "_" + documentId
         val safeDir = File(context.filesDir, "offline_uploads").apply { mkdirs() }
-        val localFile = File(safeDir, id)
+        val localFile = File(safeDir, stableId)
         sourceFile.copyTo(localFile, overwrite = true)
         database.uploadQueueDao().upsert(
             UploadQueueEntity(
-                id = id,
+                id = stableId,
                 documentId = documentId,
                 collection = collection,
                 localFilePath = localFile.absolutePath,
-                storagePath = "users/" + FirebaseService.currentUser()?.uid.orEmpty() + "/files/" + id,
+                storagePath = "users/" + FirebaseService.currentUser()?.uid.orEmpty() + "/files/" + documentId,
                 status = FileUploadStatus.PENDING,
                 retryCount = 0
             )
         )
-        return id
+        return stableId
     }
 
     suspend fun enqueueDelete(
@@ -149,7 +149,9 @@ class StorageSyncManager(
 
                     database.pendingDeleteDao().updateStatus(item.id, PendingDeleteStatus.DELETED, retries)
                     database.pendingDeleteDao().delete(item.id)
-                    database.deletedIdDao().delete(item.collection, item.documentId)
+                    // Keep the tombstone durable. A later snapshot must never
+                    // resurrect the document after remote cleanup.
+                    database.deletedIdDao().markCloudSynced(item.collection, item.documentId)
                     success = true
                 } catch (_: Exception) {
                     retries += 1
