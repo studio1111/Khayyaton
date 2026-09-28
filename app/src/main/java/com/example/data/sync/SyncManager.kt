@@ -122,7 +122,7 @@ class SyncManager(
                 repository.unitRules
             ) { workshops, orders, payments, presets, rules ->
                 LocalSnapshot(workshops, orders, payments, presets, rules)
-            }.debounce(350).collect { snapshot ->
+            }.collect { snapshot ->
                 val hasPending = snapshot.workshops.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
                     snapshot.orders.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
                     snapshot.payments.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
