@@ -443,12 +443,28 @@ class WorkshopRepository(
 
     suspend fun saveWorkshop(workshop: Workshop): Long {
         val trimmed = workshop.name.trim()
-        val toSave = workshop.copy(name = if (trimmed.isBlank()) "کارگاه جدید" else trimmed, updatedAt = System.currentTimeMillis(), syncStatus = com.example.data.sync.RecordSyncStatus.PENDING)
-        return if (toSave.id == 0L) {
-            workshopDao.insertWorkshop(toSave)
-        } else {
-            workshopDao.updateWorkshop(toSave)
-            toSave.id
+        if (trimmed.isBlank()) return workshop.id
+
+        val syncId = workshop.syncId.ifBlank { java.util.UUID.randomUUID().toString() }
+        val now = System.currentTimeMillis()
+        val toSave = workshop.copy(
+            name = trimmed,
+            syncId = syncId,
+            updatedAt = now,
+            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+        )
+
+        val existingBySync = workshopDao.getWorkshopBySyncId(syncId)
+        return when {
+            existingBySync != null -> {
+                workshopDao.updateWorkshop(toSave.copy(id = existingBySync.id))
+                existingBySync.id
+            }
+            toSave.id == 0L -> workshopDao.insertWorkshop(toSave)
+            else -> {
+                workshopDao.updateWorkshop(toSave)
+                toSave.id
+            }
         }
     }
 
@@ -484,6 +500,7 @@ class WorkshopRepository(
 
     suspend fun applyCloudDeletions(deletions: List<PendingCloudDeletion>) {
         if (deletions.isEmpty()) return
+
         database.withTransaction {
             for (deletion in deletions) {
                 when (deletion.collection) {
@@ -502,9 +519,32 @@ class WorkshopRepository(
                         }
                     }
                 }
+
+                // A remote delete is itself a durable fact. Keep the tombstone so
+                // a later stale snapshot or legacy document can never resurrect it.
+                database.deletedIdDao().upsert(
+                    com.example.data.sync.DeletedIdEntity(
+                        collection = deletion.collection,
+                        documentId = deletion.syncId,
+                        deletedAt = System.currentTimeMillis(),
+                        cloudSynced = true
+                    )
+                )
             }
         }
     }
+
+    private fun shouldApplyRemote(localUpdatedAt: Long, localStatus: com.example.data.sync.RecordSyncStatus, remoteUpdatedAt: Long): Boolean {
+        if (localStatus == com.example.data.sync.RecordSyncStatus.PENDING ||
+            localStatus == com.example.data.sync.RecordSyncStatus.FAILED
+        ) {
+            return remoteUpdatedAt > localUpdatedAt
+        }
+        return remoteUpdatedAt >= localUpdatedAt
+    }
+
+    private fun normalizedRemoteUpdatedAt(value: Long, createdAt: Long): Long =
+        if (value > 0L) value else createdAt
 
     suspend fun mergeCloudData(
         cloudWorkshops: List<Workshop>,
@@ -516,6 +556,7 @@ class WorkshopRepository(
         val deleted = database.deletedIdDao().getAll()
             .map { deletionKey(it.collection, it.documentId) }
             .toSet()
+
         val safeWorkshops = cloudWorkshops.filterNot { deletionKey("workshops", it.syncId) in deleted }
         val safeOrders = cloudOrders.filterNot { deletionKey("orders", it.syncId) in deleted }
         val safePayments = cloudPayments.filterNot { deletionKey("payments", it.syncId) in deleted }
@@ -524,85 +565,125 @@ class WorkshopRepository(
 
         database.withTransaction {
             val workshopMap = mutableMapOf<String, Long>()
-            // Legacy cloud records may have only the old numeric workshopId.
-            // Keep a second map so their child records are remapped to the
-            // actual local Room workshop id after multi-device merge.
             val legacyWorkshopIdMap = mutableMapOf<Long, Long>()
 
-            for (remote in safeWorkshops) {
+            for (remoteRaw in safeWorkshops) {
+                val remote = remoteRaw.copy(
+                    updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, remoteRaw.createdAt),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
+                )
                 val existing = workshopDao.getWorkshopBySyncId(remote.syncId)
+
                 val localId = if (existing == null) {
                     workshopDao.insertWorkshop(remote.copy(id = 0L))
                 } else {
-                    workshopDao.updateWorkshop(remote.copy(id = existing.id))
+                    if (shouldApplyRemote(existing.updatedAt, existing.syncStatus, remote.updatedAt)) {
+                        workshopDao.updateWorkshop(remote.copy(id = existing.id))
+                    }
                     existing.id
                 }
+
                 workshopMap[remote.syncId] = localId
                 legacyWorkshopIdMap[remote.id] = localId
             }
 
             val orderMap = mutableMapOf<String, Long>()
             val legacyOrderIdMap = mutableMapOf<Long, Long>()
-            for (remote in safeOrders) {
+
+            for (remoteRaw in safeOrders) {
+                val remote = remoteRaw.copy(
+                    updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, remoteRaw.createdAt),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
+                )
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
+
                 val existing = orderDao.getOrderBySyncId(remote.syncId)
-                val value = remote.copy(
-                    id = existing?.id ?: 0L,
-                    workshopId = localWorkshopId
-                )
                 val localId = if (existing == null) {
-                    orderDao.insertOrder(value)
+                    orderDao.insertOrder(remote.copy(id = 0L, workshopId = localWorkshopId))
                 } else {
-                    orderDao.updateOrder(value)
+                    if (shouldApplyRemote(existing.updatedAt, existing.syncStatus, remote.updatedAt)) {
+                        orderDao.updateOrder(
+                            remote.copy(id = existing.id, workshopId = localWorkshopId)
+                        )
+                    }
                     existing.id
                 }
+
                 orderMap[remote.syncId] = localId
                 legacyOrderIdMap[remote.id] = localId
             }
 
-            for (remote in safePayments) {
+            for (remoteRaw in safePayments) {
+                val remote = remoteRaw.copy(
+                    updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, remoteRaw.createdAt),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
+                )
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
                 val localRelatedOrderId =
                     remote.relatedOrderSyncId.takeIf { it.isNotBlank() }?.let { orderMap[it] }
                         ?: remote.relatedOrderId?.let { legacyOrderIdMap[it] }
+
                 val existing = paymentDao.getPaymentBySyncId(remote.syncId)
-                val value = remote.copy(
-                    id = existing?.id ?: 0L,
-                    workshopId = localWorkshopId,
-                    relatedOrderId = localRelatedOrderId
-                )
-                if (existing == null) paymentDao.insertPayment(value)
-                else paymentDao.updatePayment(value)
+                if (existing == null) {
+                    paymentDao.insertPayment(
+                        remote.copy(
+                            id = 0L,
+                            workshopId = localWorkshopId,
+                            relatedOrderId = localRelatedOrderId
+                        )
+                    )
+                } else if (shouldApplyRemote(existing.updatedAt, existing.syncStatus, remote.updatedAt)) {
+                    paymentDao.updatePayment(
+                        remote.copy(
+                            id = existing.id,
+                            workshopId = localWorkshopId,
+                            relatedOrderId = localRelatedOrderId
+                        )
+                    )
+                }
             }
 
-            for (remote in safePresets) {
+            for (remoteRaw in safePresets) {
+                val remote = remoteRaw.copy(
+                    updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, System.currentTimeMillis()),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
+                )
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
+
                 val existing = modelPresetDao.getPresetBySyncId(remote.syncId)
-                val value = remote.copy(
-                    id = existing?.id ?: 0L,
-                    workshopId = localWorkshopId
-                )
-                if (existing == null) modelPresetDao.insertPreset(value)
-                else modelPresetDao.updatePreset(value)
+                if (existing == null) {
+                    modelPresetDao.insertPreset(remote.copy(id = 0L, workshopId = localWorkshopId))
+                } else if (shouldApplyRemote(existing.updatedAt, existing.syncStatus, remote.updatedAt)) {
+                    modelPresetDao.updatePreset(
+                        remote.copy(id = existing.id, workshopId = localWorkshopId)
+                    )
+                }
             }
 
-            for (remote in safeUnitRules) {
+            for (remoteRaw in safeUnitRules) {
+                val remote = remoteRaw.copy(
+                    updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, System.currentTimeMillis()),
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
+                )
                 val existing = unitRuleDao.getRuleBySyncId(remote.syncId)
-                val value = remote.copy(id = existing?.id ?: 0L)
-                if (existing == null) unitRuleDao.insertRule(value)
-                else unitRuleDao.updateRule(value)
+                if (existing == null) {
+                    unitRuleDao.insertRule(remote.copy(id = 0L))
+                } else if (shouldApplyRemote(existing.updatedAt, existing.syncStatus, remote.updatedAt)) {
+                    unitRuleDao.updateRule(remote.copy(id = existing.id))
+                }
             }
         }
 
         val savedId = getSavedActiveWorkshopId()
-        if (savedId <= 0L) {
-            saveActiveWorkshopId(workshopDao.getAllWorkshopsSync().firstOrNull()?.id ?: 0L)
+        val workshopsNow = workshopDao.getAllWorkshopsSync()
+        if (savedId <= 0L || workshopsNow.none { it.id == savedId }) {
+            saveActiveWorkshopId(workshopsNow.firstOrNull()?.id ?: 0L)
         }
     }
 
@@ -641,32 +722,18 @@ class WorkshopRepository(
         val workshopSyncId = order.workshopSyncId.ifBlank {
             workshopDao.getWorkshopById(order.workshopId)?.syncId.orEmpty()
         }
-        val normalizedOrder = order.copy(workshopSyncId = workshopSyncId, updatedAt = System.currentTimeMillis(), syncStatus = com.example.data.sync.RecordSyncStatus.PENDING)
-        if (normalizedOrder.id == 0L) {
-            val existing = orderDao.getOrdersByWorkshopSync(normalizedOrder.workshopId)
-            val normInv = com.example.util.PersianUtils.toEnglishDigits(normalizedOrder.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
-            val normCust = normalizedOrder.customerName.trim().lowercase(java.util.Locale.ROOT)
-            val normModel = normalizedOrder.modelName.trim().lowercase(java.util.Locale.ROOT)
-            val normDate = com.example.util.PersianUtils.toEnglishDigits(normalizedOrder.dateJalali.trim())
-
-            val match = existing.find { ex ->
-                val exInv = com.example.util.PersianUtils.toEnglishDigits(ex.invoiceNumber.trim()).lowercase(java.util.Locale.ROOT)
-                val exCust = ex.customerName.trim().lowercase(java.util.Locale.ROOT)
-                val exModel = ex.modelName.trim().lowercase(java.util.Locale.ROOT)
-                val exDate = com.example.util.PersianUtils.toEnglishDigits(ex.dateJalali.trim())
-
-                (normInv.isNotBlank() && normInv != "0" && exInv == normInv) ||
-                (ex.orderNumber == normalizedOrder.orderNumber && (exCust == normCust || ex.createdAt == normalizedOrder.createdAt)) ||
-                (normCust.isNotBlank() && exCust == normCust && exModel == normModel && ex.calculatedTotal == normalizedOrder.calculatedTotal && exDate == normDate)
-            }
-
-            if (match != null) {
-                orderDao.updateOrder(normalizedOrder.copy(id = match.id, syncId = match.syncId))
-            } else {
-                orderDao.insertOrder(normalizedOrder)
-            }
+        val syncId = order.syncId.ifBlank { java.util.UUID.randomUUID().toString() }
+        val normalizedOrder = order.copy(
+            syncId = syncId,
+            workshopSyncId = workshopSyncId,
+            updatedAt = System.currentTimeMillis(),
+            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+        )
+        val existing = orderDao.getOrderBySyncId(syncId)
+        if (existing == null) {
+            orderDao.insertOrder(normalizedOrder)
         } else {
-            orderDao.updateOrder(normalizedOrder)
+            orderDao.updateOrder(normalizedOrder.copy(id = existing.id))
         }
     }
 
@@ -686,37 +753,21 @@ class WorkshopRepository(
             workshopDao.getWorkshopById(payment.workshopId)?.syncId.orEmpty()
         }
         val relatedOrderSyncId = payment.relatedOrderSyncId.ifBlank {
-            payment.relatedOrderId?.let { orderDao.getAllOrdersSync().firstOrNull { o -> o.id == it }?.syncId }.orEmpty()
+            payment.relatedOrderId?.let { orderDao.getOrderById(it)?.syncId }.orEmpty()
         }
+        val syncId = payment.syncId.ifBlank { java.util.UUID.randomUUID().toString() }
         val normalizedPayment = payment.copy(
+            syncId = syncId,
             workshopSyncId = workshopSyncId,
             relatedOrderSyncId = relatedOrderSyncId,
             updatedAt = System.currentTimeMillis(),
             syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
         )
-        if (normalizedPayment.id == 0L) {
-            val existing = paymentDao.getPaymentsByWorkshopSync(normalizedPayment.workshopId)
-            val normRef = com.example.util.PersianUtils.toEnglishDigits(normalizedPayment.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
-            val normCust = normalizedPayment.customerName.trim().lowercase(java.util.Locale.ROOT)
-            val normDate = com.example.util.PersianUtils.toEnglishDigits(normalizedPayment.dateJalali.trim())
-
-            val match = existing.find { ex ->
-                val exRef = com.example.util.PersianUtils.toEnglishDigits(ex.referenceNo.trim()).lowercase(java.util.Locale.ROOT)
-                val exCust = ex.customerName.trim().lowercase(java.util.Locale.ROOT)
-                val exDate = com.example.util.PersianUtils.toEnglishDigits(ex.dateJalali.trim())
-
-                (normRef.isNotBlank() && exRef == normRef) ||
-                (ex.paymentNumber == normalizedPayment.paymentNumber && (exCust == normCust || ex.createdAt == normalizedPayment.createdAt)) ||
-                (normCust.isNotBlank() && exCust == normCust && ex.amount == normalizedPayment.amount && exDate == normDate)
-            }
-
-            if (match != null) {
-                paymentDao.updatePayment(normalizedPayment.copy(id = match.id, syncId = match.syncId))
-            } else {
-                paymentDao.insertPayment(normalizedPayment)
-            }
+        val existing = paymentDao.getPaymentBySyncId(syncId)
+        if (existing == null) {
+            paymentDao.insertPayment(normalizedPayment)
         } else {
-            paymentDao.updatePayment(normalizedPayment)
+            paymentDao.updatePayment(normalizedPayment.copy(id = existing.id))
         }
     }
 
