@@ -1,10 +1,9 @@
 name: Build Release AAB and APK
-# CI retrigger: verify latest fixes
+
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
-
 
 concurrency:
   group: khayyaton-production-release
@@ -17,16 +16,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
 
-      - name: Set up JDK
+      - name: Set up JDK 17
         uses: actions/setup-java@v6
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Decode Khayyaton keystore
-        run: echo "${{ secrets.KHAYYATON_KEYSTORE_BASE64 }}" | base64 -d > khayyaton.jks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${{ secrets.KHAYYATON_KEYSTORE_BASE64 }}"
+          echo "${{ secrets.KHAYYATON_KEYSTORE_BASE64 }}" | base64 -d > khayyaton.jks
+          test -s khayyaton.jks
 
       - name: Setup Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v6
@@ -54,30 +59,48 @@ jobs:
         run: gradle :app:assembleRelease --stacktrace --no-daemon
 
       - name: Verify AAB signature
-        run: jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
+        run: |
+          set -euo pipefail
+          jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
 
       - name: Verify APK signature
         run: |
+          set -euo pipefail
           jarsigner -verify -verbose -certs app/build/outputs/apk/release/app-release.apk
           if command -v apksigner >/dev/null 2>&1; then
             apksigner verify --verbose app/build/outputs/apk/release/app-release.apk
           fi
+
+      - name: Create Source ZIP
+        run: |
+          set -euo pipefail
+          git archive --format=zip --output="Khayyaton-Source-${GITHUB_SHA}.zip" "${GITHUB_SHA}"
+          test -s "Khayyaton-Source-${GITHUB_SHA}.zip"
+
+      - name: Verify source archive identity
+        run: |
+          set -euo pipefail
+          git archive --format=tar "${GITHUB_SHA}" | tar -tf - >/dev/null
+
+      - name: Create SHA-256 checksums
+        run: |
+          set -euo pipefail
+          sha256sum             app/build/outputs/bundle/release/app-release.aab             app/build/outputs/apk/release/app-release.apk             "Khayyaton-Source-${GITHUB_SHA}.zip"             > "Khayyaton-SHA256-${GITHUB_SHA}.txt"
+          test -s "Khayyaton-SHA256-${GITHUB_SHA}.txt"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v6
         with:
           name: khayyaton-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
         with:
           name: khayyaton-release-apk
           path: app/build/outputs/apk/release/app-release.apk
-
-      - name: Create Source ZIP
-        if: github.event_name != 'pull_request'
-        run: git archive --format=zip --output="Khayyaton-Source-${GITHUB_SHA}.zip" "${GITHUB_SHA}"
+          if-no-files-found: error
 
       - name: Upload Source ZIP artifact
         uses: actions/upload-artifact@v6
@@ -86,21 +109,19 @@ jobs:
           path: Khayyaton-Source-${{ github.sha }}.zip
           if-no-files-found: error
 
+      - name: Upload SHA-256 checksum artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: khayyaton-release-checksums
+          path: Khayyaton-SHA256-${{ github.sha }}.txt
+          if-no-files-found: error
+
       - name: Publish GitHub Release
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "release-${GITHUB_RUN_NUMBER}" --target "${GITHUB_SHA}" --title "Khayyaton Release ${GITHUB_RUN_NUMBER}" --notes "Production release built from commit ${GITHUB_SHA}. Includes signed AAB, signed APK, and complete source ZIP." "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB" "app/build/outputs/apk/release/app-release.apk#Khayyaton APK" "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"
-
-      - name: Verify release identity
-        if: always()
         run: |
-          echo "=== Release identity ==="
-          jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab | grep -E "X.509|SHA256 digest|jar verified" | head -20 || true
-          if command -v apkanalyzer >/dev/null 2>&1; then
-            apkanalyzer manifest application-id app/build/outputs/bundle/release/app-release.aab || true
-          fi
+          set -euo pipefail
+          gh release create "release-${GITHUB_RUN_NUMBER}"             --target "${GITHUB_SHA}"             --title "Khayyaton Release ${GITHUB_RUN_NUMBER}"             --notes "Production release built from commit ${GITHUB_SHA}. Includes signed AAB, signed APK, complete source ZIP, and SHA-256 checksums."             "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB"             "app/build/outputs/apk/release/app-release.apk#Khayyaton APK"             "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"             "Khayyaton-SHA256-${GITHUB_SHA}.txt#Khayyaton SHA-256"
 
       - name: Remove keystore
         if: always()
