@@ -90,7 +90,6 @@ object FirebaseService {
         }
 
     fun firestoreInstance(): FirebaseFirestore? = firestore
-    fun storageInstance(): FirebaseStorage? = storage
     fun authInstance(): FirebaseAuth = auth ?: FirebaseAuth.getInstance()
     fun currentUser(): FirebaseUser? = auth?.currentUser ?: FirebaseAuth.getInstance().currentUser
 
