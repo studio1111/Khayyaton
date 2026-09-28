@@ -257,16 +257,20 @@ object FirebaseService {
         }
 
         return try {
-            // IMPORTANT: push durable local changes first.
-            // If we pull first, an empty/stale cloud snapshot can race with the
-            // local pending state and make a newly entered record look already
-            // reconciled before it has ever been uploaded.
-            val uploaded = uploadPendingToCloud(repository)
-            if (uploaded.isFailure) return uploaded
+            when (com.example.data.sync.CloudSyncPolicy.phaseFor(repository.isCloudSyncReady(user.uid))) {
+                com.example.data.sync.CloudSyncPhase.RESTORE_THEN_UPLOAD -> {
+                    val restored = downloadFromCloud(repository, requireServer = true)
+                    if (restored.isFailure) return restored
+                    repository.markCloudSyncReady(user.uid)
+                    uploadPendingToCloud(repository)
+                }
 
-            // After local changes are safely committed (or reconciled by LWW),
-            // pull the authoritative cloud state back into Room.
-            downloadFromCloud(repository)
+                com.example.data.sync.CloudSyncPhase.UPLOAD_THEN_RECONCILE -> {
+                    val uploaded = uploadPendingToCloud(repository)
+                    if (uploaded.isFailure) return uploaded
+                    downloadFromCloud(repository, requireServer = true)
+                }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Account sync failed: " + e.message, e)
             Result.failure(Exception(parseCloudError(e)))
@@ -294,12 +298,15 @@ object FirebaseService {
             ?: return Result.failure(Exception("پایگاه داده ابری Firestore در دسترس نیست."))
 
         return try {
+            repository.repairMissingSyncIdentities()
             user.getIdToken(false).await()
 
             val userDoc = db.collection("users").document(user.uid)
             val maxBatchSize = 400
 
-            val cloudDeletionSnapshot = userDoc.collection("deletions").get().await()
+            val cloudDeletionSnapshot = userDoc.collection("deletions")
+                .get(com.google.firebase.firestore.Source.SERVER)
+                .await()
             val cloudBlocked = cloudDeletionSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val collection = data["collection"] as? String ?: return@mapNotNull null
@@ -377,7 +384,9 @@ object FirebaseService {
                 markSynced: suspend () -> Unit,
                 onBlocked: suspend () -> Unit
             ) {
-                if (syncId.isBlank()) return
+                if (syncId.isBlank()) {
+                    throw IllegalStateException("شناسه همگام‌سازی این رکورد نامعتبر است.")
+                }
                 if (blocked(collection, syncId)) {
                     onBlocked()
                     return
@@ -549,7 +558,7 @@ object FirebaseService {
             }
 
             if (remoteWon) {
-                val restored = downloadFromCloud(repository)
+                val restored = downloadFromCloud(repository, requireServer = true)
                 if (restored.isFailure) return restored
             }
 
@@ -597,7 +606,10 @@ object FirebaseService {
     /**
      * Download and restore all records from Firebase Firestore to local Room Database
      */
-    suspend fun downloadFromCloud(repository: WorkshopRepository): Result<CloudSyncResult> {
+    suspend fun downloadFromCloud(
+        repository: WorkshopRepository,
+        requireServer: Boolean = false
+    ): Result<CloudSyncResult> {
         val user = auth?.currentUser
             ?: return Result.failure(Exception("ابتدا باید وارد حساب کاربری خود شوید."))
         val db = firestore
@@ -619,7 +631,13 @@ object FirebaseService {
 
             val userDoc = db.collection("users").document(user.uid)
 
-            val deletionSnapshot = userDoc.collection("deletions").get().await()
+            val deletionSnapshot = if (requireServer) {
+                userDoc.collection("deletions")
+                    .get(com.google.firebase.firestore.Source.SERVER)
+                    .await()
+            } else {
+                userDoc.collection("deletions").get().await()
+            }
             val deletedRecords = deletionSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val collection = data["collection"] as? String ?: return@mapNotNull null
@@ -648,7 +666,13 @@ object FirebaseService {
                 }
             }
 
-            val workshopsSnapshot = userDoc.collection("workshops").get().await()
+            val workshopsSnapshot = if (requireServer) {
+                userDoc.collection("workshops")
+                    .get(com.google.firebase.firestore.Source.SERVER)
+                    .await()
+            } else {
+                userDoc.collection("workshops").get().await()
+            }
             val restoredWorkshops = workshopsSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
@@ -663,9 +687,15 @@ object FirebaseService {
                     syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
-            val fallbackWorkshopId = restoredWorkshops.firstOrNull()?.id ?: 1L
+            val fallbackWorkshopId = restoredWorkshops.firstOrNull()?.id ?: 0L
 
-            val ordersSnapshot = userDoc.collection("orders").get().await()
+            val ordersSnapshot = if (requireServer) {
+                userDoc.collection("orders")
+                    .get(com.google.firebase.firestore.Source.SERVER)
+                    .await()
+            } else {
+                userDoc.collection("orders").get().await()
+            }
             val restoredOrders = ordersSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
@@ -678,7 +708,9 @@ object FirebaseService {
                 FurnitureOrder(
                     id = id,
                     syncId = syncId,
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
+                    workshopId = (data["workshopId"] as? Number)?.toLong()
+                        ?.takeIf { it > 0L }
+                        ?: fallbackWorkshopId,
                     workshopSyncId = data["workshopSyncId"] as? String ?: "",
                     orderNumber = (data["orderNumber"] as? Number)?.toLong() ?: 1L,
                     invoiceNumber = data["invoiceNumber"] as? String ?: "",
@@ -702,7 +734,13 @@ object FirebaseService {
                 )
             }
 
-            val paymentsSnapshot = userDoc.collection("payments").get().await()
+            val paymentsSnapshot = if (requireServer) {
+                userDoc.collection("payments")
+                    .get(com.google.firebase.firestore.Source.SERVER)
+                    .await()
+            } else {
+                userDoc.collection("payments").get().await()
+            }
             val restoredPayments = paymentsSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
@@ -715,7 +753,9 @@ object FirebaseService {
                 PaymentRecord(
                     id = id,
                     syncId = syncId,
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
+                    workshopId = (data["workshopId"] as? Number)?.toLong()
+                        ?.takeIf { it > 0L }
+                        ?: fallbackWorkshopId,
                     workshopSyncId = data["workshopSyncId"] as? String ?: "",
                     paymentNumber = (data["paymentNumber"] as? Number)?.toLong() ?: 1L,
                     amount = (data["amount"] as? Number)?.toLong() ?: 0L,
@@ -735,7 +775,13 @@ object FirebaseService {
                 )
             }
 
-            val presetsSnapshot = userDoc.collection("presets").get().await()
+            val presetsSnapshot = if (requireServer) {
+                userDoc.collection("presets")
+                    .get(com.google.firebase.firestore.Source.SERVER)
+                    .await()
+            } else {
+                userDoc.collection("presets").get().await()
+            }
             val restoredPresets = presetsSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
@@ -749,7 +795,9 @@ object FirebaseService {
                 ModelPreset(
                     id = id,
                     syncId = syncId,
-                    workshopId = (data["workshopId"] as? Number)?.toLong() ?: fallbackWorkshopId,
+                    workshopId = (data["workshopId"] as? Number)?.toLong()
+                        ?.takeIf { it > 0L }
+                        ?: fallbackWorkshopId,
                     workshopSyncId = data["workshopSyncId"] as? String ?: "",
                     name = name,
                     defaultPricePerSet = (data["defaultPricePerSet"] as? Number)?.toLong() ?: 2000000L,
@@ -837,6 +885,15 @@ object FirebaseService {
     private fun parseCloudError(e: Exception): String {
         val msg = e.message.orEmpty()
         val lowerMsg = msg.lowercase()
+
+        if (
+            lowerMsg.contains("app check") ||
+            lowerMsg.contains("appcheck") ||
+            lowerMsg.contains("app_check") ||
+            lowerMsg.contains("play integrity")
+        ) {
+            return "تأیید امنیتی برنامه انجام نشد. تنظیمات App Check و Play Integrity نسخه منتشرشده را بررسی کنید."
+        }
 
         if (e is com.google.firebase.firestore.FirebaseFirestoreException) {
             if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) {
