@@ -967,20 +967,40 @@ class WorkshopRepository(
         val workshopSyncId = preset.workshopSyncId.ifBlank {
             workshopDao.getWorkshopById(preset.workshopId)?.syncId.orEmpty()
         }
-        val normalizedPreset = preset.copy(workshopSyncId = workshopSyncId, updatedAt = System.currentTimeMillis(), syncStatus = com.example.data.sync.RecordSyncStatus.PENDING)
+        val syncId = preset.syncId.ifBlank { java.util.UUID.randomUUID().toString() }
+        val normalizedPreset = preset.copy(
+            syncId = syncId,
+            workshopSyncId = workshopSyncId,
+            updatedAt = System.currentTimeMillis(),
+            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+        )
         val trimmed = preset.name.trim()
         if (trimmed.isBlank()) return
-        val existing = modelPresetDao.getPresetByNameAndWorkshop(trimmed, normalizedPreset.workshopId)
-        if (existing != null) {
+
+        val existingBySync = modelPresetDao.getPresetBySyncId(syncId)
+        if (existingBySync != null) {
             modelPresetDao.updatePreset(
-                normalizedPreset.copy(id = existing.id, name = trimmed)
+                normalizedPreset.copy(id = existingBySync.id, name = trimmed)
             )
+            return
+        }
+
+        // Name uniqueness is a UI/domain rule. Only a new preset can resolve
+        // to an existing name. Editing always follows syncId identity.
+        val existingByName = if (preset.id == 0L) {
+            modelPresetDao.getPresetByNameAndWorkshop(trimmed, normalizedPreset.workshopId)
         } else {
-            if (preset.id == 0L) {
-                modelPresetDao.insertPreset(normalizedPreset.copy(name = trimmed))
-            } else {
-                modelPresetDao.updatePreset(normalizedPreset.copy(name = trimmed))
+            null
+        }
+
+        when {
+            existingByName != null -> {
+                modelPresetDao.updatePreset(
+                    normalizedPreset.copy(id = existingByName.id, syncId = existingByName.syncId, name = trimmed)
+                )
             }
+            preset.id == 0L -> modelPresetDao.insertPreset(normalizedPreset.copy(name = trimmed))
+            else -> modelPresetDao.updatePreset(normalizedPreset.copy(name = trimmed))
         }
     }
 
@@ -1015,17 +1035,38 @@ class WorkshopRepository(
     }
 
     suspend fun saveUnitRule(rule: UnitConversionRule) {
-        val pendingRule = rule.copy(updatedAt = System.currentTimeMillis(), syncStatus = com.example.data.sync.RecordSyncStatus.PENDING)
+        val syncId = rule.syncId.ifBlank { java.util.UUID.randomUUID().toString() }
+        val pendingRule = rule.copy(
+            syncId = syncId,
+            updatedAt = System.currentTimeMillis(),
+            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+        )
         val rawKey = rule.pieceKey.ifBlank {
             if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
         }
         val norm = normalizeUnitKey(rawKey)
-        val existing = unitRuleDao.getAllRulesSync()
-        val duplicate = existing.find {
-            it.id != pendingRule.id && normalizeUnitKey(it.pieceKey.ifBlank { if (it.pieceCount % 1.0 == 0.0) it.pieceCount.toInt().toString() else it.pieceCount.toString() }) == norm
+
+        val existingBySync = unitRuleDao.getRuleBySyncId(syncId)
+        if (existingBySync != null) {
+            unitRuleDao.updateRule(pendingRule.copy(id = existingBySync.id))
+            return
         }
+
+        val duplicate = if (rule.id == 0L) {
+            unitRuleDao.getAllRulesSync().firstOrNull {
+                normalizeUnitKey(
+                    it.pieceKey.ifBlank {
+                        if (it.pieceCount % 1.0 == 0.0) it.pieceCount.toInt().toString() else it.pieceCount.toString()
+                    }
+                ) == norm
+            }
+        } else {
+            null
+        }
+
         if (duplicate != null) {
-            // Update the existing rule to maintain single rule per piece count/title
+            // A new local rule reuses the existing canonical identity instead
+            // of creating a second cloud document for the same logical rule.
             unitRuleDao.updateRule(
                 duplicate.copy(
                     pieceKey = pendingRule.pieceKey,
@@ -1036,12 +1077,10 @@ class WorkshopRepository(
                     syncStatus = pendingRule.syncStatus
                 )
             )
+        } else if (rule.id == 0L) {
+            unitRuleDao.insertRule(pendingRule)
         } else {
-            if (rule.id == 0L) {
-                unitRuleDao.insertRule(pendingRule)
-            } else {
-                unitRuleDao.updateRule(pendingRule)
-            }
+            unitRuleDao.updateRule(pendingRule)
         }
     }
 
