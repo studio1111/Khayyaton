@@ -11,5 +11,5 @@ object SyncPolicy {
     ): Boolean = "$collection|$documentId" in deletedKeys
 
     fun chooseWinner(localUpdatedAt: Long, remoteUpdatedAt: Long): String =
-        if (remoteUpdatedAt >= localUpdatedAt) REMOTE else LOCAL
+        if (remoteUpdatedAt > localUpdatedAt) REMOTE else LOCAL
 }
