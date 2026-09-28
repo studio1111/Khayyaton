@@ -654,6 +654,38 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     /**
+     * Ensures the currently authenticated account has no pending local changes
+     * before FirebaseAuth is allowed to replace it with another account.
+     * This closes the gap where direct sign-in could otherwise switch Firebase
+     * users before the previous account's local changes were synchronized.
+     */
+    suspend fun prepareForAccountSwitch(): Result<Unit> {
+        val context = repository.getApplicationContext()
+            ?: return Result.failure(Exception("محیط برنامه برای همگام‌سازی آماده نیست."))
+        val currentUid = FirebaseService.currentUser()?.uid ?: return Result.success(Unit)
+
+        if (!repository.hasPendingSyncWork()) return Result.success(Unit)
+
+        if (!hasUsableNetwork(context)) {
+            return Result.failure(
+                Exception("اطلاعات حساب فعلی هنوز همگام نشده است. لطفاً ابتدا اینترنت را وصل کنید و دوباره تلاش کنید.")
+            )
+        }
+
+        autoSyncStatusMessage.value = "در حال ذخیره و همگام‌سازی اطلاعات حساب فعلی..." 
+        val result = FirebaseService.syncAccount(repository)
+        return if (result.isSuccess && !repository.hasPendingSyncWork()) {
+            autoSyncStatusMessage.value = null
+            Result.success(Unit)
+        } else {
+            Result.failure(
+                result.exceptionOrNull()
+                    ?: Exception("همگام‌سازی اطلاعات حساب فعلی کامل نشد. برای جلوگیری از از دست رفتن اطلاعات، ورود به حساب دیگر انجام نشد.")
+            )
+        }
+    }
+
+    /**
      * Account login starts exactly one account-scoped WorkManager sync.
      * Room remains the only source used by the UI.
      */
