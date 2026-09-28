@@ -1110,8 +1110,14 @@ class WorkshopRepository(
         DefaultUnitRule("0.5", 0.5)
     )
 
+    private fun deletedDefaultUnitRulesKey(): String {
+        val uid = getLocalAccountUid().orEmpty()
+        return if (uid.isBlank()) "deleted_default_unit_rules_unscoped"
+        else "deleted_default_unit_rules_$uid"
+    }
+
     private fun deletedDefaultUnitRules(): MutableSet<String> =
-        prefs?.getStringSet("deleted_default_unit_rules", emptySet()).orEmpty().toMutableSet()
+        prefs?.getStringSet(deletedDefaultUnitRulesKey(), emptySet()).orEmpty().toMutableSet()
 
     private fun markDefaultUnitRuleDeleted(rule: UnitConversionRule) {
         val raw = rule.pieceKey.ifBlank {
@@ -1121,7 +1127,7 @@ class WorkshopRepository(
         if (defaultUnitRules.any { it.key == key }) {
             val deleted = deletedDefaultUnitRules()
             deleted += key
-            prefs?.edit()?.putStringSet("deleted_default_unit_rules", deleted)?.apply()
+            prefs?.edit()?.putStringSet(deletedDefaultUnitRulesKey(), deleted)?.apply()
         }
     }
 
@@ -1161,7 +1167,7 @@ class WorkshopRepository(
     }
 
     suspend fun restoreDefaultUnitRules() {
-        prefs?.edit()?.remove("deleted_default_unit_rules")?.apply()
+        prefs?.edit()?.remove(deletedDefaultUnitRulesKey())?.apply()
         unitRuleDao.clearAll()
         unitRuleDao.insertAll(defaultUnitRules.map {
             UnitConversionRule(
