@@ -3,7 +3,6 @@ package com.example.ui
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 
 import androidx.lifecycle.ViewModel
@@ -764,33 +763,42 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             val workManager = WorkManager.getInstance(context.applicationContext)
             workManager.getWorkInfosForUniqueWorkFlow(SyncWorkScheduler.workName(user.uid))
                 .collect { infos ->
-                    when (infos.firstOrNull()?.state) {
-                        WorkInfo.State.RUNNING -> {
+                    val result = com.example.data.sync.SyncWorkUiPolicy.resolve(
+                        infos.map {
+                            com.example.data.sync.SyncWorkUiPolicy.Snapshot(
+                                state = it.state,
+                                errorMessage = it.outputData.getString("errorMessage")
+                            )
+                        }
+                    )
+
+                    when (result.state) {
+                        com.example.data.sync.SyncWorkUiPolicy.State.RUNNING -> {
                             isAutoSyncing.value = true
                             autoSyncStatusMessage.value = "همگام‌سازی اطلاعات در حال انجام است..."
                         }
-                        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
+                        com.example.data.sync.SyncWorkUiPolicy.State.QUEUED -> {
                             isAutoSyncing.value = true
                             autoSyncStatusMessage.value = "همگام‌سازی اطلاعات در صف اجرا قرار گرفت..."
                         }
-                        WorkInfo.State.SUCCEEDED -> {
+                        com.example.data.sync.SyncWorkUiPolicy.State.SUCCESS -> {
                             isAutoSyncing.value = false
                             autoSyncStatusMessage.value = "همگام‌سازی اطلاعات انجام شد."
                         }
-                        WorkInfo.State.FAILED -> {
+                        com.example.data.sync.SyncWorkUiPolicy.State.FAILED -> {
                             isAutoSyncing.value = false
-                            autoSyncStatusMessage.value = "همگام‌سازی اطلاعات ناموفق بود."
+                            autoSyncStatusMessage.value =
+                                result.errorMessage ?: "همگام‌سازی اطلاعات ناموفق بود."
                         }
-                        WorkInfo.State.CANCELLED -> {
+                        com.example.data.sync.SyncWorkUiPolicy.State.CANCELLED -> {
                             isAutoSyncing.value = false
                             autoSyncStatusMessage.value = "همگام‌سازی اطلاعات لغو شد."
                         }
-                        null -> Unit
+                        com.example.data.sync.SyncWorkUiPolicy.State.IDLE -> Unit
                     }
                 }
         }
     }
-
     fun triggerAutoUpload() {
         val uid = FirebaseService.currentUser()?.uid ?: currentUser.value?.uid ?: return
         val context = repository.getApplicationContext() ?: return
