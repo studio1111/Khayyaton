@@ -22,6 +22,12 @@ import com.example.data.sync.PendingDeleteDao
 import com.example.data.sync.DocumentCacheDao
 import com.example.data.sync.SyncStatusConverters
 
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE deleted_ids ADD COLUMN cloudSynced INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 val MIGRATION_9_10 = object : Migration(9, 10) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE upload_queue ADD COLUMN collection TEXT NOT NULL DEFAULT ''")
@@ -136,7 +142,7 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 
 @Database(
     entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class, com.example.data.sync.DocumentCacheEntity::class, com.example.data.sync.DeletedIdEntity::class, com.example.data.sync.UploadQueueEntity::class, com.example.data.sync.PendingDeleteEntity::class],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(SyncStatusConverters::class)
@@ -162,7 +168,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "khayyaton_workshop.db"
                 )
-                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     .build()
                 INSTANCE = instance
                 instance
@@ -197,43 +203,82 @@ class WorkshopRepository(
     private fun deletionKey(collection: String, syncId: String): String =
         "$collection|$syncId"
 
+    private suspend fun migrateLegacyDeletionQueue() {
+        val current = prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty()
+        if (current.isEmpty()) return
+        val now = System.currentTimeMillis()
+        for (raw in current) {
+            val parts = raw.split("|", limit = 2)
+            if (parts.size == 2 && parts[1].isNotBlank()) {
+                database.deletedIdDao().upsert(
+                    com.example.data.sync.DeletedIdEntity(
+                        collection = parts[0],
+                        documentId = parts[1],
+                        deletedAt = now,
+                        cloudSynced = false
+                    )
+                )
+            }
+        }
+        prefs?.edit()?.remove(pendingDeletionKey())?.apply()
+    }
+
     suspend fun recordCloudDeletion(collection: String, syncId: String) {
         if (syncId.isBlank()) return
-        val now = System.currentTimeMillis()
         database.deletedIdDao().upsert(
             com.example.data.sync.DeletedIdEntity(
                 collection = collection,
                 documentId = syncId,
-                deletedAt = now
+                deletedAt = System.currentTimeMillis(),
+                cloudSynced = false
             )
         )
-        val current = prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty().toMutableSet()
-        current += deletionKey(collection, syncId)
-        prefs?.edit()?.putStringSet(pendingDeletionKey(), current)?.apply()
+    }
+
+    suspend fun markCloudDeletionConfirmed(collection: String, syncId: String) {
+        if (syncId.isBlank()) return
+        database.deletedIdDao().markCloudSynced(collection, syncId)
     }
 
     suspend fun getPendingCloudDeletions(): List<PendingCloudDeletion> {
-        val room = database.deletedIdDao().getAll().map {
+        migrateLegacyDeletionQueue()
+        return database.deletedIdDao().getPending().map {
             PendingCloudDeletion(it.collection, it.documentId)
         }
-        val legacy = prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty().mapNotNull { raw ->
-            val parts = raw.split("|", limit = 2)
-            if (parts.size == 2 && parts[1].isNotBlank()) {
-                PendingCloudDeletion(parts[0], parts[1])
-            } else null
-        }
-        return (room + legacy).distinctBy { deletionKey(it.collection, it.syncId) }
     }
 
     suspend fun clearCloudDeletions(deletions: Collection<PendingCloudDeletion>) {
         if (deletions.isEmpty()) return
-        deletions.forEach { database.deletedIdDao().delete(it.collection, it.syncId) }
-        val removeKeys = deletions.map { deletionKey(it.collection, it.syncId) }.toSet()
-        val current = prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty()
-        prefs?.edit()?.putStringSet(
-            pendingDeletionKey(),
-            current.filterNot { it in removeKeys }.toSet()
-        )?.apply()
+        for (deletion in deletions) {
+            database.deletedIdDao().markCloudSynced(deletion.collection, deletion.syncId)
+        }
+        prefs?.edit()?.remove(pendingDeletionKey())?.apply()
+    }
+
+    suspend fun clearSyncState() {
+        database.withTransaction {
+            database.deletedIdDao().clearAll()
+            database.uploadQueueDao().clearAll()
+            database.pendingDeleteDao().clearAll()
+            database.documentCacheDao().clearAll()
+        }
+        prefs?.edit()
+            ?.remove(pendingDeletionKey())
+            ?.remove("cloud_sync_ready_uid")
+            ?.apply()
+    }
+
+    suspend fun hasPendingSyncWork(): Boolean {
+        val pendingRecords =
+            workshopDao.getPendingSync().isNotEmpty() ||
+                orderDao.getPendingSync().isNotEmpty() ||
+                paymentDao.getPendingSync().isNotEmpty() ||
+                modelPresetDao.getPendingSync().isNotEmpty() ||
+                unitRuleDao.getPendingSync().isNotEmpty()
+        return pendingRecords ||
+            database.deletedIdDao().getPending().isNotEmpty() ||
+            database.uploadQueueDao().pending().isNotEmpty() ||
+            database.pendingDeleteDao().pending().isNotEmpty()
     }
 
     fun getApplicationContext(): android.content.Context? = context?.applicationContext
