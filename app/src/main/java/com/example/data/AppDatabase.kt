@@ -147,17 +147,48 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
 
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS workshops (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)")
-        db.execSQL("INSERT OR IGNORE INTO workshops (id, name, createdAt) VALUES (1, 'کارگاه اصلی', ${System.currentTimeMillis()})")
-        try {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS workshops " +
+                "(id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)"
+        )
+
+        fun tableHasColumn(table: String, column: String): Boolean {
+            db.query("PRAGMA table_info($table)").use { cursor ->
+                val nameIndex = cursor.getColumnIndex("name")
+                while (cursor.moveToNext()) {
+                    if (nameIndex >= 0 && cursor.getString(nameIndex) == column) return true
+                }
+            }
+            return false
+        }
+
+        val hasLegacyData = listOf(
+            "furniture_orders",
+            "payment_records",
+            "model_presets"
+        ).any { table ->
+            db.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                cursor.moveToFirst()
+                cursor.getLong(0) > 0L
+            }
+        }
+
+        if (hasLegacyData) {
+            db.execSQL(
+                "INSERT OR IGNORE INTO workshops (id, name, createdAt) " +
+                    "VALUES (1, 'کارگاه بازیابی‌شده', ${System.currentTimeMillis()})"
+            )
+        }
+
+        if (!tableHasColumn("furniture_orders", "workshopId")) {
             db.execSQL("ALTER TABLE furniture_orders ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 1")
-        } catch (_: Exception) {}
-        try {
+        }
+        if (!tableHasColumn("payment_records", "workshopId")) {
             db.execSQL("ALTER TABLE payment_records ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 1")
-        } catch (_: Exception) {}
-        try {
+        }
+        if (!tableHasColumn("model_presets", "workshopId")) {
             db.execSQL("ALTER TABLE model_presets ADD COLUMN workshopId INTEGER NOT NULL DEFAULT 1")
-        } catch (_: Exception) {}
+        }
     }
 }
 
