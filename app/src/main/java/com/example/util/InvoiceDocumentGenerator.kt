@@ -16,6 +16,13 @@ import java.io.FileOutputStream
 
 object InvoiceDocumentGenerator {
 
+    private fun escapeHtml(value: String): String =
+        value
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;")
     /**
      * Generates a modern, clean, print-ready Persian RTL HTML invoice
      */
@@ -32,6 +39,8 @@ object InvoiceDocumentGenerator {
 
         val statusText = if (balance > 0) "مانده حساب" else if (balance == 0L) "تسویه حساب کامل" else "بدهکاری"
         val statusColor = if (balance > 0) "#DC2626" else if (balance == 0L) "#059669" else "#DC2626"
+        val safeCurrencyUnit = escapeHtml(currencyUnit)
+        val safeTargetCustomer = escapeHtml(targetCustomer)
         val formattedBal = PersianUtils.formatRemainingBalanceText(balance, currencyUnit)
 
         val sb = StringBuilder()
@@ -88,7 +97,7 @@ object InvoiceDocumentGenerator {
             </div>
             <div class="meta-info">
                 <div>تاریخ صدور: <strong>${PersianUtils.toPersianDigits(currentDate)}</strong></div>
-                ${if (targetCustomer.isNotBlank()) "<div>طرف حساب: <span class=\"customer-pill\">$targetCustomer</span></div>" else "<div>طرف حساب: <strong>مجموع فاکتور های کارکرد و دریافتی</strong></div>"}
+                ${if (targetCustomer.isNotBlank()) "<div>طرف حساب: <span class=\"customer-pill\">$safeTargetCustomer</span></div>" else "<div>طرف حساب: <strong>مجموع فاکتور های کارکرد و دریافتی</strong></div>"}
             </div>
         </div>
 
@@ -103,7 +112,7 @@ object InvoiceDocumentGenerator {
                     <th style="width: 110px;">مدل</th>
                     <th style="width: 130px;">فرمول اجزا و تعداد</th>
                     <th style="width: 90px;">دستمزد هر دست</th>
-                    <th style="width: 105px;">مبلغ کل ($currencyUnit)</th>
+                    <th style="width: 105px;">مبلغ کل ($safeCurrencyUnit)</th>
                     <th>مشخصات و توضیحات</th>
                 </tr>
             </thead>
@@ -115,9 +124,9 @@ object InvoiceDocumentGenerator {
         } else {
             orders.forEachIndexed { i, ord ->
                 val details = listOfNotNull(
-                    if (ord.fabricName.isNotBlank()) "پارچه: ${ord.fabricName}" else null,
-                    if (ord.notes.isNotBlank()) "توضیحات: ${ord.notes}" else null,
-                    if (ord.customerName.isNotBlank() && targetCustomer.isBlank()) "طرف حساب: ${ord.customerName}" else null
+                    if (ord.fabricName.isNotBlank()) "پارچه: ${escapeHtml(ord.fabricName)}" else null,
+                    if (ord.notes.isNotBlank()) "توضیحات: ${escapeHtml(ord.notes)}" else null,
+                    if (ord.customerName.isNotBlank() && targetCustomer.isBlank()) "طرف حساب: ${escapeHtml(ord.customerName)}" else null
                 ).joinToString(" | ")
 
                 val modelHex = if (ord.colorCode.isNotBlank()) ord.colorCode else PersianUtils.getModelColor(ord.modelName)
@@ -130,8 +139,8 @@ object InvoiceDocumentGenerator {
                     <td><strong>${PersianUtils.toPersianDigits(i + 1)}</strong></td>
                     <td>${PersianUtils.toPersianDigits(ord.dateJalali)}</td>
                     <td><strong>#${PersianUtils.toPersianDigits(ord.invoiceNumber)}</strong></td>
-                    <td><span class="badge-model" style="color: #$cleanHex; background: #${cleanHex}22;">${ord.modelName}</span></td>
-                    <td>${PersianUtils.toPersianDigits(ord.countFormula)} (${PersianUtils.formatNumberWithCommas(ord.calculatedUnits)} واحد)</td>
+                    <td><span class="badge-model" style="color: #$cleanHex; background: #${cleanHex}22;">${escapeHtml(ord.modelName)}</span></td>
+                    <td>${escapeHtml(PersianUtils.toPersianDigits(ord.countFormula))} (${PersianUtils.formatNumberWithCommas(ord.calculatedUnits)} واحد)</td>
                     <td>${PersianUtils.formatNumberWithCommas(ord.pricePerSet)}</td>
                     <td class="currency-val">${PersianUtils.formatNumberWithCommas(ord.calculatedTotal)}</td>
                     <td style="font-size: $detailFontSize; text-align: right; line-height: 1.4;">${if (details.isNotBlank()) details else "-"}</td>
@@ -158,7 +167,7 @@ object InvoiceDocumentGenerator {
                         <th style="width: 100px;">روش پرداخت</th>
                         <th style="width: 100px;">کد پیگیری</th>
                         <th>بابت / شرح</th>
-                        <th style="width: 120px;">مبلغ پرداختی ($currencyUnit)</th>
+                        <th style="width: 120px;">مبلغ پرداختی ($safeCurrencyUnit)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -180,10 +189,10 @@ object InvoiceDocumentGenerator {
                 <tr style="background-color: ${if (i % 2 == 1) "#ecfdf5" else "#f0fdf4"}; border-right: 4px solid #059669;">
                     <td><strong>${PersianUtils.toPersianDigits(i + 1)}</strong></td>
                     <td>${PersianUtils.toPersianDigits(pay.dateJalali)}</td>
-                    <td><strong>${pay.customerName.ifBlank { "عمومی" }}</strong></td>
+                    <td><strong>${escapeHtml(pay.customerName.ifBlank { "عمومی" })}</strong></td>
                     <td>$methodFa</td>
-                    <td>${if (pay.referenceNo.isNotBlank()) PersianUtils.toPersianDigits(pay.referenceNo) else "-"}</td>
-                    <td style="font-size: $descFontSize; text-align: right;">$descText</td>
+                    <td>${if (pay.referenceNo.isNotBlank()) escapeHtml(PersianUtils.toPersianDigits(pay.referenceNo)) else "-"}</td>
+                    <td style="font-size: $descFontSize; text-align: right;">${escapeHtml(descText)}</td>
                     <td class="currency-val" style="color: #059669;">${PersianUtils.formatNumberWithCommas(pay.amount)}</td>
                 </tr>
                 """.trimIndent())
@@ -373,7 +382,7 @@ object InvoiceDocumentGenerator {
             canvas.drawText("نمایش جدول کارکرد و دریافتی ها با تاریخ فاکتور", 35f, 60f, textPaint)
 
             val dateStr = "تاریخ صدور: ${PersianUtils.toPersianDigits(currentDate)}"
-            val custStr = if (targetCustomer.isNotBlank()) "طرف حساب: $targetCustomer" else "مجموع فاکتور های کارکرد و دریافتی"
+            val custStr = if (targetCustomer.isNotBlank()) "طرف حساب: $safeTargetCustomer" else "مجموع فاکتور های کارکرد و دریافتی"
             canvas.drawText(dateStr, (pageWidth - 170).toFloat(), 44f, boldPaint)
             canvas.drawText(custStr, (pageWidth - 170).toFloat(), 60f, boldPaint)
 
@@ -397,7 +406,7 @@ object InvoiceDocumentGenerator {
                 canvas.drawText("مدل", 142f, currentY + 14f, tableHeaderPaint)
                 canvas.drawText("اجزا / واحد", 228f, currentY + 14f, tableHeaderPaint)
                 canvas.drawText("دستمزد دست", 308f, currentY + 14f, tableHeaderPaint)
-                canvas.drawText("مبلغ کل ($currencyUnit)", 388f, currentY + 14f, tableHeaderPaint)
+                canvas.drawText("مبلغ کل ($safeCurrencyUnit)", 388f, currentY + 14f, tableHeaderPaint)
                 canvas.drawText("مشخصات / توضیحات", 468f, currentY + 14f, tableHeaderPaint)
                 currentY += 20f
             }
@@ -453,7 +462,7 @@ object InvoiceDocumentGenerator {
                 canvas.drawText(modelDisplay, 142f, currentY + 13f, boldPaint)
                 
                 textPaint.textSize = 7.5f
-                val formulaDisplay = "${PersianUtils.toPersianDigits(ord.countFormula)} (${PersianUtils.formatNumberWithCommas(ord.calculatedUnits)}و)"
+                val formulaDisplay = "${escapeHtml(PersianUtils.toPersianDigits(ord.countFormula))} (${PersianUtils.formatNumberWithCommas(ord.calculatedUnits)}و)"
                 canvas.drawText(formulaDisplay, 228f, currentY + 13f, textPaint)
                 canvas.drawText(PersianUtils.formatNumberWithCommas(ord.pricePerSet), 308f, currentY + 13f, textPaint)
 
@@ -461,7 +470,7 @@ object InvoiceDocumentGenerator {
                 canvas.drawText(PersianUtils.formatNumberWithCommas(ord.calculatedTotal), 388f, currentY + 13f, boldPaint)
                 
                 val detailStr = listOfNotNull(
-                    if (ord.fabricName.isNotBlank()) "پارچه: ${ord.fabricName}" else null,
+                    if (ord.fabricName.isNotBlank()) "پارچه: ${escapeHtml(ord.fabricName)}" else null,
                     if (ord.notes.isNotBlank()) ord.notes else null
                 ).joinToString(" - ")
                 textPaint.textSize = if (detailStr.length > 15) 6.5f else 7.5f
@@ -492,7 +501,7 @@ object InvoiceDocumentGenerator {
                     canvas.drawText("پرداخت‌کننده", 115f, currentY + 14f, tableHeaderPaint)
                     canvas.drawText("روش پرداخت", 215f, currentY + 14f, tableHeaderPaint)
                     canvas.drawText("کد پیگیری", 295f, currentY + 14f, tableHeaderPaint)
-                    canvas.drawText("مبلغ ($currencyUnit)", 385f, currentY + 14f, tableHeaderPaint)
+                    canvas.drawText("مبلغ ($safeCurrencyUnit)", 385f, currentY + 14f, tableHeaderPaint)
                     canvas.drawText("بابت / توضیحات", 475f, currentY + 14f, tableHeaderPaint)
                     currentY += 20f
                 }
