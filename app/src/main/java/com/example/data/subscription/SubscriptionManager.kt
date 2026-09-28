@@ -215,7 +215,7 @@ object SubscriptionManager {
      */
     private suspend fun isOwnerByFirestore(user: com.google.firebase.auth.FirebaseUser): Boolean {
         return try {
-            val db = com.google.firebase.data.firebase.FirebaseService.firestoreInstance()
+            val db = com.example.data.firebase.FirebaseService.firestoreInstance()
                 ?: return false
             val snapshot = db.collection("admin").document("owners")
                 .collection("members").document(user.uid).get().await()
