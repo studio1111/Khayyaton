@@ -13,6 +13,8 @@ import java.util.concurrent.TimeUnit
 object SyncWorkScheduler {
     private const val WORK_PREFIX = "khayyaton_cloud_sync_"
 
+    // The UID is part of the unique work name so an old account's KEEP policy
+    // can never block a newly authenticated account.
     fun workName(uid: String): String = WORK_PREFIX + uid
 
     fun enqueue(context: Context, uid: String) {
