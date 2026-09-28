@@ -232,9 +232,11 @@ object BackupManager {
             }
         }
 
-        val fallbackWorkshopId = workshops.firstOrNull()?.id
-            ?: repository.getAllWorkshopsSync().firstOrNull()?.id
-            ?: 1L
+        val normalizedBackupWorkshops = workshops.map { workshop ->
+            workshop.copy(
+                syncId = workshop.syncId.ifBlank { java.util.UUID.randomUUID().toString() }
+            )
+        }.toMutableList()
 
         val orders = mutableListOf<FurnitureOrder>()
         if (root.has("orders")) {
@@ -245,7 +247,7 @@ object BackupManager {
                 orders += FurnitureOrder(
                     id = id,
                     syncId = obj.optString("syncId", if (id > 0) "ord_" + id else java.util.UUID.randomUUID().toString()),
-                    workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopId = obj.optLong("workshopId", 0L),
                     workshopSyncId = obj.optString("workshopSyncId", ""),
                     orderNumber = obj.optLong("orderNumber", (i + 1).toLong()),
                     invoiceNumber = obj.optString("invoiceNumber", (i + 1).toString()),
@@ -278,7 +280,7 @@ object BackupManager {
                 payments += PaymentRecord(
                     id = obj.optLong("id", 0L),
                     syncId = obj.optString("syncId", "pay_" + obj.optLong("id", 0L)),
-                    workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopId = obj.optLong("workshopId", 0L),
                     workshopSyncId = obj.optString("workshopSyncId", ""),
                     paymentNumber = obj.optLong("paymentNumber", (i + 1).toLong()),
                     amount = obj.optLong("amount", 0L),
@@ -305,7 +307,7 @@ object BackupManager {
                 presets += ModelPreset(
                     id = obj.optLong("id", 0L),
                     syncId = obj.optString("syncId", "pre_" + obj.optLong("id", 0L)),
-                    workshopId = obj.optLong("workshopId", fallbackWorkshopId),
+                    workshopId = obj.optLong("workshopId", 0L),
                     workshopSyncId = obj.optString("workshopSyncId", ""),
                     name = obj.optString("name", "مدل").ifBlank { "مدل" },
                     defaultPricePerSet = obj.optLong("defaultPricePerSet", 0L),
@@ -332,22 +334,75 @@ object BackupManager {
             }
         }
 
-        // Legacy v1/v2 backups did not contain workshops. Create one only as part
-        // of an explicit user restore operation, never during normal app startup.
-        val finalWorkshops = if (workshops.isEmpty() && (orders.isNotEmpty() || payments.isNotEmpty() || presets.isNotEmpty())) {
-            listOf(
-                com.example.model.Workshop(
-                    id = fallbackWorkshopId,
-                    name = "کارگاه بازیابی‌شده"
+        // Explicit backup restore may reconstruct missing workshop identities,
+        // but normal runtime startup never creates a workshop.
+        val referencedWorkshopIds = linkedSetOf<Long>().apply {
+            orders.mapTo(this) { it.workshopId }
+            payments.mapTo(this) { it.workshopId }
+            presets.mapTo(this) { it.workshopId }
+        }.filter { it > 0L }
+
+        val existingWorkshopIds = normalizedBackupWorkshops.map { it.id }.toSet()
+        for (legacyWorkshopId in referencedWorkshopIds) {
+            if (legacyWorkshopId !in existingWorkshopIds) {
+                normalizedBackupWorkshops += com.example.model.Workshop(
+                    id = legacyWorkshopId,
+                    syncId = "backup_workshop_$legacyWorkshopId",
+                    name = if (legacyWorkshopId == 1L) "کارگاه اصلی" else "کارگاه $legacyWorkshopId"
                 )
+            }
+        }
+
+        val orphanRecordsExist =
+            orders.any { it.workshopId <= 0L } ||
+                payments.any { it.workshopId <= 0L } ||
+                presets.any { it.workshopId <= 0L }
+
+        val generatedWorkshopId = if (orphanRecordsExist) {
+            (normalizedBackupWorkshops.maxOfOrNull { it.id } ?: 0L) + 1L
+        } else {
+            0L
+        }
+
+        if (orphanRecordsExist) {
+            normalizedBackupWorkshops += com.example.model.Workshop(
+                id = generatedWorkshopId,
+                syncId = java.util.UUID.randomUUID().toString(),
+                name = "کارگاه بازیابی‌شده"
             )
-        } else workshops
+        }
+
+        val workshopSyncById = normalizedBackupWorkshops.associate { it.id to it.syncId }
+
+        val normalizedOrders = orders.map { order ->
+            val workshopId = order.workshopId.takeIf { it > 0L } ?: generatedWorkshopId
+            order.copy(
+                workshopId = workshopId,
+                workshopSyncId = order.workshopSyncId.ifBlank { workshopSyncById[workshopId].orEmpty() }
+            )
+        }
+
+        val normalizedPayments = payments.map { payment ->
+            val workshopId = payment.workshopId.takeIf { it > 0L } ?: generatedWorkshopId
+            payment.copy(
+                workshopId = workshopId,
+                workshopSyncId = payment.workshopSyncId.ifBlank { workshopSyncById[workshopId].orEmpty() }
+            )
+        }
+
+        val normalizedPresets = presets.map { preset ->
+            val workshopId = preset.workshopId.takeIf { it > 0L } ?: generatedWorkshopId
+            preset.copy(
+                workshopId = workshopId,
+                workshopSyncId = preset.workshopSyncId.ifBlank { workshopSyncById[workshopId].orEmpty() }
+            )
+        }
 
         repository.replaceAllData(
-            workshops = finalWorkshops,
-            orders = orders,
-            payments = payments,
-            presets = presets,
+            workshops = normalizedBackupWorkshops,
+            orders = normalizedOrders,
+            payments = normalizedPayments,
+            presets = normalizedPresets,
             unitRules = rules
         )
 

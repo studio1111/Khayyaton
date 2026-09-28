@@ -11,74 +11,116 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    // Owner/admin is controlled only by Firebase Authentication Custom Claims.
-    // Client-writable Firestore fields such as role/owner_account are never trusted.
+    // Owner/admin access is based only on Firebase Authentication custom claims.
+    // Client-writable Firestore fields are never trusted for authorization.
     function isFirebaseOwner() {
       return signedIn() &&
         (request.auth.token.role == "owner" || request.auth.token.admin == true);
     }
 
-    // Username lookup is intentionally limited to single-document reads.
-    // The client uses this before authentication during registration.
+    function canonicalSyncId(docId) {
+      return request.resource.data.syncId is string
+        && request.resource.data.syncId == docId;
+    }
+
+    // Username reservation used by registration.
     match /usernames/{username} {
+      // Username availability is not exposed to anonymous clients.
       allow get: if signedIn();
       allow list: if false;
 
-      allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid
-        ;
+      // A username can only be claimed for the currently authenticated UID.
+      allow create: if isOwner(request.auth.uid)
+        && request.resource.data.keys().hasOnly(["uid"])
+        && request.resource.data.uid == request.auth.uid;
 
-      // Username ownership is permanent once claimed.
+      // Username ownership is permanent.
       allow update, delete: if false;
     }
 
     match /users/{uid} {
-      allow read, create, update: if isOwner(uid);
-      allow delete: if false;
+      // The app only needs these client-writable profile/sync-summary fields.
+      // Sensitive authorization/subscription fields cannot be changed by the client.
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          "username",
+          "email",
+          "lastSyncAt",
+          "totalOrders",
+          "totalPayments"
+        ]);
 
-      // New writes use the canonical client-generated syncId as the
-      // Firestore document ID. Legacy documents may still be read, but the
-      // new app cannot create/update a document under a mismatched ID.
-      function canonicalId(docId) {
-        return request.resource.data.syncId is string
-          && request.resource.data.syncId == docId;
-      }
+      allow read: if isOwner(uid);
+
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "username",
+          "email",
+          "lastSyncAt",
+          "totalOrders",
+          "totalPayments"
+        ]);
+
+      // User documents are retained; account deletion is handled separately.
+      allow delete: if false;
 
       match /workshops/{docId} {
         allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
         allow delete: if isOwner(uid);
       }
 
       match /orders/{docId} {
         allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
         allow delete: if isOwner(uid);
       }
 
       match /payments/{docId} {
         allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
         allow delete: if isOwner(uid);
       }
 
       match /presets/{docId} {
         allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
         allow delete: if isOwner(uid);
       }
 
       match /unitRules/{docId} {
         allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalId(docId);
+        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
         allow delete: if isOwner(uid);
       }
 
       match /deletions/{docId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+
+        // Tombstones must identify one of the app's supported collections and
+        // use the same deterministic document ID that the sync engine creates.
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly([
+            "collection",
+            "syncId",
+            "deletedAt"
+          ])
+          && request.resource.data.collection in [
+            "workshops",
+            "orders",
+            "payments",
+            "presets",
+            "unitRules"
+          ]
+          && request.resource.data.syncId is string
+          && request.resource.data.syncId != ""
+          && docId == request.resource.data.collection + "_" + request.resource.data.syncId;
+
+        allow delete: if isOwner(uid);
       }
 
-      // Subscription entitlement is server-controlled.
+      // Subscription entitlement is server-controlled. Admin SDK/server code
+      // can write it because server-side Firebase libraries bypass Firestore Rules.
       match /subscription/{docId} {
         allow read: if isOwner(uid);
         allow write: if false;

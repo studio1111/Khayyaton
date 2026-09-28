@@ -34,6 +34,9 @@ class AccountIsolationTest {
                 workshopDao = db.workshopDao()
             )
             repository.saveLocalAccountUid("user-a")
+            repository.markCloudSyncReady("user-a")
+            assertTrue(repository.isCloudSyncReady("user-a"))
+
             repository.replaceAllData(
                 workshops = listOf(Workshop(id = 1L, syncId = "a-ws", name = "کارگاه کاربر اول")),
                 orders = emptyList(),
@@ -46,6 +49,8 @@ class AccountIsolationTest {
 
             assertEquals("user-a", previousUid)
             assertEquals("user-b", repository.getLocalAccountUid())
+            assertEquals(false, repository.isCloudSyncReady("user-a"))
+            assertEquals(false, repository.isCloudSyncReady("user-b"))
             assertTrue(repository.getAllWorkshopsSync().isEmpty())
             assertEquals(0L, repository.getSavedActiveWorkshopId())
         } finally {

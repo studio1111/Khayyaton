@@ -36,21 +36,36 @@ class CloudSyncWorker(
 
             val result = FirebaseService.syncAccount(repository)
             if (result.isSuccess) {
-                Result.success()
+                when (SyncCompletionPolicy.afterSync(repository.hasPendingSyncWork())) {
+                    SyncCompletionPolicy.Decision.RETRY -> Result.retry()
+                    SyncCompletionPolicy.Decision.SUCCESS -> Result.success()
+                }
             } else {
                 val errorMsg = result.exceptionOrNull()?.message.orEmpty()
                 if (
                     errorMsg.contains("منقضی") ||
                     errorMsg.contains("دسترسی لازم") ||
                     errorMsg.contains("وارد حساب") ||
-                    errorMsg.contains("احراز هویت")
+                    errorMsg.contains("احراز هویت") ||
+                    errorMsg.contains("تأیید امنیتی برنامه") ||
+                    errorMsg.contains("کلید ارتباطی برنامه") ||
+                    errorMsg.contains("شناسه همگام‌سازی")
                 ) {
-                    Result.failure()
+                    Result.failure(
+                        androidx.work.workDataOf(
+                            "errorMessage" to errorMsg
+                        )
+                    )
                 } else {
                     Result.retry()
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "CloudSyncWorker",
+                e.message ?: "خطای نامشخص هنگام همگام‌سازی اطلاعات.",
+                e
+            )
             Result.retry()
         }
     }

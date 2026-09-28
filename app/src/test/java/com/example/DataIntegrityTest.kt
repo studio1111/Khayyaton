@@ -185,6 +185,93 @@ class DataIntegrityTest {
     }
 
     @Test
+    fun `blank sync identities are repaired and requeued`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val (db, repo) = repository(context)
+        try {
+            val workshop = Workshop(
+                id = 1L,
+                name = "کارگاه تست",
+                syncId = ""
+            )
+            val order = FurnitureOrder(
+                id = 10L,
+                workshopId = 1L,
+                workshopSyncId = "",
+                syncId = "",
+                orderNumber = 1L,
+                invoiceNumber = "1",
+                modelName = "مدل تست",
+                pricePerSet = 100L,
+                countFormula = "1",
+                calculatedUnits = 1.0,
+                calculatedTotal = 100L,
+                dateJalali = "۱۴۰۵/۰۷/۰۶",
+                dateGregorian = "2026-09-28",
+                customerName = "تست"
+            )
+            db.workshopDao().insertWorkshop(workshop)
+            db.orderDao().insertOrder(order)
+
+            assertTrue(repo.repairMissingSyncIdentities())
+
+            val fixedWorkshop = db.workshopDao().getWorkshopById(1L)!!
+            val fixedOrder = db.orderDao().getOrderById(10L)!!
+            assertTrue(fixedWorkshop.syncId.isNotBlank())
+            assertTrue(fixedOrder.syncId.isNotBlank())
+            assertEquals(fixedWorkshop.syncId, fixedOrder.workshopSyncId)
+            assertEquals(com.example.data.sync.RecordSyncStatus.PENDING, fixedOrder.syncStatus)
+            assertTrue(repo.hasPendingSyncWork())
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun `legacy backup reconstructs every referenced workshop instead of using workshop one`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val (db, repo) = repository(context)
+        try {
+            val root = JSONObject().apply {
+                put("version", 1)
+                put("workshops", org.json.JSONArray())
+                put("orders", org.json.JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("id", 10L)
+                        put("syncId", "order-42")
+                        put("workshopId", 42L)
+                        put("orderNumber", 1L)
+                        put("invoiceNumber", "1")
+                        put("modelName", "مدل ۴۲")
+                    })
+                    put(JSONObject().apply {
+                        put("id", 11L)
+                        put("syncId", "order-43")
+                        put("workshopId", 43L)
+                        put("orderNumber", 2L)
+                        put("invoiceNumber", "2")
+                        put("modelName", "مدل ۴۳")
+                    })
+                })
+                put("payments", org.json.JSONArray())
+                put("presets", org.json.JSONArray())
+                put("unitRules", org.json.JSONArray())
+            }
+
+            BackupManager.restoreFromJson(root.toString(), repo)
+
+            val workshops = repo.getAllWorkshopsSync()
+            val orders = repo.getAllOrdersSync()
+            assertEquals(2, workshops.size)
+            assertEquals(setOf(42L, 43L), workshops.map { it.id }.toSet())
+            assertEquals(42L, orders.first { it.syncId == "order-42" }.workshopId)
+            assertEquals(43L, orders.first { it.syncId == "order-43" }.workshopId)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
     fun `backup JSON contains full current data schema`() {
         val order = FurnitureOrder(
             id = 1L,

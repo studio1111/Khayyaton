@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   build:
@@ -116,12 +117,36 @@ jobs:
           path: Khayyaton-SHA256-${{ github.sha }}.txt
           if-no-files-found: error
 
-      - name: Publish GitHub Release
+      - name: Remove previous GitHub releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "release-${GITHUB_RUN_NUMBER}"             --target "${GITHUB_SHA}"             --title "Khayyaton Release ${GITHUB_RUN_NUMBER}"             --notes "Production release built from commit ${GITHUB_SHA}. Includes signed AAB, signed APK, complete source ZIP, and SHA-256 checksums."             "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB"             "app/build/outputs/apk/release/app-release.apk#Khayyaton APK"             "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"             "Khayyaton-SHA256-${GITHUB_SHA}.txt#Khayyaton SHA-256"
+          gh release list --limit 1000 --json tagName --jq '.[].tagName' |
+            while IFS= read -r tag; do
+              [ -z "$tag" ] && continue
+              gh release delete "$tag" --yes --cleanup-tag || true
+            done
+
+      - name: Publish GitHub Release 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "release-1"             --target "${GITHUB_SHA}"             --title "Khayyaton Release 1"             --notes "نسخه نهایی خیاطان، شماره ۱. ساخته‌شده از commit ${GITHUB_SHA}. شامل AAB امضاشده، APK امضاشده، سورس کامل و SHA-256."             "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB"             "app/build/outputs/apk/release/app-release.apk#Khayyaton APK"             "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"             "Khayyaton-SHA256-${GITHUB_SHA}.txt#Khayyaton SHA-256"
+
+      - name: Keep only this final workflow run
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run list --repo "${GITHUB_REPOSITORY}" --limit 1000 --json databaseId --jq '.[].databaseId' |
+            while IFS= read -r run_id; do
+              [ -z "$run_id" ] && continue
+              [ "$run_id" = "${GITHUB_RUN_ID}" ] && continue
+              gh run delete "$run_id" --repo "${GITHUB_REPOSITORY}" || true
+            done
 
       - name: Remove keystore
         if: always()
