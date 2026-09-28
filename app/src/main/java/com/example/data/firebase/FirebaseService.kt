@@ -20,7 +20,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.PersistentCacheSettings
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 
 object FirebaseService {
@@ -37,8 +36,7 @@ object FirebaseService {
                         .setApplicationId("1:15543905804:android:8fc6393c86598be4310829")
                         .setApiKey("AIzaSyAmLQ7SPiYxhMvquyV01xYD8MZZjezknoY")
                         .setProjectId("khayyaton-26abc")
-                        .setStorageBucket("khayyaton-26abc.firebasestorage.app")
-                        .setGcmSenderId("15543905804")
+                           .setGcmSenderId("15543905804")
                         .build()
                     FirebaseApp.initializeApp(context, options)
                     if (BuildConfig.DEBUG) Log.d(TAG, "Firebase initialized with explicit options")
@@ -88,14 +86,6 @@ object FirebaseService {
             FirebaseFirestore.getInstance()
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.w(TAG, "Firebase Firestore not available", e)
-            null
-        }
-
-    private val storage: FirebaseStorage?
-        get() = try {
-            FirebaseStorage.getInstance()
-        } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Firebase Storage not available", e)
             null
         }
 
@@ -675,9 +665,7 @@ object FirebaseService {
                     name = (data["name"] as? String).orEmpty().ifBlank { "کارگاه" },
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
                     updatedAt = readUpdatedAt(data),
-                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
-                    fileUrl = data["fileUrl"] as? String,
-                    storagePath = data["storagePath"] as? String
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
             val fallbackWorkshopId = restoredWorkshops.firstOrNull()?.id ?: 1L
@@ -715,9 +703,7 @@ object FirebaseService {
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
                     updatedAt = readUpdatedAt(data),
-                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
-                    fileUrl = data["fileUrl"] as? String,
-                    storagePath = data["storagePath"] as? String
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
 
@@ -750,9 +736,7 @@ object FirebaseService {
                     relatedOrderSyncId = data["relatedOrderSyncId"] as? String ?: "",
                     createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
                     updatedAt = readUpdatedAt(data),
-                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
-                    fileUrl = data["fileUrl"] as? String,
-                    storagePath = data["storagePath"] as? String
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
 
@@ -778,9 +762,7 @@ object FirebaseService {
                     colorCode = data["colorCode"] as? String ?: "#2563EB",
                     description = data["description"] as? String ?: "",
                     updatedAt = readUpdatedAt(data),
-                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
-                    fileUrl = data["fileUrl"] as? String,
-                    storagePath = data["storagePath"] as? String
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
 
@@ -798,9 +780,7 @@ object FirebaseService {
                     calculatedUnits = (data["calculatedUnits"] as? Number)?.toDouble() ?: 0.0,
                     isEnabled = data["isEnabled"] as? Boolean ?: true,
                     updatedAt = readUpdatedAt(data),
-                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED,
-                    fileUrl = data["fileUrl"] as? String,
-                    storagePath = data["storagePath"] as? String
+                    syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
             }
 

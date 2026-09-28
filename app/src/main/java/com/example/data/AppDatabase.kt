@@ -17,8 +17,6 @@ import kotlinx.coroutines.flow.Flow
 import androidx.room.withTransaction
 import androidx.room.TypeConverters
 import com.example.data.sync.DeletedIdDao
-import com.example.data.sync.UploadQueueDao
-import com.example.data.sync.PendingDeleteDao
 import com.example.data.sync.DocumentCacheDao
 import com.example.data.sync.SyncStatusConverters
 
@@ -172,8 +170,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun unitRuleDao(): UnitRuleDao
     abstract fun workshopDao(): WorkshopDao
     abstract fun deletedIdDao(): DeletedIdDao
-    abstract fun uploadQueueDao(): UploadQueueDao
-    abstract fun pendingDeleteDao(): PendingDeleteDao
     abstract fun documentCacheDao(): DocumentCacheDao
 
     companion object {
@@ -296,8 +292,7 @@ class WorkshopRepository(
                 unitRuleDao.getPendingSync().isNotEmpty()
         return pendingRecords ||
             database.deletedIdDao().getPending().isNotEmpty() ||
-            database.uploadQueueDao().pending().isNotEmpty() ||
-            database.pendingDeleteDao().pending().isNotEmpty()
+
     }
 
     fun getApplicationContext(): android.content.Context? = context?.applicationContext

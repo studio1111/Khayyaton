@@ -32,7 +32,7 @@ class SyncManager(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectivity = ConnectivityMonitor(context)
-    // Firebase Storage در نسخه رایگان استفاده نمی‌شود؛ فایل‌ها فقط به‌صورت محلی نگهداری می‌شوند.
+    // Legacy file-queue tables are retained only for schema compatibility and are not active sync work.
     private val listeners = CopyOnWriteArrayList<com.google.firebase.firestore.ListenerRegistration>()
     private var authListener: FirebaseAuth.AuthStateListener? = null
     private var observeJob: Job? = null
@@ -110,12 +110,10 @@ class SyncManager(
     private fun observePendingCount() {
         scope.launch {
             combine(
-                database.uploadQueueDao().pendingCount(),
-                database.pendingDeleteDao().pendingCount(),
                 database.documentCacheDao().pendingWritesCount(),
                 database.deletedIdDao().countPendingFlow()
-            ) { uploads, deletes, pendingWrites, tombstones ->
-                uploads + deletes + pendingWrites + tombstones
+            ) { pendingWrites, tombstones ->
+                pendingWrites + tombstones
             }.collect { _pendingCount.value = it }
         }
     }
