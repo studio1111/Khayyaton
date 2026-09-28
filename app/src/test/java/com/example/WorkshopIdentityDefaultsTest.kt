@@ -1,15 +1,9 @@
 package com.example
 
-import android.content.Context
-import androidx.room.Room
-import androidx.test.core.app.ApplicationProvider
-import com.example.data.AppDatabase
-import com.example.data.WorkshopRepository
 import com.example.model.FurnitureOrder
 import com.example.model.ModelPreset
 import com.example.model.PaymentRecord
 import com.example.model.Workshop
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
