@@ -152,6 +152,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 if (switchingUser) {
                     repository.clearAllDomainData()
                     repository.clearLocalAccountUid()
+                    repository.clearCloudSyncReady()
                     customUsername.value = ""
                     activeWorkshopId.value = 0L
                     repository.saveActiveWorkshopId(0L)
@@ -182,6 +183,12 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                     localUid == null ||
                     (localOrders.isEmpty() && localPayments.isEmpty() && localPresets.isEmpty() && currentWorkshops.isEmpty()) ||
                     onlyPlaceholderWorkshop
+
+                if (shouldDownload) {
+                    repository.clearCloudSyncReady()
+                } else {
+                    repository.markCloudSyncReady(user.uid)
+                }
 
                 performAutoSync(user, shouldDownload = shouldDownload)
 
