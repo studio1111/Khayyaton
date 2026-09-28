@@ -704,8 +704,10 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         // Publish the authenticated Firebase user immediately so the UI leaves
         // the auth screen before account-scoped background work starts.
         currentUser.value = user
+        // syncSubscriptionWithFirebase() already refreshes Bazaar purchases after
+        // owner/trial resolution. Calling the Bazaar refresh a second time here
+        // creates duplicate callbacks and unnecessary concurrent state updates.
         SubscriptionManager.syncSubscriptionWithFirebase()
-        SubscriptionManager.refreshSubscriptionFromBazaar()
 
         viewModelScope.launch {
             try {
