@@ -862,7 +862,7 @@ fun OrderDialog(
                             val units = PersianUtils.toEnglishDigits(unitsPerSet).toDoubleOrNull() ?: 6.0
                             val order = FurnitureOrder(
                                 id = initialOrder?.id ?: 0L,
-                                workshopId = initialOrder?.workshopId ?: 1L,
+                                workshopId = initialOrder?.workshopId ?: 0L,
                                 workshopSyncId = initialOrder?.workshopSyncId ?: "",
                                 syncId = initialOrder?.syncId ?: java.util.UUID.randomUUID().toString(),
                                 orderNumber = initialOrder?.orderNumber ?: nextOrderNumber,
