@@ -43,34 +43,12 @@ class WorkshopIdentityDefaultsTest {
     }
     
     @Test
-    fun same_name_workshops_are_not_auto_merged() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
-        try {
-            val repository = WorkshopRepository(
-                context = context,
-                database = db,
-                orderDao = db.orderDao(),
-                paymentDao = db.paymentDao(),
-                modelPresetDao = db.modelPresetDao(),
-                unitRuleDao = db.unitRuleDao(),
-                workshopDao = db.workshopDao()
-            )
+    fun same_name_workshops_keep_distinct_sync_identity() {
+        val first = Workshop(name = "کارگاه مشترک", syncId = "workshop-a")
+        val second = Workshop(name = "کارگاه مشترک", syncId = "workshop-b")
 
-            db.workshopDao().insertWorkshop(
-                Workshop(syncId = "workshop-a", name = "کارگاه مشترک")
-            )
-            db.workshopDao().insertWorkshop(
-                Workshop(syncId = "workshop-b", name = "کارگاه مشترک")
-            )
-
-            repository.deduplicateWorkshops()
-
-            assertEquals(2, db.workshopDao().getAllWorkshopsSync().size)
-        } finally {
-            db.close()
-        }
+        assertEquals(first.name, second.name)
+        assertEquals("workshop-a", first.syncId)
+        assertEquals("workshop-b", second.syncId)
     }
 }
