@@ -528,63 +528,16 @@ class WorkshopRepository(
     suspend fun getWorkshopById(id: Long): Workshop? =
         workshopDao.getWorkshopById(id)
 
+    /**
+     * Workshop identity is the stable syncId, not the display name.
+     * Never auto-merge or delete user-created workshops solely because their
+     * names match. Older releases used name-based cleanup, which could destroy
+     * two legitimate workshops that happened to share a name.
+     */
     suspend fun deduplicateWorkshops() {
-        val all = workshopDao.getAllWorkshopsSync()
-        if (all.size <= 1) return
-
-        val seenNames = mutableMapOf<String, Long>()
-        val defaultWorkshops = mutableListOf<Workshop>()
-        val toDelete = mutableListOf<Workshop>()
-
-        for (ws in all) {
-            val normName = ws.name.trim().lowercase(java.util.Locale.ROOT)
-            val isDefaultName = normName == "کارگاه اصلی" || normName == "کارگاه"
-
-            if (isDefaultName) {
-                defaultWorkshops.add(ws)
-            } else {
-                val existingMasterId = seenNames[normName]
-                if (existingMasterId != null) {
-                    toDelete.add(ws)
-                } else {
-                    seenNames[normName] = ws.id
-                }
-            }
-        }
-
-        // Ensure default workshops NEVER exist more than one:
-        if (defaultWorkshops.size > 1) {
-            for (i in 1 until defaultWorkshops.size) {
-                toDelete.add(defaultWorkshops[i])
-            }
-        }
-
-        for (dup in toDelete) {
-            val normName = dup.name.trim().lowercase(java.util.Locale.ROOT)
-            val targetId = if (normName in listOf("کارگاه اصلی", "کارگاه")) {
-                defaultWorkshops.first().id
-            } else {
-                seenNames[normName] ?: all.first().id
-            }
-
-            if (dup.id != targetId) {
-                val dupOrders = orderDao.getOrdersByWorkshopSync(dup.id)
-                for (ord in dupOrders) {
-                    orderDao.updateOrder(ord.copy(workshopId = targetId))
-                }
-                val dupPayments = paymentDao.getPaymentsByWorkshopSync(dup.id)
-                for (pay in dupPayments) {
-                    paymentDao.updatePayment(pay.copy(workshopId = targetId))
-                }
-                val dupPresets = modelPresetDao.getPresetsByWorkshopSync(dup.id)
-                for (pre in dupPresets) {
-                    modelPresetDao.updatePreset(pre.copy(workshopId = targetId))
-                }
-
-                if (getLocalAccountUid() != null) recordCloudDeletion("workshops", dup.syncId)
-                workshopDao.deleteWorkshopById(dup.id)
-            }
-        }
+        // Intentionally no-op. Existing duplicates are kept so no user data is
+        // silently reassigned or deleted. Users can explicitly remove a
+        // workshop from the management screen.
     }
 
     suspend fun saveWorkshop(workshop: Workshop): Long {
