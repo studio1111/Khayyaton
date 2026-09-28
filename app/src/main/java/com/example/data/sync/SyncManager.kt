@@ -65,7 +65,7 @@ class SyncManager(
                     val localUid = repository.getLocalAccountUid()
 
                     if (localUid != null && localUid != firebaseUser.uid) {
-                        SyncWorkScheduler.cancel(context, localUid)
+                        localUid.let { SyncWorkScheduler.cancel(context, it) }
                         repository.clearAccountLocalState()
                     }
 
