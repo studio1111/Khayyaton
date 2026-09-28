@@ -61,7 +61,7 @@ data class FurnitureOrder(
 data class PaymentRecord(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val workshopId: Long = 1L,
+    val workshopId: Long = 0L,
     val workshopSyncId: String = "",
     val syncId: String = java.util.UUID.randomUUID().toString(),
     val paymentNumber: Long,
@@ -90,7 +90,7 @@ data class PaymentRecord(
 data class ModelPreset(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val workshopId: Long = 1L,
+    val workshopId: Long = 0L,
     val workshopSyncId: String = "",
     val syncId: String = java.util.UUID.randomUUID().toString(),
     val name: String,
