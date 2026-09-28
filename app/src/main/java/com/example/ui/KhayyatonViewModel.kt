@@ -129,7 +129,14 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
             if (user != null) {
                 val context = repository.getApplicationContext()
-                val previousUid = repository.ensureLocalAccount(user.uid)
+                val previousUid = try {
+                    repository.ensureLocalAccount(user.uid)
+                } catch (e: com.example.data.sync.PendingAccountSwitchException) {
+                    FirebaseService.signOut()
+                    currentUser.value = null
+                    autoSyncStatusMessage.value = e.message
+                    return@launch
+                }
                 if (previousUid != null) {
                     switchedAccount = true
                     if (context != null) SyncWorkScheduler.cancel(context, previousUid)
