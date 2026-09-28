@@ -701,60 +701,75 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
      * Room remains the only source used by the UI.
      */
     fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
+        // Publish the authenticated Firebase user immediately so the UI leaves
+        // the auth screen before account-scoped background work starts.
+        currentUser.value = user
         SubscriptionManager.syncSubscriptionWithFirebase()
         SubscriptionManager.refreshSubscriptionFromBazaar()
 
         viewModelScope.launch {
-            val context = repository.getApplicationContext() ?: return@launch
-            val previousUid = try {
-                repository.ensureLocalAccount(user.uid)
-            } catch (e: com.example.data.sync.PendingAccountSwitchException) {
-                FirebaseService.signOut()
-                currentUser.value = null
-                autoSyncStatusMessage.value = e.message
-                return@launch
-            }
+            try {
+                val context = repository.getApplicationContext()
+                    ?: throw IllegalStateException("محیط برنامه برای ورود آماده نیست.")
 
-            if (previousUid != null) {
-                SyncWorkScheduler.cancel(context, previousUid)
-                repository.saveActiveWorkshopId(0L)
-                activeWorkshopId.value = 0L
-                customUsername.value = ""
-                clearFilters()
-            }
+                val previousUid = try {
+                    repository.ensureLocalAccount(user.uid)
+                } catch (e: com.example.data.sync.PendingAccountSwitchException) {
+                    FirebaseService.signOut()
+                    currentUser.value = null
+                    autoSyncStatusMessage.value = e.message
+                    return@launch
+                }
 
-            currentUser.value = user
+                if (previousUid != null) {
+                    SyncWorkScheduler.cancel(context, previousUid)
+                    repository.saveActiveWorkshopId(0L)
+                    activeWorkshopId.value = 0L
+                    customUsername.value = ""
+                    clearFilters()
+                }
 
-            // Every Firebase account gets the four mandatory base unit rules.
-            // Recreate only missing defaults, without removing any user-defined rules.
-            repository.insertDefaultUnitRulesIfEmpty()
+                // Every Firebase account gets the four mandatory base unit rules.
+                repository.insertDefaultUnitRulesIfEmpty()
 
-            val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
-                ?: customUsername.value.takeIf { it.isNotBlank() }
-                ?: user.displayName?.takeIf { it.isNotBlank() }
+                val chosenName = preferredUsername?.takeIf { it.isNotBlank() }
+                    ?: customUsername.value.takeIf { it.isNotBlank() }
+                    ?: user.displayName?.takeIf { it.isNotBlank() }
 
-            if (!chosenName.isNullOrBlank()) {
-                updateCustomUsername(chosenName)
-            }
+                if (!chosenName.isNullOrBlank()) {
+                    updateCustomUsername(chosenName)
+                }
 
-            // A workshop is created only when a name was explicitly supplied
-            // by the user during registration. No automatic default workshop.
-            if (!workshopName.isNullOrBlank()) {
-                val trimmed = workshopName.trim()
-                val existing = repository.getAllWorkshopsSync()
-                if (existing.isEmpty()) {
-                    createWorkshop(trimmed)
-                } else if (
-                    existing.size == 1 &&
-                    existing.first().name.trim() in setOf("کارگاه اصلی", "کارگاه") &&
-                    repository.getAllOrdersSync().isEmpty() &&
-                    repository.getAllPaymentsSync().isEmpty()
-                ) {
-                    renameWorkshop(existing.first().id, trimmed)
+                // A workshop is created only when a name was explicitly supplied.
+                if (!workshopName.isNullOrBlank()) {
+                    val trimmed = workshopName.trim()
+                    val existing = repository.getAllWorkshopsSync()
+                    if (existing.isEmpty()) {
+                        createWorkshop(trimmed)
+                    } else if (
+                        existing.size == 1 &&
+                        existing.first().name.trim() in setOf("کارگاه اصلی", "کارگاه") &&
+                        repository.getAllOrdersSync().isEmpty() &&
+                        repository.getAllPaymentsSync().isEmpty()
+                    ) {
+                        renameWorkshop(existing.first().id, trimmed)
+                    }
+                }
+
+                autoSyncStatusMessage.value = null
+                performAutoSync(user)
+            } catch (e: Exception) {
+                // Login itself succeeded. A Room/Sync failure must not crash the
+                // app or log the user out. Surface a Persian status instead.
+                if (currentUser.value?.uid == user.uid) {
+                    autoSyncStatusMessage.value =
+                        e.message?.takeIf { it.isNotBlank() }
+                            ?: "ورود انجام شد، اما آماده‌سازی اطلاعات حساب کامل نشد."
+                }
+                if (com.example.BuildConfig.DEBUG) {
+                    android.util.Log.e("KhayyatonViewModel", "Post-login initialization failed", e)
                 }
             }
-
-            performAutoSync(user)
         }
     }
 
