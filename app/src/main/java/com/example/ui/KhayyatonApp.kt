@@ -95,6 +95,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
             KhayyatonTheme(themeMode = themeMode) {
                 GlassyAuthScreen(
                     isFirstLaunch = true,
+                    onBeforeAuth = { viewModel.prepareForAccountSwitch() },
                     onAuthSuccess = { user, username, workshopName ->
                         viewModel.onUserLoggedIn(user, username, workshopName)
                     }
