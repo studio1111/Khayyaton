@@ -509,7 +509,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     fun savePreset(preset: ModelPreset) {
         viewModelScope.launch {
             val wsId = activeWorkshopId.value
-            val presetToSave = if (preset.workshopId <= 0L) preset.copy(workshopId = wsId) else preset
+            val presetToSave = PresetWorkshopPolicy.forSave(preset, wsId)
             repository.savePreset(presetToSave)
             manuallyDeletedModelNames.value = manuallyDeletedModelNames.value - preset.name.trim().lowercase()
             // When updating a preset's color, also update existing orders for this model in this workshop
