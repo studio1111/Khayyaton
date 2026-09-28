@@ -767,7 +767,12 @@ class WorkshopRepository(
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: existingWorkshopBySync
                     ?: legacyWorkshopIdMap[remote.workshopId]
-                    ?: remote.workshopId
+                    ?: workshopDao.getWorkshopById(remote.workshopId)?.id
+                    ?: 0L
+
+                // Never attach a cloud child record to a fabricated workshop.
+                // A missing parent is retried by the next account sync.
+                if (localWorkshopId <= 0L) continue
 
                 val existing = orderDao.getOrderBySyncId(remote.syncId)
                 val localId = if (existing == null) {
@@ -797,7 +802,11 @@ class WorkshopRepository(
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: existingWorkshopBySync
                     ?: legacyWorkshopIdMap[remote.workshopId]
-                    ?: remote.workshopId
+                    ?: workshopDao.getWorkshopById(remote.workshopId)?.id
+                    ?: 0L
+
+                if (localWorkshopId <= 0L) continue
+
                 val existingOrderBySync = remote.relatedOrderSyncId
                     .takeIf { it.isNotBlank() }
                     ?.let { orderDao.getOrderBySyncId(it)?.id }
@@ -839,7 +848,10 @@ class WorkshopRepository(
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: existingWorkshopBySync
                     ?: legacyWorkshopIdMap[remote.workshopId]
-                    ?: remote.workshopId
+                    ?: workshopDao.getWorkshopById(remote.workshopId)?.id
+                    ?: 0L
+
+                if (localWorkshopId <= 0L) continue
 
                 val existing = modelPresetDao.getPresetBySyncId(remote.syncId)
                 if (existing == null) {
