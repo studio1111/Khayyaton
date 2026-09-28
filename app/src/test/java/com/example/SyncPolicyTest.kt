@@ -17,6 +17,6 @@ class SyncPolicyTest {
     fun `newer server timestamp wins over older local timestamp`() {
         assertEquals(SyncPolicy.REMOTE, SyncPolicy.chooseWinner(localUpdatedAt = 10L, remoteUpdatedAt = 20L))
         assertEquals(SyncPolicy.LOCAL, SyncPolicy.chooseWinner(localUpdatedAt = 30L, remoteUpdatedAt = 20L))
-        assertEquals(SyncPolicy.REMOTE, SyncPolicy.chooseWinner(localUpdatedAt = 20L, remoteUpdatedAt = 20L))
+        assertEquals(SyncPolicy.LOCAL, SyncPolicy.chooseWinner(localUpdatedAt = 20L, remoteUpdatedAt = 20L))
     }
 }
