@@ -155,9 +155,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
                 if (localUid != null && localUid != user.uid) {
                     if (context != null) SyncWorkScheduler.cancel(context, localUid)
-                    repository.clearAllDomainData()
-                    repository.clearSyncState()
-                    repository.clearLocalAccountUid()
+                    repository.clearAccountLocalState()
                     customUsername.value = ""
                     activeWorkshopId.value = 0L
                     repository.saveActiveWorkshopId(0L)
@@ -662,9 +660,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
 
             if (switchingUser) {
                 previousUid?.let { SyncWorkScheduler.cancel(context, it) }
-                repository.clearAllDomainData()
-                repository.clearSyncState()
-                repository.clearLocalAccountUid()
+                repository.clearAccountLocalState()
                 repository.saveActiveWorkshopId(0L)
                 activeWorkshopId.value = 0L
                 customUsername.value = ""
@@ -716,9 +712,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         SubscriptionManager.clearCachedUserState()
 
         viewModelScope.launch {
-            repository.clearAllDomainData()
-            repository.clearSyncState()
-            repository.clearLocalAccountUid()
+            repository.clearAccountLocalState()
             repository.saveActiveWorkshopId(0L)
             activeWorkshopId.value = 0L
             customUsername.value = ""
