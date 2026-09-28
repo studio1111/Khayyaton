@@ -83,9 +83,10 @@ fun PaymentDialog(
         mutableStateOf(initialPayment?.dateJalali ?: PersianUtils.getTodayJalaliString())
     }
     var isDatePickerOpen by remember { mutableStateOf(false) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     val currentAmount = remember(amountStr) {
-        PersianUtils.toEnglishDigits(amountStr).toLongOrNull() ?: 0L
+        PersianUtils.toEnglishDigits(amountStr).toLongOrNull()
     }
 
     val bankSuggestions = remember(existingPayments) {
@@ -516,54 +517,74 @@ fun PaymentDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
 
                 // Footer Buttons
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(text = "انصراف", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Button(
-                        onClick = {
-                            if (currentAmount <= 0) return@Button
-                            val pay = PaymentRecord(
-                                id = initialPayment?.id ?: 0L,
-                                workshopId = initialPayment?.workshopId ?: 0L,
-                                workshopSyncId = initialPayment?.workshopSyncId ?: "",
-                                syncId = initialPayment?.syncId ?: java.util.UUID.randomUUID().toString(),
-                                paymentNumber = initialPayment?.paymentNumber ?: nextPaymentNumber,
-                                amount = currentAmount,
-                                dateJalali = dateJalali,
-                                dateGregorian = initialPayment?.dateGregorian ?: PersianUtils.getTodayGregorianString(),
-                                customerName = customerName.trim().ifBlank { "پرداخت‌کننده عمومی" },
-                                description = description.trim().ifBlank { "واریزی وجه" },
-                                paymentType = paymentType,
-                                referenceNo = referenceNo.trim(),
-                                bankName = bankName.trim(),
-                                cardNumber = cardNumber.trim(),
-                                relatedOrderId = initialPayment?.relatedOrderId,
-                                relatedOrderSyncId = initialPayment?.relatedOrderSyncId ?: "",
-                                createdAt = initialPayment?.createdAt ?: System.currentTimeMillis()
-                            )
-                            onSave(pay)
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Emerald600,
-                            contentColor = Color.White
-                        )
-                    ) {
+                    validationError?.let { message ->
                         Text(
-                            text = if (initialPayment != null) "بروزرسانی سند" else "ثبت نهایی دریافتی",
-                            fontSize = 12.sp,
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(text = "انصراف", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Button(
+                            onClick = {
+                                validationError = null
+                                val amount = currentAmount
+                                if (amount == null || amount <= 0L) {
+                                    validationError = "مبلغ دریافتی را به‌صورت عددی بزرگ‌تر از صفر وارد کنید."
+                                    return@Button
+                                }
+
+                                val pay = PaymentRecord(
+                                    id = initialPayment?.id ?: 0L,
+                                    workshopId = initialPayment?.workshopId ?: 0L,
+                                    workshopSyncId = initialPayment?.workshopSyncId ?: "",
+                                    syncId = initialPayment?.syncId ?: java.util.UUID.randomUUID().toString(),
+                                    paymentNumber = initialPayment?.paymentNumber ?: nextPaymentNumber,
+                                    amount = amount,
+                                    dateJalali = dateJalali,
+                                    dateGregorian = initialPayment?.dateGregorian ?: PersianUtils.getTodayGregorianString(),
+                                    customerName = customerName.trim().ifBlank { "پرداخت‌کننده عمومی" },
+                                    description = description.trim().ifBlank { "واریزی وجه" },
+                                    paymentType = paymentType,
+                                    referenceNo = referenceNo.trim(),
+                                    bankName = bankName.trim(),
+                                    cardNumber = cardNumber.trim(),
+                                    relatedOrderId = initialPayment?.relatedOrderId,
+                                    relatedOrderSyncId = initialPayment?.relatedOrderSyncId ?: "",
+                                    createdAt = initialPayment?.createdAt ?: System.currentTimeMillis()
+                                )
+                                onSave(pay)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Emerald600,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(
+                                text = if (initialPayment != null) "بروزرسانی سند" else "ثبت نهایی دریافتی",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
