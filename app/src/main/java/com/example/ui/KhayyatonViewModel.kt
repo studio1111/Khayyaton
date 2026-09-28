@@ -35,7 +35,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val activeWorkshopId = MutableStateFlow(0L)
 
     val activeWorkshop: StateFlow<com.example.model.Workshop?> = combine(workshops, activeWorkshopId) { list, id ->
-        list.find { it.id == id } ?: list.firstOrNull()
+        list.find { it.id == id }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val orders: StateFlow<List<FurnitureOrder>> = combine(repository.orders, activeWorkshopId) { all, currentWsId ->
