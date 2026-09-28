@@ -907,6 +907,14 @@ class WorkshopRepository(
             unitRuleDao.clearAll()
             workshopDao.clearAll()
 
+            // A manual restore is an explicit user action. Old deletion
+            // tombstones and realtime cache entries must not override the
+            // restored snapshot.
+            database.deletedIdDao().clearAll()
+            database.documentCacheDao().clearAll()
+            database.uploadQueueDao().clearAll()
+            database.pendingDeleteDao().clearAll()
+
             if (normalizedWorkshops.isNotEmpty()) workshopDao.insertAll(normalizedWorkshops)
             if (normalizedOrders.isNotEmpty()) orderDao.insertAll(normalizedOrders)
             if (normalizedPayments.isNotEmpty()) paymentDao.insertAll(normalizedPayments)
