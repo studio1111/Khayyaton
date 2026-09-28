@@ -14,6 +14,8 @@ import com.example.model.Workshop
 import com.example.model.CalendarType
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import androidx.room.withTransaction
 import androidx.room.TypeConverters
 import com.example.data.sync.DeletedIdDao
@@ -201,6 +203,7 @@ class WorkshopRepository(
     val unitRuleDao: UnitRuleDao,
     val workshopDao: WorkshopDao
 ) {
+    private val accountMutex = Mutex()
     private val prefs by lazy {
         context?.getSharedPreferences("khayyaton_prefs", android.content.Context.MODE_PRIVATE)
     }
@@ -306,6 +309,19 @@ class WorkshopRepository(
 
     fun saveLocalAccountUid(uid: String) {
         prefs?.edit()?.putString("local_account_uid", uid)?.apply()
+    }
+
+    /**
+     * Switches local storage to the supplied Firebase account atomically.
+     * Returns the previous UID when a real account switch occurred.
+     */
+    suspend fun ensureLocalAccount(uid: String): String? = accountMutex.withLock {
+        val previousUid = getLocalAccountUid()
+        if (previousUid != null && previousUid != uid) {
+            clearAccountLocalState()
+        }
+        saveLocalAccountUid(uid)
+        previousUid?.takeIf { it != uid }
     }
 
     fun clearLocalAccountUid() {
