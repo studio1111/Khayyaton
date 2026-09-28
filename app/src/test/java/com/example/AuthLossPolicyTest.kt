@@ -2,7 +2,6 @@ package com.example
 
 import com.example.data.sync.AuthLossPolicy
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthLossPolicyTest {
@@ -12,7 +11,7 @@ class AuthLossPolicyTest {
     }
 
     @Test
-    fun clean_local_state_can_be_cleared_after_auth_loss() {
-        assertTrue(AuthLossPolicy.shouldClearLocalData(hasPendingSyncWork = false))
+    fun passive_auth_loss_never_clears_local_state() {
+        assertFalse(AuthLossPolicy.shouldClearLocalData(hasPendingSyncWork = false))
     }
 }
