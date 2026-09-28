@@ -63,6 +63,7 @@ data class UploadQueueEntity(
     @androidx.room.PrimaryKey
     val id: String,
     val documentId: String,
+    val collection: String = "",
     val localFilePath: String,
     val storagePath: String,
     val status: FileUploadStatus = FileUploadStatus.PENDING,
