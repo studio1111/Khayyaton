@@ -23,8 +23,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import androidx.work.WorkManager
-import kotlinx.coroutines.tasks.await
 import java.util.concurrent.CopyOnWriteArrayList
 
 class SyncManager(
@@ -57,15 +55,40 @@ class SyncManager(
         authListener = FirebaseAuth.AuthStateListener { user ->
             if (user == null) {
                 detachListeners()
+                scope.launch {
+                    repository.clearAllDomainData()
+                    repository.clearSyncState()
+                    repository.clearLocalAccountUid()
+                    repository.saveActiveWorkshopId(0L)
+                }
             } else {
-                restartListeners()
-                syncNow()
+                scope.launch {
+                    val context = repository.getApplicationContext() ?: return@launch
+                    val localUid = repository.getLocalAccountUid()
+
+                    if (localUid != null && localUid != user.uid) {
+                        SyncWorkScheduler.cancel(context, localUid)
+                        repository.clearAllDomainData()
+                        repository.clearSyncState()
+                        repository.clearLocalAccountUid()
+                        repository.saveActiveWorkshopId(0L)
+                    }
+
+                    repository.saveLocalAccountUid(user.uid)
+
+                    // Attach listeners only after account isolation is complete.
+                    restartListeners()
+                    syncNow()
+                }
             }
         }
         auth.addAuthStateListener(authListener!!)
-        if (auth.currentUser != null) {
-            restartListeners()
-            syncNow()
+        auth.currentUser?.let { current ->
+            scope.launch {
+                repository.saveLocalAccountUid(current.uid)
+                restartListeners()
+                syncNow()
+            }
         }
     }
 
