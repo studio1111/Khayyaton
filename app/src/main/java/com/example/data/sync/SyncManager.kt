@@ -33,7 +33,7 @@ class SyncManager(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectivity = ConnectivityMonitor(context)
-    private val storageSync = StorageSyncManager(context, database)
+    // Firebase Storage در نسخه رایگان استفاده نمی‌شود؛ فایل‌ها فقط به‌صورت محلی نگهداری می‌شوند.
     private val listeners = CopyOnWriteArrayList<com.google.firebase.firestore.ListenerRegistration>()
     private var authListener: FirebaseAuth.AuthStateListener? = null
     private var observeJob: Job? = null
@@ -83,7 +83,7 @@ class SyncManager(
         if (!connectivity.isOnline.value) return
         syncJob?.cancel()
         syncJob = scope.launch {
-            storageSync.processQueues()
+            // همگام‌سازی اصلی فقط با Firestore انجام می‌شود و به Storage وابسته نیست.
             val result = FirebaseService.uploadAllToCloud(
                 orders = repository.getAllOrdersSync(),
                 payments = repository.getAllPaymentsSync(),
