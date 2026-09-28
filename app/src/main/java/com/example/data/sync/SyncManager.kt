@@ -43,7 +43,6 @@ class SyncManager(
     fun start() {
         connectivity.start()
         observePendingCount()
-        observeLocalChanges()
 
         scope.launch {
             connectivity.isOnline.collect { online ->
@@ -55,6 +54,8 @@ class SyncManager(
         authListener = FirebaseAuth.AuthStateListener { user ->
             if (user == null) {
                 detachListeners()
+                observeJob?.cancel()
+                observeJob = null
                 scope.launch {
                     if (AuthLossPolicy.shouldClearLocalData(repository.hasPendingSyncWork())) {
                         repository.clearAccountLocalState()
@@ -73,8 +74,10 @@ class SyncManager(
                             SyncWorkScheduler.cancel(context, previousUid)
                         }
 
-                        // Attach listeners only after account isolation is complete.
+                        // Attach listeners and local-change observation only after
+                        // account isolation is complete.
                         restartListeners()
+                        startLocalChangeObservation()
                         syncNow()
                     } catch (e: PendingAccountSwitchException) {
                         android.util.Log.w("SyncManager", "Account switch blocked until pending data is synchronized.", e)
@@ -94,6 +97,7 @@ class SyncManager(
                         SyncWorkScheduler.cancel(context, previousUid)
                     }
                     restartListeners()
+                    startLocalChangeObservation()
                     syncNow()
                 } catch (e: PendingAccountSwitchException) {
                     android.util.Log.w("SyncManager", "Initial account switch blocked until pending data is synchronized.", e)
@@ -117,22 +121,14 @@ class SyncManager(
         // WorkManager owns network waiting/retry. Enqueue even while offline so
         // a pending local change survives process death and is flushed later.
         val user = FirebaseService.currentUser() ?: return
+        val localUid = repository.getLocalAccountUid()
+        if (localUid != user.uid) return
         val context = repository.getApplicationContext() ?: return
         SyncWorkScheduler.enqueue(context, user.uid)
     }
 
-    private fun observePendingCount() {
-        scope.launch {
-            combine(
-                database.documentCacheDao().pendingWritesCount(),
-                database.deletedIdDao().countPendingFlow()
-            ) { pendingWrites, tombstones ->
-                pendingWrites + tombstones
-            }.collect { _pendingCount.value = it }
-        }
-    }
-
-    private fun observeLocalChanges() {
+    private fun startLocalChangeObservation() {
+        observeJob?.cancel()
         observeJob = scope.launch {
             combine(
                 repository.workshops,
@@ -143,6 +139,10 @@ class SyncManager(
             ) { workshops, orders, payments, presets, rules ->
                 LocalSnapshot(workshops, orders, payments, presets, rules)
             }.collect { snapshot ->
+                val currentUid = FirebaseService.currentUser()?.uid
+                    ?: return@collect
+                if (repository.getLocalAccountUid() != currentUid) return@collect
+
                 val hasPending = snapshot.workshops.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
                     snapshot.orders.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
                     snapshot.payments.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
@@ -150,6 +150,17 @@ class SyncManager(
                     snapshot.rules.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED }
                 if (hasPending) syncNow()
             }
+        }
+    }
+
+    private fun observePendingCount() {
+        scope.launch {
+            combine(
+                database.documentCacheDao().pendingWritesCount(),
+                database.deletedIdDao().countPendingFlow()
+            ) { pendingWrites, tombstones ->
+                pendingWrites + tombstones
+            }.collect { _pendingCount.value = it }
         }
     }
 
