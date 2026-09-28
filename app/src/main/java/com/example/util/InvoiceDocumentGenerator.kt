@@ -23,6 +23,11 @@ object InvoiceDocumentGenerator {
             .replace(">", "&gt;")
             .replace("\"", "&quot;")
             .replace("'", "&#39;")
+    private fun safeHexColor(value: String, fallback: String = "#2563EB"): String {
+        val candidate = value.trim().removePrefix("#")
+        return if (candidate.matches(Regex("[0-9A-Fa-f]{6}"))) "#$candidate" else fallback
+    }
+
     private fun safeFilePart(value: String): String =
         value.replace(Regex("[\\/:*?\"<>|\\s]+"), "_").trim('_').take(40)
     /**
@@ -43,7 +48,7 @@ object InvoiceDocumentGenerator {
         val statusColor = if (balance > 0) "#DC2626" else if (balance == 0L) "#059669" else "#DC2626"
         val safeCurrencyUnit = escapeHtml(currencyUnit)
         val safeTargetCustomer = escapeHtml(targetCustomer)
-        val formattedBal = PersianUtils.formatRemainingBalanceText(balance, currencyUnit)
+        val formattedBal = escapeHtml(PersianUtils.formatRemainingBalanceText(balance, currencyUnit))
 
         val sb = StringBuilder()
         sb.append("""
@@ -132,7 +137,7 @@ object InvoiceDocumentGenerator {
                 ).joinToString(" | ")
 
                 val modelHex = if (ord.colorCode.isNotBlank()) ord.colorCode else PersianUtils.getModelColor(ord.modelName)
-                val cleanHex = modelHex.removePrefix("#")
+                val cleanHex = safeHexColor(modelHex).removePrefix("#")
                 val rowBgStyle = "background-color: #${cleanHex}18; border-right: 4px solid #$cleanHex;"
                 val detailFontSize = if (details.length > 50) "10px" else "11px"
 
@@ -211,11 +216,11 @@ object InvoiceDocumentGenerator {
         <div class="summary-box">
             <div class="summary-row">
                 <span>مجموع کارکرد و فاکتورها:</span>
-                <strong>${PersianUtils.formatCurrency(totalWork, currencyUnit)}</strong>
+                <strong>${escapeHtml(PersianUtils.formatCurrency(totalWork, currencyUnit))}</strong>
             </div>
             <div class="summary-row">
                 <span>مجموع دریافتی‌ها و پیش‌پرداخت‌ها:</span>
-                <strong style="color: #059669;">${PersianUtils.formatCurrency(totalPaid, currencyUnit)}</strong>
+                <strong style="color: #059669;">${escapeHtml(PersianUtils.formatCurrency(totalPaid, currencyUnit))}</strong>
             </div>
             <div class="summary-row total-balance" style="color: $statusColor;">
                 <span>باقی مانده حساب ($statusText):</span>
