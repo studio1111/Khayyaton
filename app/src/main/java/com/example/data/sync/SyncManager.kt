@@ -235,9 +235,7 @@ class SyncManager(
                 name = data["name"] as? String ?: "کارگاه",
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             "orders" -> FurnitureOrder(
                 id = data["id"].numberLong(),
@@ -262,9 +260,7 @@ class SyncManager(
                 colorCode = data["colorCode"] as? String ?: "#2563EB",
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             "payments" -> PaymentRecord(
                 id = data["id"].numberLong(),
@@ -285,9 +281,7 @@ class SyncManager(
                 relatedOrderSyncId = data["relatedOrderSyncId"] as? String ?: "",
                 createdAt = data["createdAt"].numberLong(System.currentTimeMillis()),
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             "presets" -> ModelPreset(
                 id = data["id"].numberLong(),
@@ -300,9 +294,7 @@ class SyncManager(
                 colorCode = data["colorCode"] as? String ?: "#2563EB",
                 description = data["description"] as? String ?: "",
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             "unitRules" -> UnitConversionRule(
                 id = data["id"].numberLong(),
@@ -312,9 +304,7 @@ class SyncManager(
                 calculatedUnits = data["calculatedUnits"].numberDouble(),
                 isEnabled = data["isEnabled"] as? Boolean ?: true,
                 updatedAt = updatedAt,
-                syncStatus = status,
-                fileUrl = data["fileUrl"] as? String,
-                storagePath = data["storagePath"] as? String
+                syncStatus = status
             )
             else -> null
         }
