@@ -12,8 +12,10 @@ import com.example.data.WorkshopRepository
 import com.example.ui.KhayyatonApp
 import com.example.ui.KhayyatonViewModel
 import com.example.ui.KhayyatonViewModelFactory
+import com.example.data.sync.SyncManager
 
 class MainActivity : ComponentActivity() {
+    private var syncManager: SyncManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +45,8 @@ class MainActivity : ComponentActivity() {
             workshopDao = database.workshopDao()
         )
 
+        syncManager = SyncManager(applicationContext, repository, database).also { it.start() }
+
         val viewModel: KhayyatonViewModel by viewModels {
             KhayyatonViewModelFactory(repository)
         }
@@ -54,6 +58,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        syncManager?.stop()
+        syncManager = null
         com.example.data.subscription.SubscriptionManager.disconnect()
     }
 }
