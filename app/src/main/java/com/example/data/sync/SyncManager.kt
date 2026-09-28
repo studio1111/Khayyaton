@@ -56,25 +56,20 @@ class SyncManager(
             if (user == null) {
                 detachListeners()
                 scope.launch {
-                    repository.clearAllDomainData()
-                    repository.clearSyncState()
-                    repository.clearLocalAccountUid()
-                    repository.saveActiveWorkshopId(0L)
+                    repository.clearAccountLocalState()
                 }
             } else {
+                val firebaseUser = user
                 scope.launch {
                     val context = repository.getApplicationContext() ?: return@launch
                     val localUid = repository.getLocalAccountUid()
 
-                    if (localUid != null && localUid != user.uid) {
+                    if (localUid != null && localUid != firebaseUser.uid) {
                         SyncWorkScheduler.cancel(context, localUid)
-                        repository.clearAllDomainData()
-                        repository.clearSyncState()
-                        repository.clearLocalAccountUid()
-                        repository.saveActiveWorkshopId(0L)
+                        repository.clearAccountLocalState()
                     }
 
-                    repository.saveLocalAccountUid(user.uid)
+                    repository.saveLocalAccountUid(firebaseUser.uid)
 
                     // Attach listeners only after account isolation is complete.
                     restartListeners()
