@@ -648,7 +648,12 @@ class WorkshopRepository(
                     updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, remoteRaw.createdAt),
                     syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
+                val existingWorkshopBySync = remote.workshopSyncId
+                    .takeIf { it.isNotBlank() }
+                    ?.let { workshopDao.getWorkshopBySyncId(it)?.id }
+
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
+                    ?: existingWorkshopBySync
                     ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
                 val existingOrderBySync = remote.relatedOrderSyncId
@@ -685,7 +690,12 @@ class WorkshopRepository(
                     updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, System.currentTimeMillis()),
                     syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
+                val existingWorkshopBySync = remote.workshopSyncId
+                    .takeIf { it.isNotBlank() }
+                    ?.let { workshopDao.getWorkshopBySyncId(it)?.id }
+
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
+                    ?: existingWorkshopBySync
                     ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
 
