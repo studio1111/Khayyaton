@@ -3,6 +3,8 @@ package com.example.ui
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -96,6 +98,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isDrawerOpen = MutableStateFlow(false)
     val isAutoSyncing = MutableStateFlow(false)
     val autoSyncStatusMessage = MutableStateFlow<String?>(null)
+    private var autoSyncStateJob: kotlinx.coroutines.Job? = null
 
     fun hasPremiumAccess(): Boolean {
         return SubscriptionManager.hasPremiumAccess()
@@ -122,11 +125,28 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         }
 
         viewModelScope.launch {
-            val savedUser = repository.getCustomUsername()
-            if (savedUser.isNotBlank()) customUsername.value = savedUser
+            val user = FirebaseService.getCurrentUser()
+            var switchedAccount = false
+
+            if (user != null) {
+                val context = repository.getApplicationContext()
+                val previousUid = repository.ensureLocalAccount(user.uid)
+                if (previousUid != null) {
+                    switchedAccount = true
+                    if (context != null) SyncWorkScheduler.cancel(context, previousUid)
+                    customUsername.value = ""
+                    activeWorkshopId.value = 0L
+                    repository.saveActiveWorkshopId(0L)
+                    clearFilters()
+                }
+            }
+
+            if (!switchedAccount) {
+                val savedUser = repository.getCustomUsername()
+                if (savedUser.isNotBlank()) customUsername.value = savedUser
+            }
 
             val savedWsId = repository.getSavedActiveWorkshopId()
-            val user = FirebaseService.getCurrentUser()
             val localWorkshops = repository.getAllWorkshopsSync()
 
             activeWorkshopId.value =
@@ -154,20 +174,6 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             SubscriptionManager.syncSubscriptionWithFirebase()
 
             if (user != null) {
-                val localUid = repository.getLocalAccountUid()
-                val context = repository.getApplicationContext()
-
-                if (localUid != null && localUid != user.uid) {
-                    if (context != null) SyncWorkScheduler.cancel(context, localUid)
-                    repository.clearAccountLocalState()
-                    customUsername.value = ""
-                    activeWorkshopId.value = 0L
-                    repository.saveActiveWorkshopId(0L)
-                    clearFilters()
-                }
-
-                repository.saveLocalAccountUid(user.uid)
-
                 if (customUsername.value.isBlank() && !user.displayName.isNullOrBlank()) {
                     customUsername.value = user.displayName
                     repository.saveCustomUsername(user.displayName)
@@ -653,25 +659,22 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
      * Room remains the only source used by the UI.
      */
     fun onUserLoggedIn(user: FirebaseUserDto, preferredUsername: String? = null, workshopName: String? = null) {
-        currentUser.value = user
         SubscriptionManager.syncSubscriptionWithFirebase()
         SubscriptionManager.refreshSubscriptionFromBazaar()
 
         viewModelScope.launch {
             val context = repository.getApplicationContext() ?: return@launch
-            val previousUid = repository.getLocalAccountUid()
-            val switchingUser = previousUid != null && previousUid != user.uid
+            val previousUid = repository.ensureLocalAccount(user.uid)
 
-            if (switchingUser) {
-                previousUid?.let { SyncWorkScheduler.cancel(context, it) }
-                repository.clearAccountLocalState()
+            if (previousUid != null) {
+                SyncWorkScheduler.cancel(context, previousUid)
                 repository.saveActiveWorkshopId(0L)
                 activeWorkshopId.value = 0L
                 customUsername.value = ""
                 clearFilters()
             }
 
-            repository.saveLocalAccountUid(user.uid)
+            currentUser.value = user
 
             // Every Firebase account gets the four mandatory base unit rules.
             // Recreate only missing defaults, without removing any user-defined rules.
@@ -755,10 +758,37 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         if (FirebaseService.currentUser()?.uid != user.uid) return
         val context = repository.getApplicationContext() ?: return
 
-        isAutoSyncing.value = true
-        autoSyncStatusMessage.value = "همگام‌سازی اطلاعات در حال انجام است..."
-        SyncWorkScheduler.enqueue(context, user.uid)
-        isAutoSyncing.value = false
+        autoSyncStateJob?.cancel()
+        autoSyncStateJob = viewModelScope.launch {
+            SyncWorkScheduler.enqueue(context, user.uid)
+            val workManager = WorkManager.getInstance(context.applicationContext)
+            workManager.getWorkInfosForUniqueWorkFlow(SyncWorkScheduler.workName(user.uid))
+                .collect { infos ->
+                    when (infos.firstOrNull()?.state) {
+                        WorkInfo.State.RUNNING -> {
+                            isAutoSyncing.value = true
+                            autoSyncStatusMessage.value = "همگام‌سازی اطلاعات در حال انجام است..."
+                        }
+                        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
+                            isAutoSyncing.value = true
+                            autoSyncStatusMessage.value = "همگام‌سازی اطلاعات در صف اجرا قرار گرفت..."
+                        }
+                        WorkInfo.State.SUCCEEDED -> {
+                            isAutoSyncing.value = false
+                            autoSyncStatusMessage.value = "همگام‌سازی اطلاعات انجام شد."
+                        }
+                        WorkInfo.State.FAILED -> {
+                            isAutoSyncing.value = false
+                            autoSyncStatusMessage.value = "همگام‌سازی اطلاعات ناموفق بود."
+                        }
+                        WorkInfo.State.CANCELLED -> {
+                            isAutoSyncing.value = false
+                            autoSyncStatusMessage.value = "همگام‌سازی اطلاعات لغو شد."
+                        }
+                        null -> Unit
+                    }
+                }
+        }
     }
 
     fun triggerAutoUpload() {
