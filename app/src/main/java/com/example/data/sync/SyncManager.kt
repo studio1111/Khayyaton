@@ -56,7 +56,9 @@ class SyncManager(
             if (user == null) {
                 detachListeners()
                 scope.launch {
-                    repository.clearAccountLocalState()
+                    if (AuthLossPolicy.shouldClearLocalData(repository.hasPendingSyncWork())) {
+                        repository.clearAccountLocalState()
+                    }
                 }
             } else {
                 val firebaseUser = user
