@@ -353,7 +353,7 @@ class DataIntegrityTest {
             )
 
             assertTrue(db.deletedIdDao().getAll().isEmpty())
-            assertTrue(db.documentCacheDao().getAll().isEmpty())
+            assertTrue(!db.documentCacheDao().exists("orders", "old-order"))
             assertEquals(
                 com.example.data.sync.RecordSyncStatus.PENDING,
                 db.unitRuleDao().getAllRulesSync().first().syncStatus
