@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.widget.Toast
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import com.example.model.FurnitureOrder
@@ -258,6 +259,11 @@ object InvoiceDocumentGenerator {
 
             context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری فاکتور HTML"))
         } catch (e: Exception) {
+            Toast.makeText(
+                context,
+                "اشتراک‌گذاری فاکتور HTML انجام نشد. لطفاً برنامه‌ای برای ارسال فایل انتخاب کنید.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -603,6 +609,11 @@ object InvoiceDocumentGenerator {
 
             context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری صورت‌حساب PDF"))
         } catch (e: Exception) {
+            Toast.makeText(
+                context,
+                "ساخت یا اشتراک‌گذاری فایل PDF انجام نشد. لطفاً فضای ذخیره‌سازی و برنامه ارسال فایل را بررسی کنید.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 }
