@@ -97,7 +97,8 @@ class SyncManager(
     }
 
     fun syncNow() {
-        if (!connectivity.isOnline.value) return
+        // WorkManager owns network waiting/retry. Enqueue even while offline so
+        // a pending local change survives process death and is flushed later.
         val user = FirebaseService.currentUser() ?: return
         val context = repository.getApplicationContext() ?: return
         SyncWorkScheduler.enqueue(context, user.uid)
@@ -132,7 +133,7 @@ class SyncManager(
                     snapshot.payments.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
                     snapshot.presets.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED } ||
                     snapshot.rules.any { it.syncStatus == RecordSyncStatus.PENDING || it.syncStatus == RecordSyncStatus.FAILED }
-                if (hasPending && connectivity.isOnline.value) syncNow()
+                if (hasPending) syncNow()
             }
         }
     }
