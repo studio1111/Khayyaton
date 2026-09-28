@@ -1325,53 +1325,89 @@ class WorkshopRepository(
         }
     }
 
+    private fun newDefaultUnitRule(defaultRule: DefaultUnitRule, now: Long): UnitConversionRule =
+        UnitConversionRule(
+            syncId = java.util.UUID.randomUUID().toString(),
+            pieceKey = defaultRule.key,
+            pieceCount = defaultRule.key.toDouble(),
+            calculatedUnits = defaultRule.calculatedUnits,
+            isEnabled = true,
+            updatedAt = now,
+            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+        )
+
+    private fun ruleKey(rule: UnitConversionRule): String {
+        val raw = rule.pieceKey.ifBlank {
+            if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
+        }
+        return normalizeUnitKey(raw)
+    }
+
     suspend fun insertDefaultUnitRulesIfEmpty() {
         // These four base conversion rules are mandatory defaults for every account.
-        // They must survive logout/account switching and must be restored if missing.
+        // They must survive logout/account switching and be restored individually when missing.
         // User-created extra rules remain untouched.
-        val existing = unitRuleDao.getAllRulesSync()
+        database.withTransaction {
+            val now = System.currentTimeMillis()
+            val existing = unitRuleDao.getAllRulesSync()
 
-        for (defaultRule in defaultUnitRules) {
-            val exists = existing.any { rule ->
-                val raw = rule.pieceKey.ifBlank {
-                    if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
+            for (defaultRule in defaultUnitRules) {
+                val exists = existing.any { ruleKey(it) == defaultRule.key }
+                if (!exists) {
+                    unitRuleDao.insertRule(newDefaultUnitRule(defaultRule, now))
                 }
-                normalizeUnitKey(raw) == defaultRule.key
             }
-            if (!exists) {
-                unitRuleDao.insertRule(
-                    UnitConversionRule(
-                        pieceKey = defaultRule.key,
-                        pieceCount = defaultRule.key.toDouble(),
-                        calculatedUnits = defaultRule.calculatedUnits,
-                        isEnabled = true
-                    )
-                )
-            }
-        }
 
-        val all = unitRuleDao.getAllRulesSync()
-        val seen = mutableSetOf<String>()
-        for (r in all) {
-            val rawKey = r.pieceKey.ifBlank {
-                if (r.pieceCount % 1.0 == 0.0) r.pieceCount.toInt().toString() else r.pieceCount.toString()
+            val all = unitRuleDao.getAllRulesSync()
+            val seen = mutableSetOf<String>()
+            for (rule in all) {
+                val key = ruleKey(rule)
+                if (key in seen) {
+                    if (getLocalAccountUid() != null && rule.syncId.isNotBlank()) {
+                        recordCloudDeletion("unitRules", rule.syncId)
+                    }
+                    unitRuleDao.deleteRuleById(rule.id)
+                } else {
+                    seen += key
+                }
             }
-            val norm = normalizeUnitKey(rawKey)
-            if (norm in seen) unitRuleDao.deleteRuleById(r.id) else seen.add(norm)
         }
     }
 
     suspend fun restoreDefaultUnitRules() {
         prefs?.edit()?.remove(deletedDefaultUnitRulesKey())?.apply()
-        unitRuleDao.clearAll()
-        unitRuleDao.insertAll(defaultUnitRules.map {
-            UnitConversionRule(
-                pieceKey = it.key,
-                pieceCount = it.key.toDouble(),
-                calculatedUnits = it.calculatedUnits,
-                isEnabled = true
-            )
-        })
+
+        database.withTransaction {
+            val now = System.currentTimeMillis()
+            val existing = unitRuleDao.getAllRulesSync()
+
+            for (defaultRule in defaultUnitRules) {
+                val matches = existing.filter { ruleKey(it) == defaultRule.key }
+                val keeper = matches.firstOrNull()
+
+                if (keeper == null) {
+                    unitRuleDao.insertRule(newDefaultUnitRule(defaultRule, now))
+                } else {
+                    unitRuleDao.updateRule(
+                        keeper.copy(
+                            pieceKey = defaultRule.key,
+                            pieceCount = defaultRule.key.toDouble(),
+                            calculatedUnits = defaultRule.calculatedUnits,
+                            isEnabled = true,
+                            updatedAt = now,
+                            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                        )
+                    )
+
+                    for (duplicate in matches.drop(1)) {
+                        if (getLocalAccountUid() != null && duplicate.syncId.isNotBlank()) {
+                            recordCloudDeletion("unitRules", duplicate.syncId)
+                        }
+                        unitRuleDao.deleteRuleById(duplicate.id)
+                    }
+                }
+            }
+        }
     }
 
     companion object {
