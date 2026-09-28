@@ -56,7 +56,7 @@ class UnitRuleSyncIntegrityTest {
             )
 
             val rules = db.unitRuleDao().getAllRulesSync()
-                .filter { AppDatabase.normalizeUnitKey(it.pieceKey.ifBlank { it.pieceCount.toString() }) == "3" }
+                .filter { WorkshopRepository.normalizeUnitKey(it.pieceKey.ifBlank { it.pieceCount.toString() }) == "3" }
 
             assertEquals(1, rules.size)
             assertEquals("remote-rule-3", rules.first().syncId)
