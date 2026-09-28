@@ -811,7 +811,13 @@ object FirebaseService {
                 )
             }
 
-            val rulesSnapshot = userDoc.collection("unitRules").get().await()
+            val rulesSnapshot = if (requireServer) {
+                userDoc.collection("unitRules")
+                    .get(com.google.firebase.firestore.Source.SERVER)
+                    .await()
+            } else {
+                userDoc.collection("unitRules").get().await()
+            }
             val restoredRules = rulesSnapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val id = (data["id"] as? Number)?.toLong() ?: 0L
