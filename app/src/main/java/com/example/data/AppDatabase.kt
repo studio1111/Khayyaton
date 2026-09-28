@@ -302,14 +302,152 @@ class WorkshopRepository(
             database.deletedIdDao().getPending().isNotEmpty()
     }
 
+    /**
+     * Repairs legacy or malformed local rows that have no sync identity.
+     * A blank syncId cannot be uploaded to the canonical Firestore document path,
+     * so silently skipping it would cause permanent local-only data.
+     */
+    suspend fun repairMissingSyncIdentities(): Boolean {
+        var repaired = false
+        database.withTransaction {
+            val now = System.currentTimeMillis()
+            val workshopSyncById = mutableMapOf<Long, String>()
+
+            for (workshop in workshopDao.getAllWorkshopsSync()) {
+                var normalized = workshop
+                if (normalized.syncId.isBlank()) {
+                    normalized = normalized.copy(
+                        syncId = java.util.UUID.randomUUID().toString(),
+                        updatedAt = maxOf(normalized.updatedAt, now),
+                        syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                    )
+                    workshopDao.updateWorkshop(normalized)
+                    repaired = true
+                }
+                workshopSyncById[normalized.id] = normalized.syncId
+            }
+
+            for (order in orderDao.getAllOrdersSync()) {
+                var normalized = order
+                var changed = false
+                if (normalized.syncId.isBlank()) {
+                    normalized = normalized.copy(
+                        syncId = java.util.UUID.randomUUID().toString(),
+                        updatedAt = maxOf(normalized.updatedAt, now),
+                        syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                    )
+                    changed = true
+                }
+                if (normalized.workshopSyncId.isBlank()) {
+                    workshopSyncById[normalized.workshopId]?.let {
+                        normalized = normalized.copy(
+                            workshopSyncId = it,
+                            updatedAt = maxOf(normalized.updatedAt, now),
+                            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                        )
+                        changed = true
+                    }
+                }
+                if (changed) {
+                    orderDao.updateOrder(normalized)
+                    repaired = true
+                }
+            }
+
+            for (payment in paymentDao.getAllPaymentsSync()) {
+                var normalized = payment
+                var changed = false
+                if (normalized.syncId.isBlank()) {
+                    normalized = normalized.copy(
+                        syncId = java.util.UUID.randomUUID().toString(),
+                        updatedAt = maxOf(normalized.updatedAt, now),
+                        syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                    )
+                    changed = true
+                }
+                if (normalized.workshopSyncId.isBlank()) {
+                    workshopSyncById[normalized.workshopId]?.let {
+                        normalized = normalized.copy(
+                            workshopSyncId = it,
+                            updatedAt = maxOf(normalized.updatedAt, now),
+                            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                        )
+                        changed = true
+                    }
+                }
+                if (changed) {
+                    paymentDao.updatePayment(normalized)
+                    repaired = true
+                }
+            }
+
+            for (preset in modelPresetDao.getAllPresetsSync()) {
+                var normalized = preset
+                var changed = false
+                if (normalized.syncId.isBlank()) {
+                    normalized = normalized.copy(
+                        syncId = java.util.UUID.randomUUID().toString(),
+                        updatedAt = maxOf(normalized.updatedAt, now),
+                        syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                    )
+                    changed = true
+                }
+                if (normalized.workshopSyncId.isBlank()) {
+                    workshopSyncById[normalized.workshopId]?.let {
+                        normalized = normalized.copy(
+                            workshopSyncId = it,
+                            updatedAt = maxOf(normalized.updatedAt, now),
+                            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                        )
+                        changed = true
+                    }
+                }
+                if (changed) {
+                    modelPresetDao.updatePreset(normalized)
+                    repaired = true
+                }
+            }
+
+            for (rule in unitRuleDao.getAllRulesSync()) {
+                if (rule.syncId.isBlank()) {
+                    unitRuleDao.updateRule(
+                        rule.copy(
+                            syncId = java.util.UUID.randomUUID().toString(),
+                            updatedAt = maxOf(rule.updatedAt, now),
+                            syncStatus = com.example.data.sync.RecordSyncStatus.PENDING
+                        )
+                    )
+                    repaired = true
+                }
+            }
+        }
+        return repaired
+    }
+
     fun getApplicationContext(): android.content.Context? = context?.applicationContext
 
     fun getSavedActiveWorkshopId(): Long {
-        return prefs?.getLong("active_workshop_id", -1L) ?: -1L
+        return prefs?.getLong("active_workshop_id", 0L) ?: 0L
     }
 
     fun getLocalAccountUid(): String? =
         prefs?.getString("local_account_uid", null)
+
+    private fun cloudSyncReadyKey(uid: String): String =
+        "cloud_sync_ready_uid_$uid"
+
+    fun isCloudSyncReady(uid: String = getLocalAccountUid().orEmpty()): Boolean =
+        uid.isNotBlank() && prefs?.getBoolean(cloudSyncReadyKey(uid), false) == true
+
+    fun markCloudSyncReady(uid: String) {
+        if (uid.isBlank()) return
+        prefs?.edit()?.putBoolean(cloudSyncReadyKey(uid), true)?.apply()
+    }
+
+    fun clearCloudSyncReady(uid: String = getLocalAccountUid().orEmpty()) {
+        if (uid.isBlank()) return
+        prefs?.edit()?.remove(cloudSyncReadyKey(uid))?.apply()
+    }
 
     fun saveLocalAccountUid(uid: String) {
         prefs?.edit()?.putString("local_account_uid", uid)?.apply()
@@ -386,19 +524,6 @@ class WorkshopRepository(
 
     suspend fun getWorkshopById(id: Long): Workshop? =
         workshopDao.getWorkshopById(id)
-
-    suspend fun ensureDefaultWorkshop(): Long {
-        val existing = workshopDao.getAllWorkshopsSync()
-        if (existing.isNotEmpty()) {
-            return existing.first().id
-        }
-        val defaultWorkshop = Workshop(
-            id = 1L,
-            name = "کارگاه اصلی",
-            createdAt = System.currentTimeMillis()
-        )
-        return workshopDao.insertWorkshop(defaultWorkshop)
-    }
 
     suspend fun deduplicateWorkshops() {
         val all = workshopDao.getAllWorkshopsSync()
@@ -528,10 +653,12 @@ class WorkshopRepository(
             database.pendingDeleteDao().clearAll()
             database.documentCacheDao().clearAll()
         }
+        val currentUid = getLocalAccountUid().orEmpty()
         prefs?.edit()
             ?.remove(pendingDeletionKey())
             ?.remove("local_account_uid")
             ?.remove("cloud_sync_ready_uid")
+            ?.remove(cloudSyncReadyKey(currentUid))
             ?.putLong("active_workshop_id", 0L)
             ?.apply()
     }
