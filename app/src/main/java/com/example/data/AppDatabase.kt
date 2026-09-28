@@ -181,25 +181,37 @@ class WorkshopRepository(
     private fun deletionKey(collection: String, syncId: String): String =
         "$collection|$syncId"
 
-    fun recordCloudDeletion(collection: String, syncId: String) {
+    suspend fun recordCloudDeletion(collection: String, syncId: String) {
         if (syncId.isBlank()) return
+        val now = System.currentTimeMillis()
+        database.deletedIdDao().upsert(
+            com.example.data.sync.DeletedIdEntity(
+                collection = collection,
+                documentId = syncId,
+                deletedAt = now
+            )
+        )
         val current = prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty().toMutableSet()
         current += deletionKey(collection, syncId)
         prefs?.edit()?.putStringSet(pendingDeletionKey(), current)?.apply()
     }
 
-    fun getPendingCloudDeletions(): List<PendingCloudDeletion> {
-        return prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty()
-            .mapNotNull { raw ->
-                val parts = raw.split("|", limit = 2)
-                if (parts.size == 2 && parts[1].isNotBlank()) {
-                    PendingCloudDeletion(parts[0], parts[1])
-                } else null
-            }
+    suspend fun getPendingCloudDeletions(): List<PendingCloudDeletion> {
+        val room = database.deletedIdDao().getAll().map {
+            PendingCloudDeletion(it.collection, it.documentId)
+        }
+        val legacy = prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty().mapNotNull { raw ->
+            val parts = raw.split("|", limit = 2)
+            if (parts.size == 2 && parts[1].isNotBlank()) {
+                PendingCloudDeletion(parts[0], parts[1])
+            } else null
+        }
+        return (room + legacy).distinctBy { deletionKey(it.collection, it.syncId) }
     }
 
-    fun clearCloudDeletions(deletions: Collection<PendingCloudDeletion>) {
+    suspend fun clearCloudDeletions(deletions: Collection<PendingCloudDeletion>) {
         if (deletions.isEmpty()) return
+        deletions.forEach { database.deletedIdDao().delete(it.collection, it.syncId) }
         val removeKeys = deletions.map { deletionKey(it.collection, it.syncId) }.toSet()
         val current = prefs?.getStringSet(pendingDeletionKey(), emptySet()).orEmpty()
         prefs?.edit()?.putStringSet(
@@ -423,6 +435,15 @@ class WorkshopRepository(
         cloudPresets: List<ModelPreset>,
         cloudUnitRules: List<UnitConversionRule>
     ) {
+        val deleted = database.deletedIdDao().getAll()
+            .map { deletionKey(it.collection, it.documentId) }
+            .toSet()
+        val safeWorkshops = cloudWorkshops.filterNot { deletionKey("workshops", it.syncId) in deleted }
+        val safeOrders = cloudOrders.filterNot { deletionKey("orders", it.syncId) in deleted }
+        val safePayments = cloudPayments.filterNot { deletionKey("payments", it.syncId) in deleted }
+        val safePresets = cloudPresets.filterNot { deletionKey("presets", it.syncId) in deleted }
+        val safeUnitRules = cloudUnitRules.filterNot { deletionKey("unitRules", it.syncId) in deleted }
+
         database.withTransaction {
             val workshopMap = mutableMapOf<String, Long>()
             // Legacy cloud records may have only the old numeric workshopId.
@@ -430,7 +451,7 @@ class WorkshopRepository(
             // actual local Room workshop id after multi-device merge.
             val legacyWorkshopIdMap = mutableMapOf<Long, Long>()
 
-            for (remote in cloudWorkshops) {
+            for (remote in safeWorkshops) {
                 val existing = workshopDao.getWorkshopBySyncId(remote.syncId)
                 val localId = if (existing == null) {
                     workshopDao.insertWorkshop(remote.copy(id = 0L))
@@ -444,7 +465,7 @@ class WorkshopRepository(
 
             val orderMap = mutableMapOf<String, Long>()
             val legacyOrderIdMap = mutableMapOf<Long, Long>()
-            for (remote in cloudOrders) {
+            for (remote in safeOrders) {
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
@@ -463,7 +484,7 @@ class WorkshopRepository(
                 legacyOrderIdMap[remote.id] = localId
             }
 
-            for (remote in cloudPayments) {
+            for (remote in safePayments) {
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
@@ -480,7 +501,7 @@ class WorkshopRepository(
                 else paymentDao.updatePayment(value)
             }
 
-            for (remote in cloudPresets) {
+            for (remote in safePresets) {
                 val localWorkshopId = workshopMap[remote.workshopSyncId]
                     ?: legacyWorkshopIdMap[remote.workshopId]
                     ?: remote.workshopId
@@ -493,7 +514,7 @@ class WorkshopRepository(
                 else modelPresetDao.updatePreset(value)
             }
 
-            for (remote in cloudUnitRules) {
+            for (remote in safeUnitRules) {
                 val existing = unitRuleDao.getRuleBySyncId(remote.syncId)
                 val value = remote.copy(id = existing?.id ?: 0L)
                 if (existing == null) unitRuleDao.insertRule(value)
