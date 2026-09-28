@@ -6,6 +6,7 @@ import androidx.room.TypeConverter
 
 enum class FileUploadStatus { PENDING, UPLOADING, UPLOADED, FAILED }
 enum class PendingDeleteStatus { PENDING, DELETING, DELETED, FAILED }
+enum class RecordSyncStatus { SYNCED, PENDING, FAILED, DELETED }
 
 class SyncStatusConverters {
     @TypeConverter
@@ -21,6 +22,13 @@ class SyncStatusConverters {
     @TypeConverter
     fun stringToDeleteStatus(value: String): PendingDeleteStatus =
         runCatching { PendingDeleteStatus.valueOf(value) }.getOrDefault(PendingDeleteStatus.PENDING)
+
+    @TypeConverter
+    fun recordStatusToString(value: RecordSyncStatus): String = value.name
+
+    @TypeConverter
+    fun stringToRecordStatus(value: String): RecordSyncStatus =
+        runCatching { RecordSyncStatus.valueOf(value) }.getOrDefault(RecordSyncStatus.SYNCED)
 }
 
 @Entity(
