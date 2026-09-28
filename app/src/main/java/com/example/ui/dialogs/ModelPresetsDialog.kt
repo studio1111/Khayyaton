@@ -239,7 +239,7 @@ fun ModelPresetsDialog(
                                             val existing = presets.find { it.name.trim().equals(trimmedName, ignoreCase = true) }
                                             val preset = ModelPreset(
                                                 id = editingPreset?.id ?: (existing?.id ?: 0L),
-                                                workshopId = editingPreset?.workshopId ?: (existing?.workshopId ?: 1L),
+                                                workshopId = editingPreset?.workshopId ?: (existing?.workshopId ?: 0L),
                                                 workshopSyncId = editingPreset?.workshopSyncId ?: (existing?.workshopSyncId ?: ""),
                                                 syncId = editingPreset?.syncId ?: (existing?.syncId ?: java.util.UUID.randomUUID().toString()),
                                                 name = trimmedName,
