@@ -938,6 +938,7 @@ class WorkshopRepository(
     }
 
     suspend fun saveOrder(order: FurnitureOrder) {
+        if (order.workshopId <= 0L) return
         val workshopSyncId = order.workshopSyncId.ifBlank {
             workshopDao.getWorkshopById(order.workshopId)?.syncId.orEmpty()
         }
@@ -972,6 +973,7 @@ class WorkshopRepository(
     }
 
     suspend fun savePayment(payment: PaymentRecord) {
+        if (payment.workshopId <= 0L) return
         val workshopSyncId = payment.workshopSyncId.ifBlank {
             workshopDao.getWorkshopById(payment.workshopId)?.syncId.orEmpty()
         }
@@ -1112,6 +1114,7 @@ class WorkshopRepository(
     }
 
     suspend fun savePreset(preset: ModelPreset) {
+        if (preset.workshopId <= 0L) return
         val workshopSyncId = preset.workshopSyncId.ifBlank {
             workshopDao.getWorkshopById(preset.workshopId)?.syncId.orEmpty()
         }
