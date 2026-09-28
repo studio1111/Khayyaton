@@ -47,6 +47,7 @@ fun ModelPresetsDialog(
     var priceStr by remember { mutableStateOf("2000000") }
     var unitsStr by remember { mutableStateOf("6") }
     var colorCode by remember { mutableStateOf("#2563EB") }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     fun startAdd() {
         editingPreset = null
@@ -55,6 +56,7 @@ fun ModelPresetsDialog(
         priceStr = "2000000"
         unitsStr = "6"
         colorCode = "#2563EB"
+        validationError = null
     }
 
     fun startEdit(preset: ModelPreset) {
@@ -221,39 +223,71 @@ fun ModelPresetsDialog(
                                     }
                                 }
 
-                                Row(
+                                Column(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    TextButton(onClick = { isAddingNew = false }) {
-                                        Text("انصراف", fontSize = 11.sp)
+                                    validationError?.let { message ->
+                                        Text(
+                                            text = message,
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Button(
-                                        onClick = {
-                                            val trimmedName = name.trim()
-                                            if (trimmedName.isBlank()) return@Button
-                                            val price = PersianUtils.toEnglishDigits(priceStr).toLongOrNull() ?: 2000000L
-                                            val units = PersianUtils.toEnglishDigits(unitsStr).toDoubleOrNull() ?: 6.0
-                                            val existing = presets.find { it.name.trim().equals(trimmedName, ignoreCase = true) }
-                                            val preset = ModelPreset(
-                                                id = editingPreset?.id ?: (existing?.id ?: 0L),
-                                                workshopId = editingPreset?.workshopId ?: (existing?.workshopId ?: 0L),
-                                                workshopSyncId = editingPreset?.workshopSyncId ?: (existing?.workshopSyncId ?: ""),
-                                                syncId = editingPreset?.syncId ?: (existing?.syncId ?: java.util.UUID.randomUUID().toString()),
-                                                name = trimmedName,
-                                                defaultPricePerSet = price,
-                                                defaultUnitsPerSet = units,
-                                                colorCode = colorCode,
-                                                description = ""
-                                            )
-                                            onSavePreset(preset)
-                                            isAddingNew = false
-                                        },
-                                        shape = RoundedCornerShape(10.dp)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("ذخیره مدل", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        TextButton(onClick = {
+                                            validationError = null
+                                            isAddingNew = false
+                                        }) {
+                                            Text("انصراف", fontSize = 11.sp)
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Button(
+                                            onClick = {
+                                                validationError = null
+                                                val trimmedName = name.trim()
+                                                if (trimmedName.isBlank()) {
+                                                    validationError = "لطفاً نام مدل را وارد کنید."
+                                                    return@Button
+                                                }
+
+                                                val price = PersianUtils.toEnglishDigits(priceStr).toLongOrNull()
+                                                if (price == null || price <= 0L) {
+                                                    validationError = "قیمت پیش‌فرض را به‌صورت عددی بزرگ‌تر از صفر وارد کنید."
+                                                    return@Button
+                                                }
+
+                                                val units = PersianUtils.toEnglishDigits(unitsStr).toDoubleOrNull()
+                                                if (units == null || units <= 0.0) {
+                                                    validationError = "واحد پیش‌فرض را به‌صورت عددی بزرگ‌تر از صفر وارد کنید."
+                                                    return@Button
+                                                }
+
+                                                val existing = presets.find { it.name.trim().equals(trimmedName, ignoreCase = true) }
+                                                val preset = ModelPreset(
+                                                    id = editingPreset?.id ?: (existing?.id ?: 0L),
+                                                    workshopId = editingPreset?.workshopId ?: (existing?.workshopId ?: 0L),
+                                                    workshopSyncId = editingPreset?.workshopSyncId ?: (existing?.workshopSyncId ?: ""),
+                                                    syncId = editingPreset?.syncId ?: (existing?.syncId ?: java.util.UUID.randomUUID().toString()),
+                                                    name = trimmedName,
+                                                    defaultPricePerSet = price,
+                                                    defaultUnitsPerSet = units,
+                                                    colorCode = colorCode,
+                                                    description = ""
+                                                )
+                                                onSavePreset(preset)
+                                                isAddingNew = false
+                                            },
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Text("ذخیره مدل", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
                             }
