@@ -53,14 +53,12 @@ class SyncManager(
         val auth = FirebaseService.authInstance()
         authListener = FirebaseAuth.AuthStateListener { user ->
             if (user == null) {
+                // Firebase Auth loss alone is not permission to erase local data.
+                // Explicit logout already performs a safe sync-and-clear transition,
+                // while transient/startup auth-state callbacks must never destroy data.
                 detachListeners()
                 observeJob?.cancel()
                 observeJob = null
-                scope.launch {
-                    if (AuthLossPolicy.shouldClearLocalData(repository.hasPendingSyncWork())) {
-                        repository.clearAccountLocalState()
-                    }
-                }
             } else {
                 val firebaseUser = user
                 scope.launch {
