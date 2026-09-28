@@ -66,6 +66,7 @@ fun ModelPresetsDialog(
         priceStr = preset.defaultPricePerSet.toString()
         unitsStr = if (preset.defaultUnitsPerSet % 1.0 == 0.0) preset.defaultUnitsPerSet.toInt().toString() else preset.defaultUnitsPerSet.toString()
         colorCode = preset.colorCode
+        validationError = null
     }
 
     Dialog(
