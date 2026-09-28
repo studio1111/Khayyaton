@@ -117,7 +117,14 @@ jobs:
           path: Khayyaton-SHA256-${{ github.sha }}.txt
           if-no-files-found: error
 
-      - name: Remove previous GitHub releases
+      - name: Publish GitHub Release 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "release-1"             --target "${GITHUB_SHA}"             --title "Khayyaton Release 1"             --notes "نسخه نهایی خیاطان، شماره ۱. ساخته‌شده از commit ${GITHUB_SHA}. شامل AAB امضاشده، APK امضاشده، سورس کامل و SHA-256."             "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB"             "app/build/outputs/apk/release/app-release.apk#Khayyaton APK"             "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"             "Khayyaton-SHA256-${GITHUB_SHA}.txt#Khayyaton SHA-256"
+
+      - name: Remove previous GitHub releases except Release 1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -125,15 +132,9 @@ jobs:
           gh release list --limit 1000 --json tagName --jq '.[].tagName' |
             while IFS= read -r tag; do
               [ -z "$tag" ] && continue
+              [ "$tag" = "release-1" ] && continue
               gh release delete "$tag" --yes --cleanup-tag || true
             done
-
-      - name: Publish GitHub Release 1
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release create "release-1"             --target "${GITHUB_SHA}"             --title "Khayyaton Release 1"             --notes "نسخه نهایی خیاطان، شماره ۱. ساخته‌شده از commit ${GITHUB_SHA}. شامل AAB امضاشده، APK امضاشده، سورس کامل و SHA-256."             "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB"             "app/build/outputs/apk/release/app-release.apk#Khayyaton APK"             "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"             "Khayyaton-SHA256-${GITHUB_SHA}.txt#Khayyaton SHA-256"
 
       - name: Keep only this final workflow run
         if: success()
