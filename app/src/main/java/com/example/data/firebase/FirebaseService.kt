@@ -827,35 +827,33 @@ object FirebaseService {
                 )
             }
 
-            // Older Firestore data may contain orders/payments/presets without
-            // a corresponding workshops document. Without a local workshop those
-            // records become invisible because the UI filters cards by activeWorkshopId.
-            // Reconstruct the missing workshop identities from the legacy numeric IDs.
-            val normalizedWorkshops = restoredWorkshops.toMutableList()
-            val referencedWorkshopIds = buildSet {
-                restoredOrders.mapTo(this) { it.workshopId }
-                restoredPayments.mapTo(this) { it.workshopId }
-                restoredPresets.mapTo(this) { it.workshopId }
-            }.filter { it > 0L }
+            // Never synthesize a workshop during cloud restore.
+            // Child records are accepted only when their workshop reference resolves
+            // to an actual restored workshop. This prevents deleted/malformed legacy
+            // data from creating a phantom workshop and making old cards reappear.
+            val validWorkshopSyncIds = restoredWorkshops.map { it.syncId }.filter { it.isNotBlank() }.toSet()
+            val validWorkshopIds = restoredWorkshops.map { it.id }.filter { it > 0L }.toSet()
 
-            val existingWorkshopIds = normalizedWorkshops.map { it.id }.toSet()
-            for (legacyId in referencedWorkshopIds) {
-                if (legacyId !in existingWorkshopIds) {
-                    normalizedWorkshops += Workshop(
-                        id = legacyId,
-                        syncId = "legacy_workshop_$legacyId",
-                        name = if (legacyId == 1L) "کارگاه اصلی" else "کارگاه $legacyId"
-                    )
-                }
+            val safeOrders = restoredOrders.filter { order ->
+                (order.workshopSyncId.isNotBlank() && order.workshopSyncId in validWorkshopSyncIds) ||
+                    (order.workshopSyncId.isBlank() && order.workshopId in validWorkshopIds)
+            }
+            val safePayments = restoredPayments.filter { payment ->
+                (payment.workshopSyncId.isNotBlank() && payment.workshopSyncId in validWorkshopSyncIds) ||
+                    (payment.workshopSyncId.isBlank() && payment.workshopId in validWorkshopIds)
+            }
+            val safePresets = restoredPresets.filter { preset ->
+                (preset.workshopSyncId.isNotBlank() && preset.workshopSyncId in validWorkshopSyncIds) ||
+                    (preset.workshopSyncId.isBlank() && preset.workshopId in validWorkshopIds)
             }
 
             // Restore as one atomic local transaction. This prevents half-restored
             // databases and keeps IDs stable so relations such as relatedOrderId work.
             repository.mergeCloudData(
-                cloudWorkshops = normalizedWorkshops,
-                cloudOrders = restoredOrders,
-                cloudPayments = restoredPayments,
-                cloudPresets = restoredPresets,
+                cloudWorkshops = restoredWorkshops,
+                cloudOrders = safeOrders,
+                cloudPayments = safePayments,
+                cloudPresets = safePresets,
                 cloudUnitRules = restoredRules
             )
 
