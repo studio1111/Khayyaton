@@ -241,7 +241,7 @@ class SyncManager(
             )
             "orders" -> FurnitureOrder(
                 id = data["id"].numberLong(),
-                workshopId = data["workshopId"].numberLong(1L),
+                workshopId = data["workshopId"].numberLong(),
                 workshopSyncId = data["workshopSyncId"] as? String ?: "",
                 syncId = data["syncId"] as? String ?: doc.id,
                 orderNumber = data["orderNumber"].numberLong(1L),
@@ -266,7 +266,7 @@ class SyncManager(
             )
             "payments" -> PaymentRecord(
                 id = data["id"].numberLong(),
-                workshopId = data["workshopId"].numberLong(1L),
+                workshopId = data["workshopId"].numberLong(),
                 workshopSyncId = data["workshopSyncId"] as? String ?: "",
                 syncId = data["syncId"] as? String ?: doc.id,
                 paymentNumber = data["paymentNumber"].numberLong(1L),
@@ -287,7 +287,7 @@ class SyncManager(
             )
             "presets" -> ModelPreset(
                 id = data["id"].numberLong(),
-                workshopId = data["workshopId"].numberLong(1L),
+                workshopId = data["workshopId"].numberLong(),
                 workshopSyncId = data["workshopSyncId"] as? String ?: "",
                 syncId = data["syncId"] as? String ?: doc.id,
                 name = data["name"] as? String ?: "",
