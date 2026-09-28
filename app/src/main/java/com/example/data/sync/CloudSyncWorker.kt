@@ -28,6 +28,17 @@ class CloudSyncWorker(
                 workshopDao = database.workshopDao()
             )
 
+            // Background work can start during the login lifecycle. Restore
+            // the authenticated account first so an empty/default local snapshot
+            // can never overwrite or mask the cloud account.
+            if (!repository.isCloudSyncReady(user.uid)) {
+                val restore = FirebaseService.downloadFromCloud(repository)
+                if (restore.isFailure) {
+                    return Result.retry()
+                }
+                repository.markCloudSyncReady(user.uid)
+            }
+
             val result = FirebaseService.uploadAllToCloud(
                 orders = repository.getAllOrdersSync(),
                 payments = repository.getAllPaymentsSync(),
