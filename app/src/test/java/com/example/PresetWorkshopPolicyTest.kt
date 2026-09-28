@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.model.ModelPreset
+import com.example.ui.PresetWorkshopPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
