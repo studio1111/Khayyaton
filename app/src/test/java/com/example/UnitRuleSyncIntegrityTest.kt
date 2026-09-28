@@ -64,4 +64,108 @@ class UnitRuleSyncIntegrityTest {
             db.close()
         }
     }
+
+    
+    @Test
+    fun missing_mandatory_rule_is_restored_without_removing_custom_rules_and_is_pending() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val repository = WorkshopRepository(
+                context = context,
+                database = db,
+                orderDao = db.orderDao(),
+                paymentDao = db.paymentDao(),
+                modelPresetDao = db.modelPresetDao(),
+                unitRuleDao = db.unitRuleDao(),
+                workshopDao = db.workshopDao()
+            )
+
+            db.unitRuleDao().insertRule(
+                UnitConversionRule(
+                    pieceKey = "custom",
+                    pieceCount = 0.0,
+                    calculatedUnits = 4.0,
+                    isEnabled = true,
+                    syncStatus = RecordSyncStatus.SYNCED
+                )
+            )
+            db.unitRuleDao().insertRule(
+                UnitConversionRule(
+                    pieceKey = "3",
+                    pieceCount = 3.0,
+                    calculatedUnits = 2.0,
+                    isEnabled = true,
+                    syncStatus = RecordSyncStatus.SYNCED
+                )
+            )
+
+            repository.insertDefaultUnitRulesIfEmpty()
+
+            val rules = db.unitRuleDao().getAllRulesSync()
+            assertEquals(5, rules.size)
+            assertEquals(1, rules.count { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "0.5" })
+            assertEquals(1, rules.count { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "1" })
+            assertEquals(1, rules.count { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "2" })
+            assertEquals(1, rules.count { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "3" })
+            assertEquals(1, rules.count { it.pieceKey == "custom" })
+            assertEquals(
+                RecordSyncStatus.PENDING,
+                rules.first { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "2" }.syncStatus
+            )
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun restore_defaults_does_not_delete_custom_rules() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val repository = WorkshopRepository(
+                context = context,
+                database = db,
+                orderDao = db.orderDao(),
+                paymentDao = db.paymentDao(),
+                modelPresetDao = db.modelPresetDao(),
+                unitRuleDao = db.unitRuleDao(),
+                workshopDao = db.workshopDao()
+            )
+
+            db.unitRuleDao().insertRule(
+                UnitConversionRule(
+                    pieceKey = "custom",
+                    pieceCount = 0.0,
+                    calculatedUnits = 4.0,
+                    isEnabled = false,
+                    syncStatus = RecordSyncStatus.SYNCED
+                )
+            )
+            db.unitRuleDao().insertRule(
+                UnitConversionRule(
+                    pieceKey = "3",
+                    pieceCount = 3.0,
+                    calculatedUnits = 99.0,
+                    isEnabled = false,
+                    syncStatus = RecordSyncStatus.SYNCED
+                )
+            )
+
+            repository.restoreDefaultUnitRules()
+
+            val rules = db.unitRuleDao().getAllRulesSync()
+            assertEquals(5, rules.size)
+            assertEquals(1, rules.count { it.pieceKey == "custom" })
+            val restoredThree = rules.first { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "3" }
+            assertEquals(2.0, restoredThree.calculatedUnits, 0.0)
+            assertEquals(RecordSyncStatus.PENDING, restoredThree.syncStatus)
+        } finally {
+            db.close()
+        }
+    }
 }
