@@ -727,10 +727,19 @@ class WorkshopRepository(
                     updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, System.currentTimeMillis()),
                     syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
-                val existing = unitRuleDao.getRuleBySyncId(remote.syncId)
+                val existingBySync = unitRuleDao.getRuleBySyncId(remote.syncId)
+                val existing = existingBySync ?: unitRuleDao.getAllRulesSync().firstOrNull { local ->
+                    val rawKey = local.pieceKey.ifBlank {
+                        if (local.pieceCount % 1.0 == 0.0) local.pieceCount.toInt().toString() else local.pieceCount.toString()
+                    }
+                    normalizeUnitKey(rawKey) == normalizeUnitKey(remote.pieceKey.ifBlank {
+                        if (remote.pieceCount % 1.0 == 0.0) remote.pieceCount.toInt().toString() else remote.pieceCount.toString()
+                    })
+                }
+
                 if (existing == null) {
                     unitRuleDao.insertRule(remote.copy(id = 0L))
-                } else if (shouldApplyRemote(existing.updatedAt, existing.syncStatus, remote.updatedAt)) {
+                } else if (shouldApplyRemote(existing.updatedAt, existing.syncStatus, remote.updatedAt) || existingBySync == null) {
                     unitRuleDao.updateRule(remote.copy(id = existing.id))
                 }
             }
