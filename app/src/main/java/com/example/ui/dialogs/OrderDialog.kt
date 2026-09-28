@@ -100,6 +100,7 @@ fun OrderDialog(
         mutableStateOf(initialOrder?.colorCode ?: "#2563EB")
     }
     var addToPresets by remember { mutableStateOf(false) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     // Dialog state for calendar picker
     var isDatePickerOpen by remember { mutableStateOf(false) }
@@ -222,9 +223,9 @@ fun OrderDialog(
         PersianUtils.evaluateCountFormula(countFormula, unitRules)
     }
     val calculatedTotal = remember(calculatedUnits, pricePerSet, unitsPerSet) {
-        val price = PersianUtils.toEnglishDigits(pricePerSet).toLongOrNull() ?: 0L
-        val units = PersianUtils.toEnglishDigits(unitsPerSet).toDoubleOrNull() ?: 8.0
-        if (units > 0) {
+        val price = PersianUtils.toEnglishDigits(pricePerSet).toLongOrNull()
+        val units = PersianUtils.toEnglishDigits(unitsPerSet).toDoubleOrNull()
+        if (price != null && price > 0L && units != null && units > 0.0) {
             ((calculatedUnits / units) * price).toLong()
         } else 0L
     }
@@ -841,63 +842,92 @@ fun OrderDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
 
                 // Footer Buttons
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(text = "انصراف", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    validationError?.let { message ->
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // "ثبت نهایی فاکتور" Button
-                    Button(
-                        onClick = {
-                            if (modelName.isBlank()) return@Button
-                            val price = PersianUtils.toEnglishDigits(pricePerSet).toLongOrNull() ?: 2000000L
-                            val units = PersianUtils.toEnglishDigits(unitsPerSet).toDoubleOrNull() ?: 6.0
-                            val order = FurnitureOrder(
-                                id = initialOrder?.id ?: 0L,
-                                workshopId = initialOrder?.workshopId ?: 0L,
-                                workshopSyncId = initialOrder?.workshopSyncId ?: "",
-                                syncId = initialOrder?.syncId ?: java.util.UUID.randomUUID().toString(),
-                                orderNumber = initialOrder?.orderNumber ?: nextOrderNumber,
-                                invoiceNumber = invoiceNumber.ifBlank { nextOrderNumber.toString() },
-                                modelName = modelName.trim(),
-                                pricePerSet = price,
-                                unitsPerSet = if (units <= 0) 6.0 else units,
-                                countFormula = countFormula.ifBlank { "6" },
-                                calculatedUnits = calculatedUnits,
-                                calculatedTotal = calculatedTotal,
-                                dateJalali = dateJalali,
-                                dateGregorian = initialOrder?.dateGregorian ?: PersianUtils.getTodayGregorianString(),
-                                customerName = customerName.trim(),
-                                fabricName = fabricName.trim(),
-                                workshopInvoiceNumber = workshopInvoiceNumber.trim(),
-                                notes = notes.trim(),
-                                colorCode = colorCode,
-                                createdAt = initialOrder?.createdAt ?: System.currentTimeMillis()
-                            )
-                            if (modelName.isNotBlank()) {
-                                onUpdateModelColor(modelName.trim(), colorCode)
-                            }
-                            onSave(order, addToPresets)
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = Color.White
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (initialOrder != null) "بروزرسانی فاکتور" else "ثبت نهایی فاکتور",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        TextButton(onClick = onDismiss) {
+                            Text(text = "انصراف", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Button(
+                            onClick = {
+                                validationError = null
+
+                                if (modelName.isBlank()) {
+                                    validationError = "لطفاً نام مدل مبل را وارد کنید."
+                                    return@Button
+                                }
+
+                                val price = PersianUtils.toEnglishDigits(pricePerSet).toLongOrNull()
+                                if (price == null || price <= 0L) {
+                                    validationError = "مبلغ دستمزد هر دست را به‌صورت عددی بزرگ‌تر از صفر وارد کنید."
+                                    return@Button
+                                }
+
+                                val units = PersianUtils.toEnglishDigits(unitsPerSet).toDoubleOrNull()
+                                if (units == null || units <= 0.0) {
+                                    validationError = "تعداد واحد در یک دست را به‌صورت عددی بزرگ‌تر از صفر وارد کنید."
+                                    return@Button
+                                }
+
+                                val order = FurnitureOrder(
+                                    id = initialOrder?.id ?: 0L,
+                                    workshopId = initialOrder?.workshopId ?: 0L,
+                                    workshopSyncId = initialOrder?.workshopSyncId ?: "",
+                                    syncId = initialOrder?.syncId ?: java.util.UUID.randomUUID().toString(),
+                                    orderNumber = initialOrder?.orderNumber ?: nextOrderNumber,
+                                    invoiceNumber = invoiceNumber.ifBlank { nextOrderNumber.toString() },
+                                    modelName = modelName.trim(),
+                                    pricePerSet = price,
+                                    unitsPerSet = units,
+                                    countFormula = countFormula.ifBlank { "6" },
+                                    calculatedUnits = calculatedUnits,
+                                    calculatedTotal = ((calculatedUnits / units) * price).toLong(),
+                                    dateJalali = dateJalali,
+                                    dateGregorian = initialOrder?.dateGregorian ?: PersianUtils.getTodayGregorianString(),
+                                    customerName = customerName.trim(),
+                                    fabricName = fabricName.trim(),
+                                    workshopInvoiceNumber = workshopInvoiceNumber.trim(),
+                                    notes = notes.trim(),
+                                    colorCode = colorCode,
+                                    createdAt = initialOrder?.createdAt ?: System.currentTimeMillis()
+                                )
+
+                                onUpdateModelColor(modelName.trim(), colorCode)
+                                onSave(order, addToPresets)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(
+                                text = if (initialOrder != null) "بروزرسانی فاکتور" else "ثبت نهایی فاکتور",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
