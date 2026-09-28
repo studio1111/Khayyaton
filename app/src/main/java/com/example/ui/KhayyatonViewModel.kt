@@ -124,8 +124,9 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         }
 
         viewModelScope.launch {
-            val user = FirebaseService.getCurrentUser()
-            var switchedAccount = false
+            try {
+                val user = FirebaseService.getCurrentUser()
+                var switchedAccount = false
 
             if (user != null) {
                 val context = repository.getApplicationContext()
@@ -186,6 +187,16 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 }
 
                 performAutoSync(user)
+            }
+            } catch (e: Exception) {
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.e("KhayyatonViewModel", "Startup initialization failed", e)
+                }
+                if (currentUser.value != null) {
+                    autoSyncStatusMessage.value =
+                        e.message?.takeIf { it.isNotBlank() }
+                            ?: "اطلاعات محلی برنامه کامل بارگذاری نشد."
+                }
             }
         }
     }
