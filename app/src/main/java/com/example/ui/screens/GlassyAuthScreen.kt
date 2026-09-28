@@ -68,6 +68,7 @@ enum class GlassAuthTab {
 @Composable
 fun GlassyAuthScreen(
     onAuthSuccess: (FirebaseUserDto, String, String) -> Unit,
+    onBeforeAuth: suspend () -> Result<Unit> = { Result.success(Unit) },
     onSkip: (() -> Unit)? = null,
     isFirstLaunch: Boolean = false,
     modifier: Modifier = Modifier
@@ -542,6 +543,14 @@ fun GlassyAuthScreen(
 
                             isLoading = true
                             coroutineScope.launch {
+                                val gate = onBeforeAuth()
+                                if (gate.isFailure) {
+                                    isLoading = false
+                                    errorMessage = gate.exceptionOrNull()?.message
+                                        ?: "همگام‌سازی اطلاعات حساب فعلی کامل نشد."
+                                    return@launch
+                                }
+
                                 val res = if (activeTab == GlassAuthTab.SIGN_IN) {
                                     FirebaseService.signInWithEmail(cleanEmail, password, cleanUsername.ifBlank { null })
                                 } else {
