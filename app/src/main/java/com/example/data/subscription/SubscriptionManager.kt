@@ -209,7 +209,7 @@ object SubscriptionManager {
     /**
      * تشخیص مالک دو مسیر امن دارد:
      * 1) Custom Claim از Firebase Authentication، در صورت وجود.
-     * 2) سند فقط‌خواندنی /admin/owners/{uid} که فقط از خارج برنامه (Firebase Console)
+     * 2) سند فقط‌خواندنی /admin/owners/members/{uid} که فقط از خارج برنامه (Firebase Console)
      *    قابل ایجاد یا تغییر است. این مسیر برای پروژه بدون Blaze استفاده می‌شود.
      * هیچ فیلد قابل ویرایش توسط کاربر عادی در /users نقش مالک را تعیین نمی‌کند.
      */
