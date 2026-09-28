@@ -460,6 +460,9 @@ class WorkshopRepository(
     suspend fun ensureLocalAccount(uid: String): String? = accountMutex.withLock {
         val previousUid = getLocalAccountUid()
         if (previousUid != null && previousUid != uid) {
+            if (hasPendingSyncWork()) {
+                throw com.example.data.sync.PendingAccountSwitchException()
+            }
             clearAccountLocalState()
         }
         saveLocalAccountUid(uid)
