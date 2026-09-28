@@ -22,6 +22,17 @@ import com.example.data.sync.PendingDeleteDao
 import com.example.data.sync.DocumentCacheDao
 import com.example.data.sync.SyncStatusConverters
 
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        val tables = listOf("workshops", "furniture_orders", "payment_records", "model_presets", "unit_conversion_rules")
+        for (table in tables) {
+            db.execSQL("ALTER TABLE $table ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE $table ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
+            db.execSQL("ALTER TABLE $table ADD COLUMN fileUrl TEXT")
+            db.execSQL("ALTER TABLE $table ADD COLUMN storagePath TEXT")
+        }
+    }
+}
 val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS documents_cache (collection TEXT NOT NULL, documentId TEXT NOT NULL, updatedAt INTEGER NOT NULL DEFAULT 0, fromCache INTEGER NOT NULL DEFAULT 0, hasPendingWrites INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(collection, documentId))")
@@ -120,7 +131,7 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 
 @Database(
     entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class, com.example.data.sync.DocumentCacheEntity::class, com.example.data.sync.DeletedIdEntity::class, com.example.data.sync.UploadQueueEntity::class, com.example.data.sync.PendingDeleteEntity::class],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(SyncStatusConverters::class)
@@ -146,7 +157,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "khayyaton_workshop.db"
                 )
-                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .build()
                 INSTANCE = instance
                 instance
