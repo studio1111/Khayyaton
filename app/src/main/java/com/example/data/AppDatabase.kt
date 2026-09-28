@@ -22,6 +22,25 @@ import com.example.data.sync.PendingDeleteDao
 import com.example.data.sync.DocumentCacheDao
 import com.example.data.sync.SyncStatusConverters
 
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Existing releases marked legacy local rows as SYNCED even when they
+        // had never been uploaded. Re-queue them once so the new LWW engine can
+        // reconcile them safely with the cloud instead of silently skipping them.
+        val tables = listOf(
+            "workshops",
+            "furniture_orders",
+            "payment_records",
+            "model_presets",
+            "unit_conversion_rules"
+        )
+        for (table in tables) {
+            db.execSQL("UPDATE " + table + " SET syncStatus = 'PENDING' WHERE syncId IS NOT NULL AND syncId != ''")
+            db.execSQL("UPDATE " + table + " SET updatedAt = createdAt WHERE updatedAt <= 0")
+        }
+    }
+}
+
 val MIGRATION_10_11 = object : Migration(10, 11) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE deleted_ids ADD COLUMN cloudSynced INTEGER NOT NULL DEFAULT 0")
@@ -142,7 +161,7 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 
 @Database(
     entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class, com.example.data.sync.DocumentCacheEntity::class, com.example.data.sync.DeletedIdEntity::class, com.example.data.sync.UploadQueueEntity::class, com.example.data.sync.PendingDeleteEntity::class],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(SyncStatusConverters::class)
@@ -168,7 +187,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "khayyaton_workshop.db"
                 )
-                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                     .build()
                 INSTANCE = instance
                 instance
