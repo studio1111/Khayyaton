@@ -553,6 +553,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun selectWorkshop(id: Long) {
+        if (id <= 0L || workshops.value.none { it.id == id }) return
         activeWorkshopId.value = id
         repository.saveActiveWorkshopId(id)
         clearFilters()
