@@ -13,13 +13,12 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.QuerySnapshot
-import com.google.firebase.firestore.Timestamp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.combine
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.debounce
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -134,6 +133,11 @@ class SyncManager(
         }
     }
 
+    private fun detachListeners() {
+        listeners.forEach { runCatching { it.remove() } }
+        listeners.clear()
+    }
+
     private fun restartListeners() {
         detachListeners()
         attachListenersIfNeeded()
@@ -189,7 +193,7 @@ class SyncManager(
             val parsed = parseDocument(collection, doc)
             if (parsed != null) {
                 when (parsed) {
-                    is Workshop -> repository.mergeCloudData(parsed, emptyList(), emptyList(), emptyList(), emptyList())
+                    is Workshop -> repository.mergeCloudData(listOf(parsed), emptyList(), emptyList(), emptyList(), emptyList())
                     is FurnitureOrder -> repository.mergeCloudData(emptyList(), listOf(parsed), emptyList(), emptyList(), emptyList())
                     is PaymentRecord -> repository.mergeCloudData(emptyList(), emptyList(), listOf(parsed), emptyList(), emptyList())
                     is ModelPreset -> repository.mergeCloudData(emptyList(), emptyList(), emptyList(), listOf(parsed), emptyList())
