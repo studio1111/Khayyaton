@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import androidx.work.WorkManager
 import kotlinx.coroutines.tasks.await
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -37,7 +38,6 @@ class SyncManager(
     private val listeners = CopyOnWriteArrayList<com.google.firebase.firestore.ListenerRegistration>()
     private var authListener: FirebaseAuth.AuthStateListener? = null
     private var observeJob: Job? = null
-    private var syncJob: Job? = null
 
     private val _pendingCount = MutableStateFlow(0)
     val pendingCount: StateFlow<Int> = _pendingCount.asStateFlow()
@@ -74,39 +74,15 @@ class SyncManager(
         authListener = null
         detachListeners()
         observeJob?.cancel()
-        syncJob?.cancel()
         connectivity.stop()
         scope.cancel()
     }
 
     fun syncNow() {
         if (!connectivity.isOnline.value) return
-        syncJob?.cancel()
-        syncJob = scope.launch {
-            val user = FirebaseService.currentUser() ?: return@launch
-
-            // Never upload a local snapshot for a new/changed account until its
-            // Firestore data has been restored successfully. This closes the
-            // login/upload race that could make online data appear to disappear.
-            if (!repository.isCloudSyncReady(user.uid)) {
-                val restore = FirebaseService.downloadFromCloud(repository)
-                if (restore.isFailure) return@launch
-                repository.markCloudSyncReady(user.uid)
-            }
-
-            // همگام‌سازی اصلی فقط با Firestore انجام می‌شود و به Storage وابسته نیست.
-            val result = FirebaseService.uploadAllToCloud(
-                orders = repository.getAllOrdersSync(),
-                payments = repository.getAllPaymentsSync(),
-                presets = repository.getAllPresetsSync(),
-                unitRules = repository.getAllUnitRulesSync(),
-                workshops = repository.getAllWorkshopsSync(),
-                repository = repository
-            )
-            if (result.isSuccess) {
-                attachListenersIfNeeded()
-            }
-        }
+        val user = FirebaseService.currentUser() ?: return
+        val context = repository.getApplicationContext() ?: return
+        SyncWorkScheduler.enqueue(context, user.uid)
     }
 
     private fun observePendingCount() {
@@ -115,7 +91,7 @@ class SyncManager(
                 database.uploadQueueDao().pendingCount(),
                 database.pendingDeleteDao().pendingCount(),
                 database.documentCacheDao().pendingWritesCount(),
-                database.deletedIdDao().countFlow()
+                database.deletedIdDao().countPendingFlow()
             ) { uploads, deletes, pendingWrites, tombstones ->
                 uploads + deletes + pendingWrites + tombstones
             }.collect { _pendingCount.value = it }
@@ -194,7 +170,6 @@ class SyncManager(
                 repository.applyCloudDeletions(
                     listOf(WorkshopRepository.PendingCloudDeletion(collection, syncId))
                 )
-                database.deletedIdDao().delete(collection, syncId)
                 continue
             }
 
