@@ -15,6 +15,28 @@ import com.example.model.CalendarType
 import com.example.util.PersianUtils
 import kotlinx.coroutines.flow.Flow
 import androidx.room.withTransaction
+import androidx.room.TypeConverters
+import com.example.data.sync.DeletedIdDao
+import com.example.data.sync.UploadQueueDao
+import com.example.data.sync.PendingDeleteDao
+import com.example.data.sync.DocumentCacheDao
+import com.example.data.sync.SyncStatusConverters
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS documents_cache (collection TEXT NOT NULL, documentId TEXT NOT NULL, updatedAt INTEGER NOT NULL DEFAULT 0, fromCache INTEGER NOT NULL DEFAULT 0, hasPendingWrites INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(collection, documentId))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_documents_cache_documentId ON documents_cache(documentId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_documents_cache_updatedAt ON documents_cache(updatedAt)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS deleted_ids (collection TEXT NOT NULL, documentId TEXT NOT NULL, deletedAt INTEGER NOT NULL, PRIMARY KEY(collection, documentId))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_deleted_ids_deletedAt ON deleted_ids(deletedAt)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS upload_queue (id TEXT NOT NULL PRIMARY KEY, documentId TEXT NOT NULL, localFilePath TEXT NOT NULL, storagePath TEXT NOT NULL, status TEXT NOT NULL, retryCount INTEGER NOT NULL, createdAt INTEGER NOT NULL)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_upload_queue_status ON upload_queue(status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_upload_queue_createdAt ON upload_queue(createdAt)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS pending_deletes (id TEXT NOT NULL PRIMARY KEY, collection TEXT NOT NULL, documentId TEXT NOT NULL, storagePath TEXT, status TEXT NOT NULL, retryCount INTEGER NOT NULL, createdAt INTEGER NOT NULL)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_pending_deletes_status ON pending_deletes(status)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_pending_deletes_createdAt ON pending_deletes(createdAt)")
+    }
+}
 
 val MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -97,16 +119,21 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 }
 
 @Database(
-    entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class],
-    version = 7,
+    entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class, com.example.data.sync.DocumentCacheEntity::class, com.example.data.sync.DeletedIdEntity::class, com.example.data.sync.UploadQueueEntity::class, com.example.data.sync.PendingDeleteEntity::class],
+    version = 8,
     exportSchema = false
 )
+@TypeConverters(SyncStatusConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun orderDao(): OrderDao
     abstract fun paymentDao(): PaymentDao
     abstract fun modelPresetDao(): ModelPresetDao
     abstract fun unitRuleDao(): UnitRuleDao
     abstract fun workshopDao(): WorkshopDao
+    abstract fun deletedIdDao(): DeletedIdDao
+    abstract fun uploadQueueDao(): UploadQueueDao
+    abstract fun pendingDeleteDao(): PendingDeleteDao
+    abstract fun documentCacheDao(): DocumentCacheDao
 
     companion object {
         @Volatile
@@ -119,7 +146,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "khayyaton_workshop.db"
                 )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                 INSTANCE = instance
                 instance
