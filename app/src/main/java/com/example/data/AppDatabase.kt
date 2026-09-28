@@ -488,22 +488,22 @@ class WorkshopRepository(
     }
 
     suspend fun deleteWorkshopAndAllData(workshopId: Long) {
-        val workshop = workshopDao.getWorkshopById(workshopId)
-        val orders = orderDao.getOrdersByWorkshopSync(workshopId)
-        val payments = paymentDao.getPaymentsByWorkshopSync(workshopId)
-        val presets = modelPresetDao.getPresetsByWorkshopSync(workshopId)
-
         database.withTransaction {
+            val workshop = workshopDao.getWorkshopById(workshopId)
+            val orders = orderDao.getOrdersByWorkshopSync(workshopId)
+            val payments = paymentDao.getPaymentsByWorkshopSync(workshopId)
+            val presets = modelPresetDao.getPresetsByWorkshopSync(workshopId)
+
             workshopDao.deleteOrdersByWorkshop(workshopId)
             workshopDao.deletePaymentsByWorkshop(workshopId)
             workshopDao.deletePresetsByWorkshop(workshopId)
             workshopDao.deleteWorkshopById(workshopId)
-        }
 
-        workshop?.syncId?.let { recordCloudDeletion("workshops", it) }
-        orders.forEach { recordCloudDeletion("orders", it.syncId) }
-        payments.forEach { recordCloudDeletion("payments", it.syncId) }
-        presets.forEach { recordCloudDeletion("presets", it.syncId) }
+            workshop?.syncId?.let { recordCloudDeletion("workshops", it) }
+            orders.forEach { recordCloudDeletion("orders", it.syncId) }
+            payments.forEach { recordCloudDeletion("payments", it.syncId) }
+            presets.forEach { recordCloudDeletion("presets", it.syncId) }
+        }
     }
 
     suspend fun clearAllDomainData() {
@@ -515,6 +515,26 @@ class WorkshopRepository(
             workshopDao.clearAll()
         }
         saveActiveWorkshopId(0L)
+    }
+
+    suspend fun clearAccountLocalState() {
+        database.withTransaction {
+            orderDao.clearAll()
+            paymentDao.clearAll()
+            modelPresetDao.clearAll()
+            unitRuleDao.clearAll()
+            workshopDao.clearAll()
+            database.deletedIdDao().clearAll()
+            database.uploadQueueDao().clearAll()
+            database.pendingDeleteDao().clearAll()
+            database.documentCacheDao().clearAll()
+        }
+        prefs?.edit()
+            ?.remove(pendingDeletionKey())
+            ?.remove("local_account_uid")
+            ?.remove("cloud_sync_ready_uid")
+            ?.putLong("active_workshop_id", 0L)
+            ?.apply()
     }
 
     suspend fun applyCloudDeletions(deletions: List<PendingCloudDeletion>) {
@@ -733,8 +753,11 @@ class WorkshopRepository(
     }
 
     suspend fun updateOrdersColorForModel(modelName: String, newColor: String, workshopId: Long) {
-        orderDao.updateModelColor(modelName, newColor, workshopId)
-        modelPresetDao.updatePresetColor(modelName, newColor, workshopId)
+        val now = System.currentTimeMillis()
+        database.withTransaction {
+            orderDao.updateModelColor(modelName, newColor, workshopId, now)
+            modelPresetDao.updatePresetColor(modelName, newColor, workshopId, now)
+        }
     }
 
     suspend fun saveOrder(order: FurnitureOrder) {
@@ -757,14 +780,18 @@ class WorkshopRepository(
     }
 
     suspend fun deleteOrder(order: FurnitureOrder) {
-        orderDao.deleteOrder(order)
-        recordCloudDeletion("orders", order.syncId)
+        database.withTransaction {
+            orderDao.deleteOrder(order)
+            recordCloudDeletion("orders", order.syncId)
+        }
     }
 
     suspend fun deleteOrderById(id: Long) {
-        val existing = orderDao.getOrderById(id)
-        orderDao.deleteOrderById(id)
-        existing?.syncId?.let { recordCloudDeletion("orders", it) }
+        database.withTransaction {
+            val existing = orderDao.getOrderById(id)
+            orderDao.deleteOrderById(id)
+            existing?.syncId?.let { recordCloudDeletion("orders", it) }
+        }
     }
 
     suspend fun savePayment(payment: PaymentRecord) {
@@ -791,14 +818,18 @@ class WorkshopRepository(
     }
 
     suspend fun deletePayment(payment: PaymentRecord) {
-        paymentDao.deletePayment(payment)
-        recordCloudDeletion("payments", payment.syncId)
+        database.withTransaction {
+            paymentDao.deletePayment(payment)
+            recordCloudDeletion("payments", payment.syncId)
+        }
     }
 
     suspend fun deletePaymentById(id: Long) {
-        val existing = paymentDao.getPaymentById(id)
-        paymentDao.deletePaymentById(id)
-        existing?.syncId?.let { recordCloudDeletion("payments", it) }
+        database.withTransaction {
+            val existing = paymentDao.getPaymentById(id)
+            paymentDao.deletePaymentById(id)
+            existing?.syncId?.let { recordCloudDeletion("payments", it) }
+        }
     }
 
     suspend fun getAllOrdersSync(): List<FurnitureOrder> = orderDao.getAllOrdersSync()
