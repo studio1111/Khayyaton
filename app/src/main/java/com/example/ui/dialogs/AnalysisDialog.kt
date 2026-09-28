@@ -2,6 +2,7 @@ package com.example.ui.dialogs
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -1536,5 +1537,10 @@ private fun shareAnalysisReport(
         }
         context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری گزارش تحلیلی"))
     } catch (e: Exception) {
+        Toast.makeText(
+            context,
+            "اشتراک‌گذاری گزارش تحلیلی انجام نشد. لطفاً برنامه‌ای برای ارسال متن انتخاب کنید.",
+            Toast.LENGTH_LONG
+        ).show()
     }
 }
