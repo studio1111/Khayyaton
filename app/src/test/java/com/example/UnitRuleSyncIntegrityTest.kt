@@ -168,4 +168,50 @@ class UnitRuleSyncIntegrityTest {
             db.close()
         }
     }
+    
+    @Test
+    fun mandatory_unit_rule_cannot_be_modified_or_disabled() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val repository = WorkshopRepository(
+                context = context,
+                database = db,
+                orderDao = db.orderDao(),
+                paymentDao = db.paymentDao(),
+                modelPresetDao = db.modelPresetDao(),
+                unitRuleDao = db.unitRuleDao(),
+                workshopDao = db.workshopDao()
+            )
+
+            repository.insertDefaultUnitRulesIfEmpty()
+            val rule = db.unitRuleDao().getAllRulesSync()
+                .first { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "3" }
+
+            repository.saveUnitRule(
+                rule.copy(
+                    pieceKey = "9",
+                    pieceCount = 9.0,
+                    calculatedUnits = 99.0,
+                    isEnabled = false
+                )
+            )
+
+            val restored = db.unitRuleDao().getAllRulesSync()
+                .first { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "3" }
+            assertEquals(2.0, restored.calculatedUnits, 0.0)
+            assertEquals(3.0, restored.pieceCount, 0.0)
+            assertEquals(true, restored.isEnabled)
+            assertEquals(RecordSyncStatus.PENDING, restored.syncStatus)
+            assertEquals(
+                null,
+                db.unitRuleDao().getAllRulesSync()
+                    .firstOrNull { WorkshopRepository.normalizeUnitKey(it.pieceKey) == "9" }
+            )
+        } finally {
+            db.close()
+        }
+    }
 }
