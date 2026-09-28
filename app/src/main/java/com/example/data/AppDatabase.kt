@@ -317,22 +317,6 @@ class WorkshopRepository(
         prefs?.edit()?.remove("local_account_uid")?.apply()
     }
 
-    /**
-     * Prevents background sync from uploading local data before the current
-     * Firebase account has completed its initial cloud restore.
-     */
-    fun isCloudSyncReady(uid: String): Boolean =
-        uid.isNotBlank() && prefs?.getString("cloud_sync_ready_uid", null) == uid
-
-    fun markCloudSyncReady(uid: String) {
-        if (uid.isNotBlank()) {
-            prefs?.edit()?.putString("cloud_sync_ready_uid", uid)?.apply()
-        }
-    }
-
-    fun clearCloudSyncReady() {
-        prefs?.edit()?.remove("cloud_sync_ready_uid")?.apply()
-    }
 
     fun saveActiveWorkshopId(id: Long) {
         prefs?.edit()?.putLong("active_workshop_id", id)?.apply()
@@ -956,25 +940,33 @@ class WorkshopRepository(
     }
 
     suspend fun deletePreset(preset: ModelPreset) {
-        modelPresetDao.deletePreset(preset)
-        recordCloudDeletion("presets", preset.syncId)
+        database.withTransaction {
+            modelPresetDao.deletePreset(preset)
+            recordCloudDeletion("presets", preset.syncId)
+        }
     }
 
     suspend fun deletePresetById(id: Long) {
-        val existing = modelPresetDao.getPresetById(id)
-        modelPresetDao.deletePresetById(id)
-        existing?.syncId?.let { recordCloudDeletion("presets", it) }
+        database.withTransaction {
+            val existing = modelPresetDao.getPresetById(id)
+            modelPresetDao.deletePresetById(id)
+            existing?.syncId?.let { recordCloudDeletion("presets", it) }
+        }
     }
 
     suspend fun deletePresetByName(name: String) {
-        modelPresetDao.getPresetByName(name)?.let { recordCloudDeletion("presets", it.syncId) }
-        modelPresetDao.deletePresetByName(name)
+        database.withTransaction {
+            modelPresetDao.getPresetByName(name)?.let { recordCloudDeletion("presets", it.syncId) }
+            modelPresetDao.deletePresetByName(name)
+        }
     }
 
     suspend fun deletePresetByNameAndWorkshop(name: String, workshopId: Long) {
-        val existing = modelPresetDao.getPresetByNameAndWorkshop(name, workshopId)
-        modelPresetDao.deletePresetByNameAndWorkshop(name, workshopId)
-        existing?.syncId?.let { recordCloudDeletion("presets", it) }
+        database.withTransaction {
+            val existing = modelPresetDao.getPresetByNameAndWorkshop(name, workshopId)
+            modelPresetDao.deletePresetByNameAndWorkshop(name, workshopId)
+            existing?.syncId?.let { recordCloudDeletion("presets", it) }
+        }
     }
 
     suspend fun saveUnitRule(rule: UnitConversionRule) {
@@ -1009,16 +1001,20 @@ class WorkshopRepository(
     }
 
     suspend fun deleteUnitRule(rule: UnitConversionRule) {
-        markDefaultUnitRuleDeleted(rule)
-        unitRuleDao.deleteRule(rule)
-        recordCloudDeletion("unitRules", rule.syncId)
+        database.withTransaction {
+            markDefaultUnitRuleDeleted(rule)
+            unitRuleDao.deleteRule(rule)
+            recordCloudDeletion("unitRules", rule.syncId)
+        }
     }
 
     suspend fun deleteUnitRuleById(id: Long) {
-        val existing = unitRuleDao.getAllRulesSync().firstOrNull { it.id == id }
-        existing?.let { markDefaultUnitRuleDeleted(it) }
-        unitRuleDao.deleteRuleById(id)
-        existing?.syncId?.let { recordCloudDeletion("unitRules", it) }
+        database.withTransaction {
+            val existing = unitRuleDao.getAllRulesSync().firstOrNull { it.id == id }
+            existing?.let { markDefaultUnitRuleDeleted(it) }
+            unitRuleDao.deleteRuleById(id)
+            existing?.syncId?.let { recordCloudDeletion("unitRules", it) }
+        }
     }
 
     private data class DefaultUnitRule(val key: String, val calculatedUnits: Double)
