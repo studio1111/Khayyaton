@@ -741,6 +741,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         val context = repository.getApplicationContext() ?: return
         SyncWorkScheduler.enqueue(context, user.uid)
     }
+}
 
 class KhayyatonViewModelFactory(private val repository: WorkshopRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
