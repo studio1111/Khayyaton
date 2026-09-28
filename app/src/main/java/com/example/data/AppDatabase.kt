@@ -1152,11 +1152,12 @@ class WorkshopRepository(
     }
 
     suspend fun insertDefaultUnitRulesIfEmpty() {
+        // These four base conversion rules are mandatory defaults for every account.
+        // They must survive logout/account switching and must be restored if missing.
+        // User-created extra rules remain untouched.
         val existing = unitRuleDao.getAllRulesSync()
-        val deletedDefaults = deletedDefaultUnitRules()
 
         for (defaultRule in defaultUnitRules) {
-            if (defaultRule.key in deletedDefaults) continue
             val exists = existing.any { rule ->
                 val raw = rule.pieceKey.ifBlank {
                     if (rule.pieceCount % 1.0 == 0.0) rule.pieceCount.toInt().toString() else rule.pieceCount.toString()
