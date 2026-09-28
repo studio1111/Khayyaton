@@ -717,6 +717,50 @@ class WorkshopRepository(
         presets: List<ModelPreset>,
         unitRules: List<UnitConversionRule>
     ) {
+        // A manual backup restore is a local user action. Restored records must
+        // enter the new sync pipeline as pending changes, otherwise they would
+        // look already synced and never reach Firestore.
+        val normalizedWorkshops = workshops.map {
+            it.copy(
+                syncId = it.syncId.ifBlank { java.util.UUID.randomUUID().toString() },
+                syncStatus = com.example.data.sync.RecordSyncStatus.PENDING,
+                updatedAt = if (it.updatedAt > 0L) it.updatedAt else it.createdAt
+            )
+        }
+        val workshopSyncById = normalizedWorkshops.associateBy { it.id }.mapValues { it.value.syncId }
+
+        val normalizedOrders = orders.map {
+            it.copy(
+                syncId = it.syncId.ifBlank { java.util.UUID.randomUUID().toString() },
+                workshopSyncId = it.workshopSyncId.ifBlank { workshopSyncById[it.workshopId].orEmpty() },
+                syncStatus = com.example.data.sync.RecordSyncStatus.PENDING,
+                updatedAt = if (it.updatedAt > 0L) it.updatedAt else it.createdAt
+            )
+        }
+        val normalizedPayments = payments.map {
+            it.copy(
+                syncId = it.syncId.ifBlank { java.util.UUID.randomUUID().toString() },
+                workshopSyncId = it.workshopSyncId.ifBlank { workshopSyncById[it.workshopId].orEmpty() },
+                syncStatus = com.example.data.sync.RecordSyncStatus.PENDING,
+                updatedAt = if (it.updatedAt > 0L) it.updatedAt else it.createdAt
+            )
+        }
+        val normalizedPresets = presets.map {
+            it.copy(
+                syncId = it.syncId.ifBlank { java.util.UUID.randomUUID().toString() },
+                workshopSyncId = it.workshopSyncId.ifBlank { workshopSyncById[it.workshopId].orEmpty() },
+                syncStatus = com.example.data.sync.RecordSyncStatus.PENDING,
+                updatedAt = if (it.updatedAt > 0L) it.updatedAt else System.currentTimeMillis()
+            )
+        }
+        val normalizedRules = unitRules.map {
+            it.copy(
+                syncId = it.syncId.ifBlank { java.util.UUID.randomUUID().toString() },
+                syncStatus = com.example.data.sync.RecordSyncStatus.PENDING,
+                updatedAt = if (it.updatedAt > 0L) it.updatedAt else System.currentTimeMillis()
+            )
+        }
+
         database.withTransaction {
             orderDao.clearAll()
             paymentDao.clearAll()
@@ -724,15 +768,16 @@ class WorkshopRepository(
             unitRuleDao.clearAll()
             workshopDao.clearAll()
 
-            if (workshops.isNotEmpty()) workshopDao.insertAll(workshops)
-            if (orders.isNotEmpty()) orderDao.insertAll(orders)
-            if (payments.isNotEmpty()) paymentDao.insertAll(payments)
-            if (presets.isNotEmpty()) modelPresetDao.insertAll(presets)
-            if (unitRules.isNotEmpty()) unitRuleDao.insertAll(unitRules)
+            if (normalizedWorkshops.isNotEmpty()) workshopDao.insertAll(normalizedWorkshops)
+            if (normalizedOrders.isNotEmpty()) orderDao.insertAll(normalizedOrders)
+            if (normalizedPayments.isNotEmpty()) paymentDao.insertAll(normalizedPayments)
+            if (normalizedPresets.isNotEmpty()) modelPresetDao.insertAll(normalizedPresets)
+            if (normalizedRules.isNotEmpty()) unitRuleDao.insertAll(normalizedRules)
         }
+
         val savedId = getSavedActiveWorkshopId()
-        if (savedId <= 0L || workshops.none { it.id == savedId }) {
-            saveActiveWorkshopId(workshops.firstOrNull()?.id ?: 0L)
+        if (savedId <= 0L || normalizedWorkshops.none { it.id == savedId }) {
+            saveActiveWorkshopId(normalizedWorkshops.firstOrNull()?.id ?: 0L)
         }
     }
 
