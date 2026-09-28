@@ -84,8 +84,8 @@ interface OrderDao {
     @Query("DELETE FROM furniture_orders WHERE id = :id")
     suspend fun deleteOrderById(id: Long)
 
-    @Query("UPDATE furniture_orders SET colorCode = :newColor WHERE LOWER(TRIM(modelName)) = LOWER(TRIM(:modelName)) AND workshopId = :workshopId")
-    suspend fun updateModelColor(modelName: String, newColor: String, workshopId: Long)
+    @Query("UPDATE furniture_orders SET colorCode = :newColor, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE LOWER(TRIM(modelName)) = LOWER(TRIM(:modelName)) AND workshopId = :workshopId")
+    suspend fun updateModelColor(modelName: String, newColor: String, workshopId: Long, updatedAt: Long)
 
     @Query("SELECT * FROM furniture_orders WHERE id = :id LIMIT 1")
     suspend fun getOrderById(id: Long): FurnitureOrder?
@@ -195,8 +195,8 @@ interface ModelPresetDao {
     @Query("DELETE FROM model_presets WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) AND workshopId = :workshopId")
     suspend fun deletePresetByNameAndWorkshop(name: String, workshopId: Long)
 
-    @Query("UPDATE model_presets SET colorCode = :newColor WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) AND workshopId = :workshopId")
-    suspend fun updatePresetColor(name: String, newColor: String, workshopId: Long)
+    @Query("UPDATE model_presets SET colorCode = :newColor, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) AND workshopId = :workshopId")
+    suspend fun updatePresetColor(name: String, newColor: String, workshopId: Long, updatedAt: Long)
 
     @Query("SELECT * FROM model_presets WHERE id = :id LIMIT 1")
     suspend fun getPresetById(id: Long): ModelPreset?
