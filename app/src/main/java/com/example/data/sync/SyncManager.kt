@@ -83,6 +83,17 @@ class SyncManager(
         if (!connectivity.isOnline.value) return
         syncJob?.cancel()
         syncJob = scope.launch {
+            val user = FirebaseService.currentUser() ?: return@launch
+
+            // Never upload a local snapshot for a new/changed account until its
+            // Firestore data has been restored successfully. This closes the
+            // login/upload race that could make online data appear to disappear.
+            if (!repository.isCloudSyncReady(user.uid)) {
+                val restore = FirebaseService.downloadFromCloud(repository)
+                if (restore.isFailure) return@launch
+                repository.markCloudSyncReady(user.uid)
+            }
+
             // همگام‌سازی اصلی فقط با Firestore انجام می‌شود و به Storage وابسته نیست.
             val result = FirebaseService.uploadAllToCloud(
                 orders = repository.getAllOrdersSync(),
