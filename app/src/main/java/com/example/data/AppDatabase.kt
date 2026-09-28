@@ -464,6 +464,7 @@ class WorkshopRepository(
                 throw com.example.data.sync.PendingAccountSwitchException()
             }
             clearAccountLocalState()
+            prefs?.edit()?.remove("custom_username")?.apply()
         }
         saveLocalAccountUid(uid)
         previousUid?.takeIf { it != uid }
