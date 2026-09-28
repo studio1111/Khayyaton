@@ -1,5 +1,9 @@
 package com.example.ui
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -699,25 +703,48 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun onUserLoggedOut() {
-        val context = repository.getApplicationContext()
+        val context = repository.getApplicationContext() ?: return
         val uid = FirebaseService.currentUser()?.uid ?: repository.getLocalAccountUid()
 
-        if (uid != null && context != null) {
-            SyncWorkScheduler.cancel(context, uid)
-        }
-
-        FirebaseService.signOut()
-        currentUser.value = null
-        autoSyncStatusMessage.value = null
-        SubscriptionManager.clearCachedUserState()
-
         viewModelScope.launch {
+            // Never discard unsynced local changes on logout.
+            if (repository.hasPendingSyncWork()) {
+                if (!hasUsableNetwork(context)) {
+                    autoSyncStatusMessage.value =
+                        "برای خروج از حساب، ابتدا اینترنت را وصل کنید تا اطلاعات ذخیره و همگام شود."
+                    return@launch
+                }
+
+                autoSyncStatusMessage.value = "در حال ذخیره و همگام‌سازی اطلاعات قبل از خروج..."
+                val syncResult = FirebaseService.syncAccount(repository)
+                if (syncResult.isFailure || repository.hasPendingSyncWork()) {
+                    autoSyncStatusMessage.value =
+                        syncResult.exceptionOrNull()?.message
+                            ?: "همگام‌سازی کامل نشد. خروج لغو شد تا اطلاعات شما از بین نرود."
+                    return@launch
+                }
+            }
+
+            uid?.let { SyncWorkScheduler.cancel(context, it) }
+            FirebaseService.signOut()
+            currentUser.value = null
+            autoSyncStatusMessage.value = null
+            SubscriptionManager.clearCachedUserState()
+
             repository.clearAccountLocalState()
             repository.saveActiveWorkshopId(0L)
             activeWorkshopId.value = 0L
             customUsername.value = ""
             clearFilters()
         }
+    }
+
+    private fun hasUsableNetwork(context: Context): Boolean {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        val network = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     private suspend fun performAutoSync(user: FirebaseUserDto) {
