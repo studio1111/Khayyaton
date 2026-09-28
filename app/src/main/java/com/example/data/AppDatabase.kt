@@ -22,6 +22,11 @@ import com.example.data.sync.PendingDeleteDao
 import com.example.data.sync.DocumentCacheDao
 import com.example.data.sync.SyncStatusConverters
 
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE upload_queue ADD COLUMN collection TEXT NOT NULL DEFAULT ''")
+    }
+}
 val MIGRATION_8_9 = object : Migration(8, 9) {
     override fun migrate(db: SupportSQLiteDatabase) {
         val tables = listOf("workshops", "furniture_orders", "payment_records", "model_presets", "unit_conversion_rules")
@@ -131,7 +136,7 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 
 @Database(
     entities = [FurnitureOrder::class, PaymentRecord::class, ModelPreset::class, UnitConversionRule::class, Workshop::class, com.example.data.sync.DocumentCacheEntity::class, com.example.data.sync.DeletedIdEntity::class, com.example.data.sync.UploadQueueEntity::class, com.example.data.sync.PendingDeleteEntity::class],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(SyncStatusConverters::class)
@@ -157,7 +162,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "khayyaton_workshop.db"
                 )
-                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                     .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .build()
                 INSTANCE = instance
                 instance
