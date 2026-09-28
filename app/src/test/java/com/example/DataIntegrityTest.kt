@@ -318,4 +318,48 @@ class DataIntegrityTest {
         assertTrue(root.getJSONArray("orders").getJSONObject(0).has("workshopSyncId"))
         assertTrue(root.getJSONArray("payments").getJSONObject(0).has("relatedOrderSyncId"))
     }
+    
+    @Test
+    fun manual_restore_clears_stale_tombstones_and_cloud_cache() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val (db, repo) = repository(context)
+        try {
+            repo.saveLocalAccountUid("restore-user")
+            repo.recordCloudDeletion("orders", "old-order")
+
+            db.documentCacheDao().upsert(
+                com.example.data.sync.DocumentCacheEntity(
+                    collection = "orders",
+                    documentId = "old-order",
+                    updatedAt = 10L,
+                    fromCache = true,
+                    hasPendingWrites = false
+                )
+            )
+
+            repo.replaceAllData(
+                workshops = listOf(Workshop(syncId = "restore-workshop", name = "کارگاه بازیابی")),
+                orders = emptyList(),
+                payments = emptyList(),
+                presets = emptyList(),
+                unitRules = listOf(
+                    UnitConversionRule(
+                        syncId = "restore-rule",
+                        pieceKey = "custom",
+                        pieceCount = 0.0,
+                        calculatedUnits = 4.0
+                    )
+                )
+            )
+
+            assertTrue(db.deletedIdDao().getAll().isEmpty())
+            assertTrue(db.documentCacheDao().getAll().isEmpty())
+            assertEquals(
+                com.example.data.sync.RecordSyncStatus.PENDING,
+                db.unitRuleDao().getAllRulesSync().first().syncStatus
+            )
+        } finally {
+            db.close()
+        }
+    }
 }
