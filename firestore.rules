@@ -3,128 +3,355 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // -----------------------------------------------------------------------
+    // Authentication / identity
+    // -----------------------------------------------------------------------
+
     function signedIn() {
       return request.auth != null;
     }
 
-    function isOwner(uid) {
+    function ownsUser(uid) {
       return signedIn() && request.auth.uid == uid;
     }
 
-    // Owner/admin access is based only on Firebase Authentication custom claims.
-    // Client-writable Firestore fields are never trusted for authorization.
-    function isFirebaseOwner() {
-      return signedIn() &&
-        (request.auth.token.role == "owner" || request.auth.token.admin == true);
+    // -----------------------------------------------------------------------
+    // Common validation
+    // -----------------------------------------------------------------------
+
+    // Every synchronized domain document is stored under a deterministic
+    // Firestore document ID equal to its syncId. This prevents a client from
+    // writing one record under one ID while claiming another identity inside
+    // the document.
+    function validSyncDocument(docId) {
+      return request.resource.data.keys().hasAll(["syncId", "updatedAt"])
+        && request.resource.data.syncId is string
+        && request.resource.data.syncId != ""
+        && request.resource.data.syncId == docId
+        && request.resource.data.updatedAt is number;
     }
 
-    function canonicalSyncId(docId) {
-      return request.resource.data.syncId is string
-        && request.resource.data.syncId == docId;
+    function validUserDocument() {
+      return request.resource.data.keys().hasOnly([
+          "username",
+          "email",
+          "lastSyncAt",
+          "totalOrders",
+          "totalPayments"
+        ])
+        && (
+          !request.resource.data.keys().hasAny(["username"])
+          || (
+            request.resource.data.username is string
+            && request.resource.data.username.size() >= 3
+            && request.resource.data.username.size() <= 32
+          )
+        )
+        && (
+          !request.resource.data.keys().hasAny(["email"])
+          || request.resource.data.email is string
+        )
+        && (
+          !request.resource.data.keys().hasAny(["lastSyncAt"])
+          || request.resource.data.lastSyncAt is number
+        )
+        && (
+          !request.resource.data.keys().hasAny(["totalOrders"])
+          || request.resource.data.totalOrders is number
+        )
+        && (
+          !request.resource.data.keys().hasAny(["totalPayments"])
+          || request.resource.data.totalPayments is number
+        );
     }
 
-    // Username reservation used by registration.
+    function validDeletionDocument(docId) {
+      return request.resource.data.keys().hasOnly([
+          "collection",
+          "syncId",
+          "deletedAt"
+        ])
+        && request.resource.data.collection in [
+          "workshops",
+          "orders",
+          "payments",
+          "presets",
+          "unitRules"
+        ]
+        && request.resource.data.syncId is string
+        && request.resource.data.syncId != ""
+        && request.resource.data.deletedAt is number
+        && docId == request.resource.data.collection + "_" + request.resource.data.syncId;
+    }
+
+    // -----------------------------------------------------------------------
+    // Username reservations
+    // -----------------------------------------------------------------------
+
     match /usernames/{username} {
-      // Username availability is not exposed to anonymous clients.
+      // A signed-in user may check one exact username, but collection listing
+      // is deliberately disabled so usernames cannot be enumerated.
       allow get: if signedIn();
       allow list: if false;
 
-      // A username can only be claimed for the currently authenticated UID.
-      allow create: if isOwner(request.auth.uid)
+      // A reservation is created only for the current Firebase UID and can
+      // never be reassigned by a client.
+      allow create: if signedIn()
         && request.resource.data.keys().hasOnly(["uid"])
+        && request.resource.data.uid is string
         && request.resource.data.uid == request.auth.uid;
 
-      // Username ownership is permanent.
       allow update, delete: if false;
     }
 
+    // -----------------------------------------------------------------------
+    // Account root
+    // -----------------------------------------------------------------------
+
     match /users/{uid} {
-      // The app only needs these client-writable profile/sync-summary fields.
-      // Sensitive authorization/subscription fields cannot be changed by the client.
-      allow create: if isOwner(uid)
-        && request.resource.data.keys().hasOnly([
-          "username",
-          "email",
-          "lastSyncAt",
-          "totalOrders",
-          "totalPayments"
-        ]);
+      // The account document is private to its Firebase Authentication UID.
+      allow get, list: if ownsUser(uid);
 
-      allow read: if isOwner(uid);
+      // Registration creates only the client-safe profile fields.
+      // Subscription, roles, claims, billing state and security metadata are
+      // intentionally not client-writable.
+      allow create: if ownsUser(uid)
+        && validUserDocument();
 
-      allow update: if isOwner(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          "username",
-          "email",
-          "lastSyncAt",
-          "totalOrders",
-          "totalPayments"
-        ]);
+      // Sync may update only the explicitly allowed profile/summary fields.
+      // Because request.resource.data is the complete resulting document,
+      // validUserDocument() also prevents an update from introducing unknown
+      // fields.
+      allow update: if ownsUser(uid)
+        && validUserDocument();
 
-      // User documents are retained; account deletion is handled separately.
+      // Account deletion is not performed by the Android client.
       allow delete: if false;
 
+      // ---------------------------------------------------------------------
+      // Workshops
+      // ---------------------------------------------------------------------
+
       match /workshops/{docId} {
-        allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
-        allow delete: if isOwner(uid);
+        allow read: if ownsUser(uid);
+
+        allow create, update: if ownsUser(uid)
+          && request.resource.data.keys().hasOnly([
+            "id",
+            "syncId",
+            "name",
+            "createdAt",
+            "updatedAt"
+          ])
+          && validSyncDocument(docId)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 1
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.createdAt is number
+          && request.resource.data.id is number;
+
+        allow delete: if ownsUser(uid);
       }
+
+      // ---------------------------------------------------------------------
+      // Work orders
+      // ---------------------------------------------------------------------
 
       match /orders/{docId} {
-        allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
-        allow delete: if isOwner(uid);
+        allow read: if ownsUser(uid);
+
+        allow create, update: if ownsUser(uid)
+          && request.resource.data.keys().hasOnly([
+            "id",
+            "syncId",
+            "workshopId",
+            "workshopSyncId",
+            "orderNumber",
+            "invoiceNumber",
+            "modelName",
+            "pricePerSet",
+            "unitsPerSet",
+            "countFormula",
+            "calculatedUnits",
+            "calculatedTotal",
+            "dateJalali",
+            "dateGregorian",
+            "customerName",
+            "phone",
+            "fabricName",
+            "workshopInvoiceNumber",
+            "notes",
+            "colorCode",
+            "createdAt",
+            "updatedAt"
+          ])
+          && validSyncDocument(docId)
+          && request.resource.data.id is number
+          && request.resource.data.workshopId is number
+          && request.resource.data.workshopSyncId is string
+          && request.resource.data.workshopSyncId != ""
+          && request.resource.data.orderNumber is number
+          && request.resource.data.invoiceNumber is string
+          && request.resource.data.modelName is string
+          && request.resource.data.pricePerSet is number
+          && request.resource.data.unitsPerSet is number
+          && request.resource.data.countFormula is string
+          && request.resource.data.calculatedUnits is number
+          && request.resource.data.calculatedTotal is number
+          && request.resource.data.dateJalali is string
+          && request.resource.data.dateGregorian is string
+          && request.resource.data.customerName is string
+          && request.resource.data.phone is string
+          && request.resource.data.fabricName is string
+          && request.resource.data.workshopInvoiceNumber is string
+          && request.resource.data.notes is string
+          && request.resource.data.colorCode is string
+          && request.resource.data.createdAt is number;
+
+        allow delete: if ownsUser(uid);
       }
+
+      // ---------------------------------------------------------------------
+      // Payments
+      // ---------------------------------------------------------------------
 
       match /payments/{docId} {
-        allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
-        allow delete: if isOwner(uid);
+        allow read: if ownsUser(uid);
+
+        allow create, update: if ownsUser(uid)
+          && request.resource.data.keys().hasOnly([
+            "id",
+            "syncId",
+            "workshopId",
+            "workshopSyncId",
+            "paymentNumber",
+            "amount",
+            "dateJalali",
+            "dateGregorian",
+            "customerName",
+            "description",
+            "paymentType",
+            "referenceNo",
+            "bankName",
+            "cardNumber",
+            "relatedOrderId",
+            "relatedOrderSyncId",
+            "createdAt",
+            "updatedAt"
+          ])
+          && validSyncDocument(docId)
+          && request.resource.data.id is number
+          && request.resource.data.workshopId is number
+          && request.resource.data.workshopSyncId is string
+          && request.resource.data.workshopSyncId != ""
+          && request.resource.data.paymentNumber is number
+          && request.resource.data.amount is number
+          && request.resource.data.dateJalali is string
+          && request.resource.data.dateGregorian is string
+          && request.resource.data.customerName is string
+          && request.resource.data.description is string
+          && request.resource.data.paymentType is string
+          && request.resource.data.referenceNo is string
+          && request.resource.data.bankName is string
+          && request.resource.data.cardNumber is string
+          && request.resource.data.createdAt is number;
+
+        allow delete: if ownsUser(uid);
       }
+
+      // ---------------------------------------------------------------------
+      // Model presets
+      // ---------------------------------------------------------------------
 
       match /presets/{docId} {
-        allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
-        allow delete: if isOwner(uid);
+        allow read: if ownsUser(uid);
+
+        allow create, update: if ownsUser(uid)
+          && request.resource.data.keys().hasOnly([
+            "id",
+            "syncId",
+            "workshopId",
+            "workshopSyncId",
+            "name",
+            "defaultPricePerSet",
+            "defaultUnitsPerSet",
+            "colorCode",
+            "description",
+            "updatedAt"
+          ])
+          && validSyncDocument(docId)
+          && request.resource.data.id is number
+          && request.resource.data.workshopId is number
+          && request.resource.data.workshopSyncId is string
+          && request.resource.data.workshopSyncId != ""
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 1
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.defaultPricePerSet is number
+          && request.resource.data.defaultUnitsPerSet is number
+          && request.resource.data.colorCode is string
+          && request.resource.data.description is string;
+
+        allow delete: if ownsUser(uid);
       }
+
+      // ---------------------------------------------------------------------
+      // Unit conversion rules
+      // ---------------------------------------------------------------------
 
       match /unitRules/{docId} {
-        allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid) && canonicalSyncId(docId);
-        allow delete: if isOwner(uid);
+        allow read: if ownsUser(uid);
+
+        allow create, update: if ownsUser(uid)
+          && request.resource.data.keys().hasOnly([
+            "id",
+            "syncId",
+            "pieceKey",
+            "pieceCount",
+            "calculatedUnits",
+            "isEnabled",
+            "updatedAt"
+          ])
+          && validSyncDocument(docId)
+          && request.resource.data.id is number
+          && request.resource.data.pieceKey is string
+          && request.resource.data.pieceKey.size() >= 1
+          && request.resource.data.pieceKey.size() <= 40
+          && request.resource.data.pieceCount is number
+          && request.resource.data.calculatedUnits is number
+          && request.resource.data.isEnabled is bool;
+
+        allow delete: if ownsUser(uid);
       }
+
+      // ---------------------------------------------------------------------
+      // Tombstones
+      // ---------------------------------------------------------------------
 
       match /deletions/{docId} {
-        allow read: if isOwner(uid);
-
-        // Tombstones must identify one of the app's supported collections and
-        // use the same deterministic document ID that the sync engine creates.
-        allow create, update: if isOwner(uid)
-          && request.resource.data.keys().hasOnly([
-            "collection",
-            "syncId",
-            "deletedAt"
-          ])
-          && request.resource.data.collection in [
-            "workshops",
-            "orders",
-            "payments",
-            "presets",
-            "unitRules"
-          ]
-          && request.resource.data.syncId is string
-          && request.resource.data.syncId != ""
-          && docId == request.resource.data.collection + "_" + request.resource.data.syncId;
-
-        allow delete: if isOwner(uid);
+        allow read: if ownsUser(uid);
+        allow create, update: if ownsUser(uid) && validDeletionDocument(docId);
+        allow delete: if ownsUser(uid);
       }
 
-      // Subscription entitlement is server-controlled. Admin SDK/server code
-      // can write it because server-side Firebase libraries bypass Firestore Rules.
+      // ---------------------------------------------------------------------
+      // Subscription entitlement
+      // ---------------------------------------------------------------------
+
+      // Subscription state is trusted only when written by trusted backend
+      // code. The Android client can never create, modify or delete it.
       match /subscription/{docId} {
-        allow read: if isOwner(uid);
-        allow write: if false;
+        allow read: if ownsUser(uid);
+        allow create, update, delete: if false;
       }
+    }
+
+    // -----------------------------------------------------------------------
+    // Explicit default deny
+    // -----------------------------------------------------------------------
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
