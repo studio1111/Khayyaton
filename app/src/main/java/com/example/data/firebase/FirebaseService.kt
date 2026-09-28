@@ -17,6 +17,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.PersistentCacheSettings
 import com.google.firebase.storage.FirebaseStorage
@@ -400,7 +401,8 @@ object FirebaseService {
                     "id" to workshop.id,
                     "syncId" to workshop.syncId,
                     "name" to workshop.name,
-                    "createdAt" to workshop.createdAt
+                    "createdAt" to workshop.createdAt,
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
             }
             batchSet(workshopsCol, workshopDocs)
@@ -429,7 +431,8 @@ object FirebaseService {
                     "workshopInvoiceNumber" to order.workshopInvoiceNumber,
                     "notes" to order.notes,
                     "colorCode" to order.colorCode,
-                    "createdAt" to order.createdAt
+                    "createdAt" to order.createdAt,
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
             }
             batchSet(ordersCol, orderDocs)
@@ -454,7 +457,8 @@ object FirebaseService {
                     "cardNumber" to payment.cardNumber,
                     "relatedOrderId" to payment.relatedOrderId,
                     "relatedOrderSyncId" to payment.relatedOrderSyncId,
-                    "createdAt" to payment.createdAt
+                    "createdAt" to payment.createdAt,
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
             }
             batchSet(paymentsCol, paymentDocs)
@@ -471,7 +475,8 @@ object FirebaseService {
                     "defaultPricePerSet" to preset.defaultPricePerSet,
                     "defaultUnitsPerSet" to preset.defaultUnitsPerSet,
                     "colorCode" to preset.colorCode,
-                    "description" to preset.description
+                    "description" to preset.description,
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
             }
             batchSet(presetsCol, presetDocs)
@@ -485,7 +490,8 @@ object FirebaseService {
                     "pieceKey" to rule.pieceKey,
                     "pieceCount" to rule.pieceCount,
                     "calculatedUnits" to rule.calculatedUnits,
-                    "isEnabled" to rule.isEnabled
+                    "isEnabled" to rule.isEnabled,
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
             }
             batchSet(rulesCol, ruleDocs)
