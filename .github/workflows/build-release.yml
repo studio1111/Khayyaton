@@ -152,7 +152,12 @@ jobs:
           gh run list --repo "${GITHUB_REPOSITORY}" --limit 1000 --json databaseId --jq '.[].databaseId' |
             while IFS= read -r run_id; do
               [ -z "$run_id" ] && continue
-              [ "$run_id" = "${GITHUB_RUN_ID}" ] && continue
+              # Never delete a newer run. A previous run can finish after a
+              # newer push has already started, so deleting every run except
+              # the current one can accidentally delete the newest build.
+              if [ "$run_id" -ge "${GITHUB_RUN_ID}" ]; then
+                continue
+              fi
               gh run delete "$run_id" --repo "${GITHUB_REPOSITORY}" || true
             done
 
