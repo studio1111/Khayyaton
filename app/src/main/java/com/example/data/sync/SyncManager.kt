@@ -46,7 +46,10 @@ class SyncManager(
 
         scope.launch {
             connectivity.isOnline.collect { online ->
-                if (online) syncNow()
+                if (online) {
+                    runCatching { syncNow() }
+                        .onFailure { android.util.Log.w("SyncManager", "Automatic sync enqueue failed.", it) }
+                }
             }
         }
 
@@ -81,11 +84,14 @@ class SyncManager(
                         android.util.Log.w("SyncManager", "Account switch blocked until pending data is synchronized.", e)
                         detachListeners()
                         FirebaseService.signOut()
+                    } catch (e: Exception) {
+                        android.util.Log.e("SyncManager", "Authentication-state synchronization failed.", e)
+                        detachListeners()
                     }
                 }
             }
         }
-        auth.addAuthStateListener(authListener!!)
+        authListener?.let { auth.addAuthStateListener(it) }
         auth.currentUser?.let { current ->
             scope.launch {
                 try {
