@@ -558,7 +558,11 @@ fun GlassyAuthScreen(
                                 }
                                 isLoading = false
                                 if (res.isSuccess) {
-                                    val user = res.getOrNull()!!
+                                    val user = res.getOrNull()
+                                    if (user == null) {
+                                        errorMessage = "ورود یا ثبت‌نام انجام نشد. لطفاً دوباره تلاش کنید."
+                                        return@launch
+                                    }
                                     val finalUser = if (cleanUsername.isNotBlank() && user.displayName.isNullOrBlank()) {
                                         user.copy(displayName = cleanUsername)
                                     } else {
