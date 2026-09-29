@@ -362,4 +362,29 @@ class DataIntegrityTest {
             db.close()
         }
     }
+
+    @Test
+    fun backup_preserves_updatedAt_and_file_metadata() {
+        val workshop = com.example.model.Workshop(
+            id = 1L,
+            name = "کارگاه تست",
+            syncId = "wrk-test",
+            createdAt = 100L,
+            updatedAt = 200L,
+            fileUrl = "https://example.invalid/workshop",
+            storagePath = "workshops/wrk-test"
+        )
+        val json = com.example.util.BackupManager.createBackupJson(
+            orders = emptyList(),
+            payments = emptyList(),
+            presets = emptyList(),
+            workshops = listOf(workshop),
+            unitRules = emptyList()
+        )
+        val item = org.json.JSONObject(json).getJSONArray("workshops").getJSONObject(0)
+        assertEquals(200L, item.getLong("updatedAt"))
+        assertEquals("workshops/wrk-test", item.getString("storagePath"))
+        assertEquals("https://example.invalid/workshop", item.getString("fileUrl"))
+    }
+
 }
