@@ -543,37 +543,46 @@ fun GlassyAuthScreen(
 
                             isLoading = true
                             coroutineScope.launch {
-                                val gate = onBeforeAuth()
-                                if (gate.isFailure) {
-                                    isLoading = false
-                                    errorMessage = gate.exceptionOrNull()?.message
-                                        ?: "همگام‌سازی اطلاعات حساب فعلی کامل نشد."
-                                    return@launch
-                                }
-
-                                val res = if (activeTab == GlassAuthTab.SIGN_IN) {
-                                    FirebaseService.signInWithEmail(cleanEmail, password, cleanUsername.ifBlank { null })
-                                } else {
-                                    FirebaseService.registerWithEmailAndUsername(cleanUsername, cleanEmail, password)
-                                }
-                                isLoading = false
-                                if (res.isSuccess) {
-                                    val user = res.getOrNull()
-                                    if (user == null) {
-                                        errorMessage = "ورود یا ثبت‌نام انجام نشد. لطفاً دوباره تلاش کنید."
+                                try {
+                                    val gate = onBeforeAuth()
+                                    if (gate.isFailure) {
+                                        errorMessage = gate.exceptionOrNull()?.message
+                                            ?: "همگام‌سازی اطلاعات حساب فعلی کامل نشد."
                                         return@launch
                                     }
-                                    val finalUser = if (cleanUsername.isNotBlank() && user.displayName.isNullOrBlank()) {
-                                        user.copy(displayName = cleanUsername)
+
+                                    val res = if (activeTab == GlassAuthTab.SIGN_IN) {
+                                        FirebaseService.signInWithEmail(cleanEmail, password, cleanUsername.ifBlank { null })
                                     } else {
-                                        user
+                                        FirebaseService.registerWithEmailAndUsername(cleanUsername, cleanEmail, password)
                                     }
-                                    val resolvedName = finalUser.displayName?.ifBlank { cleanUsername } ?: cleanUsername
-                                    successMessage = if (activeTab == GlassAuthTab.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد."
-                                    onAuthSuccess(finalUser, resolvedName, workshopName.trim())
-                                } else {
-                                    errorMessage = res.exceptionOrNull()?.message ?: "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
+                                    if (res.isSuccess) {
+                                        val user = res.getOrNull()
+                                        if (user == null) {
+                                            errorMessage = "ورود یا ثبت‌نام انجام نشد. لطفاً دوباره تلاش کنید."
+                                            return@launch
+                                        }
+                                        val finalUser = if (cleanUsername.isNotBlank() && user.displayName.isNullOrBlank()) {
+                                            user.copy(displayName = cleanUsername)
+                                        } else {
+                                            user
+                                        }
+                                        val resolvedName = finalUser.displayName?.ifBlank { cleanUsername } ?: cleanUsername
+                                        successMessage = if (activeTab == GlassAuthTab.SIGN_IN) "با موفقیت وارد شدید." else "ثبت‌نام با موفقیت انجام شد."
+                                        onAuthSuccess(finalUser, resolvedName, workshopName.trim())
+                                    } else {
+                                        errorMessage = res.exceptionOrNull()?.message ?: "ورود یا ثبت‌نام انجام نشد. لطفاً اطلاعات واردشده و اتصال اینترنت را بررسی کنید."
+                                    }
+                                } catch (e: Exception) {
+                                    if (com.example.BuildConfig.DEBUG) {
+                                        android.util.Log.e("GlassyAuthScreen", "Authentication flow failed", e)
+                                    }
+                                    errorMessage = e.message?.takeIf { it.isNotBlank() }
+                                        ?: "در ورود یا ثبت‌نام خطایی رخ داد. لطفاً دوباره تلاش کنید."
+                                } finally {
+                                    isLoading = false
                                 }
+                            }
                             }
                         },
                         enabled = !isLoading,
