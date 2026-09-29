@@ -44,6 +44,9 @@ object BackupManager {
                 put("syncId", ws.syncId)
                 put("name", ws.name)
                 put("createdAt", ws.createdAt)
+                put("updatedAt", ws.updatedAt)
+                ws.fileUrl?.let { put("fileUrl", it) }
+                ws.storagePath?.let { put("storagePath", it) }
             })
         }
         root.put("workshops", workshopsArray)
@@ -72,6 +75,9 @@ object BackupManager {
                 put("notes", ord.notes)
                 put("colorCode", ord.colorCode)
                 put("createdAt", ord.createdAt)
+                put("updatedAt", ord.updatedAt)
+                ord.fileUrl?.let { put("fileUrl", it) }
+                ord.storagePath?.let { put("storagePath", it) }
             })
         }
         root.put("orders", ordersArray)
@@ -96,6 +102,9 @@ object BackupManager {
                 put("relatedOrderId", pay.relatedOrderId ?: JSONObject.NULL)
                 put("relatedOrderSyncId", pay.relatedOrderSyncId)
                 put("createdAt", pay.createdAt)
+                put("updatedAt", pay.updatedAt)
+                pay.fileUrl?.let { put("fileUrl", it) }
+                pay.storagePath?.let { put("storagePath", it) }
             })
         }
         root.put("payments", paymentsArray)
@@ -112,6 +121,9 @@ object BackupManager {
                 put("defaultUnitsPerSet", pre.defaultUnitsPerSet)
                 put("colorCode", pre.colorCode)
                 put("description", pre.description)
+                put("updatedAt", pre.updatedAt)
+                pre.fileUrl?.let { put("fileUrl", it) }
+                pre.storagePath?.let { put("storagePath", it) }
             })
         }
         root.put("presets", presetsArray)
@@ -125,6 +137,9 @@ object BackupManager {
                 put("pieceCount", rule.pieceCount)
                 put("calculatedUnits", rule.calculatedUnits)
                 put("isEnabled", rule.isEnabled)
+                put("updatedAt", rule.updatedAt)
+                rule.fileUrl?.let { put("fileUrl", it) }
+                rule.storagePath?.let { put("storagePath", it) }
             })
         }
         root.put("unitRules", rulesArray)
@@ -226,7 +241,10 @@ object BackupManager {
                         id = id,
                         syncId = obj.optString("syncId", if (id > 0) "wrk_" + id else java.util.UUID.randomUUID().toString()),
                         name = obj.optString("name", "کارگاه بازیابی‌شده").ifBlank { "کارگاه بازیابی‌شده" },
-                        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        updatedAt = obj.optLong("updatedAt", obj.optLong("createdAt", System.currentTimeMillis())),
+                        fileUrl = obj.optString("fileUrl", "").ifBlank { null },
+                        storagePath = obj.optString("storagePath", "").ifBlank { null }
                     )
                 }
             }
@@ -265,7 +283,10 @@ object BackupManager {
                     workshopInvoiceNumber = obj.optString("workshopInvoiceNumber", ""),
                     notes = obj.optString("notes", ""),
                     colorCode = obj.optString("colorCode", "#2563EB"),
-                    createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    updatedAt = obj.optLong("updatedAt", obj.optLong("createdAt", System.currentTimeMillis())),
+                    fileUrl = obj.optString("fileUrl", "").ifBlank { null },
+                    storagePath = obj.optString("storagePath", "").ifBlank { null }
                 )
             }
         }
@@ -294,7 +315,10 @@ object BackupManager {
                     cardNumber = obj.optString("cardNumber", ""),
                     relatedOrderId = relatedOrderId,
                     relatedOrderSyncId = obj.optString("relatedOrderSyncId", ""),
-                    createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    updatedAt = obj.optLong("updatedAt", obj.optLong("createdAt", System.currentTimeMillis())),
+                    fileUrl = obj.optString("fileUrl", "").ifBlank { null },
+                    storagePath = obj.optString("storagePath", "").ifBlank { null }
                 )
             }
         }
@@ -313,7 +337,10 @@ object BackupManager {
                     defaultPricePerSet = obj.optLong("defaultPricePerSet", 0L),
                     defaultUnitsPerSet = obj.optDouble("defaultUnitsPerSet", 6.0),
                     colorCode = obj.optString("colorCode", "#2563EB"),
-                    description = obj.optString("description", "")
+                    description = obj.optString("description", ""),
+                    updatedAt = obj.optLong("updatedAt", System.currentTimeMillis()),
+                    fileUrl = obj.optString("fileUrl", "").ifBlank { null },
+                    storagePath = obj.optString("storagePath", "").ifBlank { null }
                 )
             }
         }
@@ -329,7 +356,10 @@ object BackupManager {
                     pieceKey = obj.optString("pieceKey", ""),
                     pieceCount = obj.optDouble("pieceCount", 0.0),
                     calculatedUnits = obj.optDouble("calculatedUnits", 0.0),
-                    isEnabled = obj.optBoolean("isEnabled", true)
+                    isEnabled = obj.optBoolean("isEnabled", true),
+                    updatedAt = obj.optLong("updatedAt", System.currentTimeMillis()),
+                    fileUrl = obj.optString("fileUrl", "").ifBlank { null },
+                    storagePath = obj.optString("storagePath", "").ifBlank { null }
                 )
             }
         }
