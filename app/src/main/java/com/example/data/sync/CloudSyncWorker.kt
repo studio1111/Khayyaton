@@ -34,6 +34,16 @@ class CloudSyncWorker(
                 workshopDao = database.workshopDao()
             )
 
+            // Account-isolation guard: the local Room database must belong to the
+            // same account that is signed in to Firebase. During an account switch
+            // (logout/login or process restart) a queued worker could otherwise
+            // download user B into user A's local data, or upload A's pending rows
+            // to B. Retry later, after SyncManager.ensureLocalAccount() finishes.
+            val localUid = repository.getLocalAccountUid()
+            if (localUid != user.uid) {
+                return Result.retry()
+            }
+
             val result = FirebaseService.syncAccount(repository)
             if (result.isSuccess) {
                 when (SyncCompletionPolicy.afterSync(repository.hasPendingSyncWork())) {
