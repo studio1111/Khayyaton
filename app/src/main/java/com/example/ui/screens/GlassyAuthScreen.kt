@@ -583,7 +583,6 @@ fun GlassyAuthScreen(
                                     isLoading = false
                                 }
                             }
-                            }
                         },
                         enabled = !isLoading,
                         shape = RoundedCornerShape(14.dp),
