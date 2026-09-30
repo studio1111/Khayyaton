@@ -224,6 +224,9 @@ fun SubscriptionDialog(
     }
 }
 
+internal fun trialStatusTitle(subscription: com.example.model.UserSubscription): String =
+    "نسخه آزمایشی ۷ روزه خیاطان؛ ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت باقی مانده"
+
 @Composable
 private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscription) {
     val (bgColor, borderColor, icon, title, subtitle) = when (subscription.status) {
@@ -250,8 +253,8 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                 Amber600.copy(alpha = 0.12f),
                 Amber600.copy(alpha = 0.45f),
                 Icons.Outlined.Timer,
-                "نسخه آزمایشی ۷ روزه خیاطان",
-                "دوره آزمایشی ۷ روزه از زمان ایجاد حساب محاسبه می‌شود؛ ${PersianUtils.toPersianDigits(subscription.remainingDays)} روز و ${PersianUtils.toPersianDigits(subscription.remainingHours)} ساعت باقی مانده است"
+                trialStatusTitle(subscription),
+                ""
             )
         }
         SubscriptionStatus.TRIAL_EXPIRED -> {
@@ -308,13 +311,15 @@ private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscri
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 11.sp,
-                    lineHeight = 17.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (subtitle.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
