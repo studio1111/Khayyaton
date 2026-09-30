@@ -117,23 +117,35 @@ object FirebaseService {
                 var resolvedDisplayName = user.displayName?.trim().orEmpty()
                 val db = firestore
                 if (db != null) {
-                    val userDoc = db.collection("users").document(user.uid).get().await()
-                    val storedUsername = userDoc.getString("username").orEmpty().trim()
-                    if (enteredUsername.isNotBlank()) {
-                        if (storedUsername.isNotBlank() && !storedUsername.equals(enteredUsername, ignoreCase = true)) {
+                    // Authentication has already succeeded. A temporary Firestore
+                    // outage must not turn a valid login into a failed login.
+                    // Only enforce the optional username check when the profile
+                    // document can actually be read.
+                    val profileResult = runCatching {
+                        db.collection("users").document(user.uid).get().await()
+                    }
+                    if (profileResult.isSuccess) {
+                        val userDoc = profileResult.getOrNull()
+                        val storedUsername = userDoc?.getString("username").orEmpty().trim()
+                        if (enteredUsername.isNotBlank() &&
+                            storedUsername.isNotBlank() &&
+                            !storedUsername.equals(enteredUsername, ignoreCase = true)
+                        ) {
                             fbAuth.signOut()
                             return Result.failure(Exception("نام کاربری یا ایمیل اشتباه است."))
                         }
-                    }
-                    if (resolvedDisplayName.isBlank() && storedUsername.isNotBlank()) {
-                        resolvedDisplayName = storedUsername
-                        runCatching {
-                            user.updateProfile(
-                                com.google.firebase.auth.UserProfileChangeRequest.Builder()
-                                    .setDisplayName(storedUsername)
-                                    .build()
-                            ).await()
+                        if (resolvedDisplayName.isBlank() && storedUsername.isNotBlank()) {
+                            resolvedDisplayName = storedUsername
+                            runCatching {
+                                user.updateProfile(
+                                    com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                                        .setDisplayName(storedUsername)
+                                        .build()
+                                ).await()
+                            }
                         }
+                    } else if (BuildConfig.DEBUG) {
+                        Log.w(TAG, "Firestore profile lookup skipped after successful authentication", profileResult.exceptionOrNull())
                     }
                 }
                 if (resolvedDisplayName.isBlank() && enteredUsername.isNotBlank()) {
