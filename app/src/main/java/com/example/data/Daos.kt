@@ -27,6 +27,9 @@ interface WorkshopDao {
     @Query("UPDATE workshops SET syncStatus = :status WHERE syncId = :syncId")
     suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
 
+    @Query("UPDATE workshops SET syncStatus = :status WHERE syncId = :syncId AND updatedAt = :updatedAt")
+    suspend fun setSyncStatusIfUnchanged(syncId: String, updatedAt: Long, status: com.example.data.sync.RecordSyncStatus): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWorkshop(workshop: Workshop): Long
 
@@ -99,6 +102,9 @@ interface OrderDao {
     @Query("UPDATE furniture_orders SET syncStatus = :status WHERE syncId = :syncId")
     suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
 
+    @Query("UPDATE furniture_orders SET syncStatus = :status WHERE syncId = :syncId AND updatedAt = :updatedAt")
+    suspend fun setSyncStatusIfUnchanged(syncId: String, updatedAt: Long, status: com.example.data.sync.RecordSyncStatus): Int
+
     @Query("DELETE FROM furniture_orders WHERE syncId = :syncId")
     suspend fun deleteOrderBySyncId(syncId: String)
 
@@ -146,6 +152,9 @@ interface PaymentDao {
 
     @Query("UPDATE payment_records SET syncStatus = :status WHERE syncId = :syncId")
     suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
+
+    @Query("UPDATE payment_records SET syncStatus = :status WHERE syncId = :syncId AND updatedAt = :updatedAt")
+    suspend fun setSyncStatusIfUnchanged(syncId: String, updatedAt: Long, status: com.example.data.sync.RecordSyncStatus): Int
 
     @Query("DELETE FROM payment_records WHERE syncId = :syncId")
     suspend fun deletePaymentBySyncId(syncId: String)
@@ -210,6 +219,9 @@ interface ModelPresetDao {
     @Query("UPDATE model_presets SET syncStatus = :status WHERE syncId = :syncId")
     suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
 
+    @Query("UPDATE model_presets SET syncStatus = :status WHERE syncId = :syncId AND updatedAt = :updatedAt")
+    suspend fun setSyncStatusIfUnchanged(syncId: String, updatedAt: Long, status: com.example.data.sync.RecordSyncStatus): Int
+
     @Query("DELETE FROM model_presets WHERE syncId = :syncId")
     suspend fun deletePresetBySyncId(syncId: String)
 
@@ -248,6 +260,9 @@ interface UnitRuleDao {
 
     @Query("UPDATE unit_conversion_rules SET syncStatus = :status WHERE syncId = :syncId")
     suspend fun setSyncStatus(syncId: String, status: com.example.data.sync.RecordSyncStatus)
+
+    @Query("UPDATE unit_conversion_rules SET syncStatus = :status WHERE syncId = :syncId AND updatedAt = :updatedAt")
+    suspend fun setSyncStatusIfUnchanged(syncId: String, updatedAt: Long, status: com.example.data.sync.RecordSyncStatus): Int
 
     @Query("DELETE FROM unit_conversion_rules")
     suspend fun clearAll()
