@@ -89,8 +89,9 @@ object FirebaseService {
         }
 
     fun firestoreInstance(): FirebaseFirestore? = firestore
-    fun authInstance(): FirebaseAuth = auth ?: FirebaseAuth.getInstance()
-    fun currentUser(): FirebaseUser? = auth?.currentUser ?: FirebaseAuth.getInstance().currentUser
+    fun authInstance(): FirebaseAuth? = auth
+    // FirebaseAuth.getInstance() throws when Firebase initialization failed.
+    fun currentUser(): FirebaseUser? = auth?.currentUser
 
     fun getCurrentUser(): FirebaseUserDto? {
         val user = auth?.currentUser ?: return null
@@ -322,7 +323,7 @@ object FirebaseService {
 
             if (pendingDeletions.isNotEmpty()) {
                 var batch = db.batch()
-                var count = 0
+                var operationCount = 0
 
                 for (deletion in pendingDeletions) {
                     val collectionRef = when (deletion.collection) {
@@ -334,8 +335,6 @@ object FirebaseService {
                         else -> null
                     } ?: continue
 
-                    batch.delete(collectionRef.document(deletion.syncId))
-
                     val legacyId = when {
                         deletion.syncId.startsWith("wrk_") -> deletion.syncId.removePrefix("wrk_")
                         deletion.syncId.startsWith("ord_") -> deletion.syncId.removePrefix("ord_")
@@ -345,6 +344,14 @@ object FirebaseService {
                         else -> null
                     }
 
+                    val operationsNeeded = if (!legacyId.isNullOrBlank()) 3 else 2
+                    if (operationCount > 0 && operationCount + operationsNeeded > maxBatchSize) {
+                        batch.commit().await()
+                        batch = db.batch()
+                        operationCount = 0
+                    }
+
+                    batch.delete(collectionRef.document(deletion.syncId))
                     if (!legacyId.isNullOrBlank()) {
                         batch.delete(collectionRef.document(legacyId))
                     }
@@ -361,16 +368,10 @@ object FirebaseService {
                     )
 
                     confirmedDeletions += deletion
-                    count++
-
-                    if (count >= maxBatchSize / 2) {
-                        batch.commit().await()
-                        batch = db.batch()
-                        count = 0
-                    }
+                    operationCount += operationsNeeded
                 }
 
-                if (count > 0) batch.commit().await()
+                if (operationCount > 0) batch.commit().await()
                 repository.clearCloudDeletions(confirmedDeletions)
             }
 
