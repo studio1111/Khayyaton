@@ -117,7 +117,7 @@ class SyncManager(
     }
 
     fun stop() {
-        authListener?.let { FirebaseService.authInstance().removeAuthStateListener(it) }
+        authListener?.let { FirebaseService.authInstance()?.removeAuthStateListener(it) }
         authListener = null
         detachListeners()
         observeJob?.cancel()
