@@ -425,7 +425,7 @@ object FirebaseService {
                         "updatedAt" to workshop.updatedAt,
                     ),
                     markSynced = {
-                        repository.workshopDao.setSyncStatus(workshop.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                        repository.workshopDao.setSyncStatusIfUnchanged(workshop.syncId, workshop.updatedAt, com.example.data.sync.RecordSyncStatus.SYNCED)
                     },
                     onBlocked = {
                         repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("workshops", workshop.syncId)))
@@ -464,7 +464,7 @@ object FirebaseService {
                         "updatedAt" to order.updatedAt,
                     ),
                     markSynced = {
-                        repository.orderDao.setSyncStatus(order.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                        repository.orderDao.setSyncStatusIfUnchanged(order.syncId, order.updatedAt, com.example.data.sync.RecordSyncStatus.SYNCED)
                     },
                     onBlocked = {
                         repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("orders", order.syncId)))
@@ -499,7 +499,7 @@ object FirebaseService {
                         "updatedAt" to payment.updatedAt,
                     ),
                     markSynced = {
-                        repository.paymentDao.setSyncStatus(payment.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                        repository.paymentDao.setSyncStatusIfUnchanged(payment.syncId, payment.updatedAt, com.example.data.sync.RecordSyncStatus.SYNCED)
                     },
                     onBlocked = {
                         repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("payments", payment.syncId)))
@@ -526,7 +526,7 @@ object FirebaseService {
                         "updatedAt" to preset.updatedAt,
                     ),
                     markSynced = {
-                        repository.modelPresetDao.setSyncStatus(preset.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                        repository.modelPresetDao.setSyncStatusIfUnchanged(preset.syncId, preset.updatedAt, com.example.data.sync.RecordSyncStatus.SYNCED)
                     },
                     onBlocked = {
                         repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("presets", preset.syncId)))
@@ -550,7 +550,7 @@ object FirebaseService {
                         "updatedAt" to rule.updatedAt,
                     ),
                     markSynced = {
-                        repository.unitRuleDao.setSyncStatus(rule.syncId, com.example.data.sync.RecordSyncStatus.SYNCED)
+                        repository.unitRuleDao.setSyncStatusIfUnchanged(rule.syncId, rule.updatedAt, com.example.data.sync.RecordSyncStatus.SYNCED)
                     },
                     onBlocked = {
                         repository.applyCloudDeletions(listOf(WorkshopRepository.PendingCloudDeletion("unitRules", rule.syncId)))
