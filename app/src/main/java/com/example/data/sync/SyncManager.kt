@@ -30,7 +30,11 @@ class SyncManager(
     private val repository: WorkshopRepository,
     private val database: AppDatabase
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+            android.util.Log.w("SyncManager", "Background sync task failed.", e)
+        }
+    )
     private val connectivity = ConnectivityMonitor(context)
     // Legacy file-queue tables are retained only for schema compatibility and are not active sync work.
     private val listeners = CopyOnWriteArrayList<com.google.firebase.firestore.ListenerRegistration>()
@@ -53,7 +57,7 @@ class SyncManager(
             }
         }
 
-        val auth = FirebaseService.authInstance()
+        val auth = FirebaseService.authInstance() ?: return
         authListener = FirebaseAuth.AuthStateListener { user ->
             if (user == null) {
                 // Firebase Auth loss alone is not permission to erase local data.
@@ -208,9 +212,7 @@ class SyncManager(
                 DocumentCacheEntity(
                     collection = collection,
                     documentId = syncId,
-                    updatedAt = doc.getTimestamp("updatedAt")?.toDate()?.time
-                        ?: doc.getLong("updatedAt")
-                        ?: System.currentTimeMillis(),
+                    updatedAt = readUpdatedAt(doc),
                     fromCache = fromCache,
                     hasPendingWrites = pending
                 )
@@ -253,13 +255,24 @@ class SyncManager(
         }
     }
 
+    /**
+     * updatedAt is written by this app as a Long. getTimestamp() throws
+     * when the Firestore field is numeric, which can crash realtime listeners.
+     */
+    private fun readUpdatedAt(doc: com.google.firebase.firestore.DocumentSnapshot): Long =
+        when (val value = doc.get("updatedAt")) {
+            is Number -> value.toLong()
+            is com.google.firebase.Timestamp -> value.toDate().time
+            is java.util.Date -> value.time
+            is String -> value.toLongOrNull() ?: 0L
+            else -> 0L
+        }
+
     private fun parseDocument(collection: String, doc: com.google.firebase.firestore.DocumentSnapshot): Any? {
         val data = doc.data ?: return null
         val syncId = (data["syncId"] as? String ?: doc.id).trim()
         if (syncId.isBlank()) return null
-        val updatedAt = doc.getTimestamp("updatedAt")?.toDate()?.time
-            ?: doc.getLong("updatedAt")
-            ?: System.currentTimeMillis()
+        val updatedAt = readUpdatedAt(doc)
         val status = if (doc.metadata.hasPendingWrites()) RecordSyncStatus.PENDING else RecordSyncStatus.SYNCED
 
         return when (collection) {
