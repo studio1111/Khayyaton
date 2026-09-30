@@ -107,7 +107,8 @@ object PersianUtils {
         for (i in trimmed.indices) {
             hash = (hash shl 5) - hash + trimmed[i].code
         }
-        val index = Math.abs(hash) % COLOR_PALETTE.size
+        // Math.abs(Int.MIN_VALUE) remains negative.
+        val index = Math.floorMod(hash, COLOR_PALETTE.size)
         return COLOR_PALETTE[index].hex
     }
 
