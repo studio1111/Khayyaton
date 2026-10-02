@@ -33,7 +33,6 @@ import com.example.ui.theme.Amber600
 import com.example.ui.theme.Emerald600
 import com.example.ui.theme.Rose600
 import com.example.util.InvoiceDocumentGenerator
-import com.example.util.ExcelExportUtil
 import com.example.util.PersianUtils
 
 @Composable
@@ -172,27 +171,6 @@ fun InvoiceDialog(
                         ) {
                             Icon(imageVector = Icons.Outlined.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
                             Text("خروجی PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // Excel Export Button
-                    Button(
-                        onClick = {
-                            ExcelExportUtil.shareInvoiceExcel(
-                                context = context,
-                                orders = displayOrders,
-                                payments = customerPayments,
-                                currencyUnit = currencyUnit
-                            )
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Emerald600),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(imageVector = Icons.Outlined.TableView, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Text("خروجی Excel", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 

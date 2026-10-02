@@ -539,6 +539,13 @@ class WorkshopRepository(
             ?: com.example.model.CardSortOrder.NEWEST_BOTTOM.name
     fun saveCardSortOrder(value: String) { prefs?.edit()?.putString("card_sort_order", value)?.apply() }
 
+    fun shouldShowCloudVpnWarning(): Boolean =
+        prefs?.getBoolean("dont_show_vpn_cloud_warning", false) != true
+
+    fun setDontShowCloudVpnWarning(dontShow: Boolean) {
+        prefs?.edit()?.putBoolean("dont_show_vpn_cloud_warning", dontShow)?.apply()
+    }
+
     val orders: Flow<List<FurnitureOrder>> = orderDao.getAllOrders()
     val payments: Flow<List<PaymentRecord>> = paymentDao.getAllPayments()
     val modelPresets: Flow<List<ModelPreset>> = modelPresetDao.getAllPresets()
@@ -567,9 +574,23 @@ class WorkshopRepository(
      * two legitimate workshops that happened to share a name.
      */
     suspend fun deduplicateWorkshops() {
-        // Intentionally no-op. Existing duplicates are kept so no user data is
-        // silently reassigned or deleted. Users can explicitly remove a
-        // workshop from the management screen.
+        val all = workshopDao.getAllWorkshopsSync()
+        val grouped = all.groupBy { it.name.trim().lowercase() }
+        for ((_, list) in grouped) {
+            if (list.size > 1) {
+                val primary = list.first()
+                val duplicates = list.drop(1)
+                for (dup in duplicates) {
+                    val orders = orderDao.getOrdersByWorkshopSync(dup.id)
+                    orders.forEach { orderDao.updateOrder(it.copy(workshopId = primary.id, workshopSyncId = primary.syncId)) }
+                    val payments = paymentDao.getPaymentsByWorkshopSync(dup.id)
+                    payments.forEach { paymentDao.updatePayment(it.copy(workshopId = primary.id, workshopSyncId = primary.syncId)) }
+                    val presets = modelPresetDao.getPresetsByWorkshopSync(dup.id)
+                    presets.forEach { modelPresetDao.updatePreset(it.copy(workshopId = primary.id)) }
+                    workshopDao.deleteWorkshop(dup)
+                }
+            }
+        }
     }
 
     suspend fun saveWorkshop(workshop: Workshop): Long {
@@ -586,16 +607,24 @@ class WorkshopRepository(
         )
 
         val existingBySync = workshopDao.getWorkshopBySyncId(syncId)
-        return when {
-            existingBySync != null -> {
-                workshopDao.updateWorkshop(toSave.copy(id = existingBySync.id))
-                existingBySync.id
-            }
-            toSave.id == 0L -> workshopDao.insertWorkshop(toSave)
-            else -> {
-                workshopDao.updateWorkshop(toSave)
-                toSave.id
-            }
+        if (existingBySync != null) {
+            workshopDao.updateWorkshop(toSave.copy(id = existingBySync.id))
+            return existingBySync.id
+        }
+
+        // Prevent duplicate workshop names in the account
+        val existingByName = workshopDao.getAllWorkshopsSync().firstOrNull {
+            it.name.trim().equals(trimmed, ignoreCase = true)
+        }
+        if (existingByName != null && (toSave.id == 0L || toSave.id == existingByName.id)) {
+            return existingByName.id
+        }
+
+        return if (toSave.id == 0L) {
+            workshopDao.insertWorkshop(toSave)
+        } else {
+            workshopDao.updateWorkshop(toSave)
+            toSave.id
         }
     }
 
@@ -727,6 +756,9 @@ class WorkshopRepository(
                     syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
                 val existing = workshopDao.getWorkshopBySyncId(remote.syncId)
+                    ?: workshopDao.getAllWorkshopsSync().firstOrNull {
+                        it.name.trim().equals(remote.name.trim(), ignoreCase = true)
+                    }
 
                 val localId = if (existing == null) {
                     workshopDao.insertWorkshop(remote.copy(id = 0L))

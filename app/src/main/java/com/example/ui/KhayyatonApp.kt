@@ -69,6 +69,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
     val isAuthDialogOpen by viewModel.isAuthDialogOpen.collectAsStateWithLifecycle()
     val isWorkshopsDialogOpen by viewModel.isWorkshopsDialogOpen.collectAsStateWithLifecycle()
     val isSubscriptionDialogOpen by viewModel.isSubscriptionDialogOpen.collectAsStateWithLifecycle()
+    val isCloudVpnNoticeOpen by viewModel.isCloudVpnNoticeOpen.collectAsStateWithLifecycle()
     val subscriptionState by viewModel.subscriptionState.collectAsStateWithLifecycle()
     val activeWorkshop by viewModel.activeWorkshop.collectAsStateWithLifecycle()
     val workshops by viewModel.workshops.collectAsStateWithLifecycle()
@@ -93,13 +94,21 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
     if (currentUser == null) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             KhayyatonTheme(themeMode = themeMode) {
-                GlassyAuthScreen(
-                    isFirstLaunch = true,
-                    onBeforeAuth = { viewModel.prepareForAccountSwitch() },
-                    onAuthSuccess = { user, username, workshopName ->
-                        viewModel.onUserLoggedIn(user, username, workshopName)
-                    }
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    GlassyAuthScreen(
+                        isFirstLaunch = true,
+                        onBeforeAuth = { viewModel.prepareForAccountSwitch() },
+                        onAuthSuccess = { user, username, workshopName ->
+                            viewModel.onUserLoggedIn(user, username, workshopName)
+                        }
+                    )
+                    CloudSyncNoticeDialog(
+                        isOpen = isCloudVpnNoticeOpen,
+                        onConfirm = { dontShowAgain ->
+                            viewModel.dismissCloudVpnNotice(dontShowAgain)
+                        }
+                    )
+                }
             }
         }
         return
@@ -471,6 +480,13 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
             SubscriptionDialog(
                 isOpen = isSubscriptionDialogOpen,
                 onDismiss = { viewModel.isSubscriptionDialogOpen.value = false }
+            )
+
+            CloudSyncNoticeDialog(
+                isOpen = isCloudVpnNoticeOpen,
+                onConfirm = { dontShowAgain ->
+                    viewModel.dismissCloudVpnNotice(dontShowAgain)
+                }
             )
         }
     }

@@ -178,6 +178,11 @@ fun WorkshopsDialog(
                                     )
                                 }
 
+                                val trimmedNewName = newWorkshopName.trim()
+                                val isNewWorkshopDuplicate = remember(trimmedNewName, workshops) {
+                                    trimmedNewName.isNotBlank() && workshops.any { it.name.trim().equals(trimmedNewName, ignoreCase = true) }
+                                }
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -187,6 +192,7 @@ fun WorkshopsDialog(
                                         value = newWorkshopName,
                                         onValueChange = { newWorkshopName = it },
                                         placeholder = { Text("نام کارگاه جدید (مثلاً: تولیدی دوم)", fontSize = 11.5.sp) },
+                                        isError = isNewWorkshopDuplicate,
                                         modifier = Modifier
                                             .weight(1f)
                                             .testTag("input_new_workshop_name"),
@@ -196,18 +202,27 @@ fun WorkshopsDialog(
 
                                     Button(
                                         onClick = {
-                                            if (newWorkshopName.trim().isNotBlank()) {
-                                                onCreateWorkshop(newWorkshopName.trim())
+                                            if (trimmedNewName.isNotBlank() && !isNewWorkshopDuplicate) {
+                                                onCreateWorkshop(trimmedNewName)
                                                 newWorkshopName = ""
                                                 onDismiss()
                                             }
                                         },
-                                        enabled = newWorkshopName.trim().isNotBlank(),
+                                        enabled = trimmedNewName.isNotBlank() && !isNewWorkshopDuplicate,
                                         shape = RoundedCornerShape(12.dp),
                                         modifier = Modifier.testTag("btn_create_workshop")
                                     ) {
                                         Text("ایجاد و ورود", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
+                                }
+
+                                if (isNewWorkshopDuplicate) {
+                                    Text(
+                                        text = "کارگاهی با این نام قبلاً ثبت شده است. نام کارگاه نمی‌تواند تکراری باشد.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
@@ -375,6 +390,11 @@ fun WorkshopsDialog(
     // -------------------------------------------------------------------------
     if (editingWorkshop != null) {
         val ws = editingWorkshop!!
+        val trimmedEditName = editNameText.trim()
+        val isEditWorkshopDuplicate = remember(trimmedEditName, workshops, ws.id) {
+            trimmedEditName.isNotBlank() && workshops.any { it.id != ws.id && it.name.trim().equals(trimmedEditName, ignoreCase = true) }
+        }
+
         AlertDialog(
             onDismissRequest = { editingWorkshop = null },
             title = { Text("ویرایش نام کارگاه", fontSize = 14.sp, fontWeight = FontWeight.Bold) },
@@ -384,21 +404,30 @@ fun WorkshopsDialog(
                     OutlinedTextField(
                         value = editNameText,
                         onValueChange = { editNameText = it },
+                        isError = isEditWorkshopDuplicate,
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
+                    if (isEditWorkshopDuplicate) {
+                        Text(
+                            text = "کارگاهی با این نام قبلاً ثبت شده است.",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (editNameText.trim().isNotBlank()) {
-                            onRenameWorkshop(ws.id, editNameText.trim())
+                        if (trimmedEditName.isNotBlank() && !isEditWorkshopDuplicate) {
+                            onRenameWorkshop(ws.id, trimmedEditName)
                             editingWorkshop = null
                         }
                     },
-                    enabled = editNameText.trim().isNotBlank()
+                    enabled = trimmedEditName.isNotBlank() && !isEditWorkshopDuplicate
                 ) {
                     Text("ذخیره تغییرات")
                 }

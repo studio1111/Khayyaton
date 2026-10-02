@@ -99,7 +99,7 @@ fun OrderDialog(
     var colorCode by remember {
         mutableStateOf(initialOrder?.colorCode ?: "#2563EB")
     }
-    var addToPresets by remember { mutableStateOf(false) }
+    var addToPresets by remember { mutableStateOf(true) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     // Dialog state for calendar picker

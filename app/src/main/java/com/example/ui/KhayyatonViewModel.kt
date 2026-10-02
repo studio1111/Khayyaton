@@ -92,6 +92,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     val isAuthDialogOpen = MutableStateFlow(false)
     val isWorkshopsDialogOpen = MutableStateFlow(false)
     val isSubscriptionDialogOpen = MutableStateFlow(false)
+    val isCloudVpnNoticeOpen = MutableStateFlow(repository.shouldShowCloudVpnWarning())
     val subscriptionState: StateFlow<UserSubscription> = SubscriptionManager.subscriptionState
     val currentUser = MutableStateFlow<FirebaseUserDto?>(null)
     val customUsername = MutableStateFlow<String>("")
@@ -474,8 +475,8 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 else -> order
             }
             repository.saveOrder(orderToSave)
-            if (addToPresets && orderToSave.modelName.isNotBlank()) {
-                val trimmedName = orderToSave.modelName.trim()
+            val trimmedName = orderToSave.modelName.trim()
+            if (trimmedName.isNotBlank()) {
                 if (orderToSave.colorCode.isNotBlank()) {
                     repository.updateOrdersColorForModel(trimmedName, orderToSave.colorCode, wsId)
                 }
@@ -484,15 +485,18 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                         it.name.trim().equals(trimmedName, ignoreCase = true)
                 }
                 if (existingPreset != null) {
-                    repository.savePreset(
-                        existingPreset.copy(
-                            workshopId = wsId,
-                            defaultPricePerSet = orderToSave.pricePerSet,
-                            defaultUnitsPerSet = orderToSave.unitsPerSet,
-                            colorCode = orderToSave.colorCode.ifBlank { existingPreset.colorCode }
+                    if (addToPresets) {
+                        repository.savePreset(
+                            existingPreset.copy(
+                                workshopId = wsId,
+                                defaultPricePerSet = orderToSave.pricePerSet,
+                                defaultUnitsPerSet = orderToSave.unitsPerSet,
+                                colorCode = orderToSave.colorCode.ifBlank { existingPreset.colorCode }
+                            )
                         )
-                    )
+                    }
                 } else {
+                    // New model! Always add to default model presets
                     repository.savePreset(
                         ModelPreset(
                             workshopId = wsId,
@@ -503,6 +507,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                             description = if (orderToSave.fabricName.isNotBlank()) "پارچه ${orderToSave.fabricName}" else ""
                         )
                     )
+                    manuallyDeletedModelNames.value = manuallyDeletedModelNames.value - trimmedName.lowercase()
                 }
             }
             isOrderDialogOpen.value = false
@@ -572,8 +577,18 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun createWorkshop(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
         viewModelScope.launch {
-            val newId = repository.saveWorkshop(com.example.model.Workshop(name = name))
+            val existing = repository.getAllWorkshopsSync()
+            val found = existing.firstOrNull { it.name.trim().equals(trimmed, ignoreCase = true) }
+            if (found != null) {
+                activeWorkshopId.value = found.id
+                repository.saveActiveWorkshopId(found.id)
+                clearFilters()
+                return@launch
+            }
+            val newId = repository.saveWorkshop(com.example.model.Workshop(name = trimmed))
             activeWorkshopId.value = newId
             repository.saveActiveWorkshopId(newId)
             clearFilters()
@@ -582,9 +597,14 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
     }
 
     fun renameWorkshop(id: Long, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) return
         viewModelScope.launch {
-            val existing = repository.getWorkshopById(id) ?: return@launch
-            repository.saveWorkshop(existing.copy(name = newName))
+            val existing = repository.getAllWorkshopsSync()
+            val isDuplicate = existing.any { it.id != id && it.name.trim().equals(trimmed, ignoreCase = true) }
+            if (isDuplicate) return@launch
+            val existingWs = repository.getWorkshopById(id) ?: return@launch
+            repository.saveWorkshop(existingWs.copy(name = trimmed))
             triggerAutoUpload()
         }
     }
@@ -623,6 +643,13 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
         viewModelScope.launch {
             repository.restoreDefaultUnitRules()
             triggerAutoUpload()
+        }
+    }
+
+    fun dismissCloudVpnNotice(dontShowAgain: Boolean) {
+        isCloudVpnNoticeOpen.value = false
+        if (dontShowAgain) {
+            repository.setDontShowCloudVpnWarning(true)
         }
     }
 
@@ -758,7 +785,11 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
                 if (!workshopName.isNullOrBlank()) {
                     val trimmed = workshopName.trim()
                     val existing = repository.getAllWorkshopsSync()
-                    if (existing.isEmpty()) {
+                    val found = existing.firstOrNull { it.name.trim().equals(trimmed, ignoreCase = true) }
+                    if (found != null) {
+                        activeWorkshopId.value = found.id
+                        repository.saveActiveWorkshopId(found.id)
+                    } else if (existing.isEmpty()) {
                         createWorkshop(trimmed)
                     } else if (
                         existing.size == 1 &&

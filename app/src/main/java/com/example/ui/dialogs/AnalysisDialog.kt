@@ -39,7 +39,6 @@ import com.example.model.PaymentRecord
 import com.example.ui.theme.*
 import com.example.util.JALALI_MONTH_NAMES
 import com.example.util.PersianUtils
-import com.example.util.ExcelExportUtil
 
 enum class AnalysisTab(val title: String, val subtitle: String) {
     TOTAL("آمار کل", "تمامی سوابق کارکرد و دریافتی‌ها"),
@@ -363,18 +362,6 @@ fun AnalysisDialog(
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        IconButton(
-                            onClick = {
-                                ExcelExportUtil.shareAnalysisExcel(
-                                    context = context,
-                                    orders = periodOrders,
-                                    payments = periodPayments,
-                                    currencyUnit = currencyUnit
-                                )
-                            }
-                        ) {
-                            Icon(imageVector = Icons.Outlined.TableView, contentDescription = "خروجی Excel", tint = primaryTextColor)
-                        }
                         IconButton(
                             onClick = {
                                 shareAnalysisReport(

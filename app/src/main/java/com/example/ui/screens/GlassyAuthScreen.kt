@@ -360,7 +360,7 @@ fun GlassyAuthScreen(
                         OutlinedTextField(
                             value = workshopName,
                             onValueChange = { workshopName = it; errorMessage = null },
-                            label = { Text("نام کارگاه") },
+                            label = { Text("نام کارگاه (اجباری)") },
                             placeholder = { Text("مثلاً: کارگاه مبل آریا") },
                             leadingIcon = {
                                 Icon(Icons.Outlined.Storefront, contentDescription = null, tint = NeonGreen)
@@ -495,10 +495,16 @@ fun GlassyAuthScreen(
                             successMessage = null
 
                             val cleanUsername = username.trim()
+                            val cleanWorkshopName = workshopName.trim()
                             val cleanEmail = com.example.util.PersianUtils.toEnglishDigits(email.trim()).lowercase()
 
                             if (activeTab == GlassAuthTab.SIGN_UP && cleanUsername.isBlank()) {
                                 errorMessage = "لطفاً نام کاربری خود را وارد نمایید."
+                                return@Button
+                            }
+
+                            if (activeTab == GlassAuthTab.SIGN_UP && cleanWorkshopName.isBlank()) {
+                                errorMessage = "لطفاً نام کارگاه را وارد نمایید."
                                 return@Button
                             }
 
