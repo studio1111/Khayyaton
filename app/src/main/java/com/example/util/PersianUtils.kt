@@ -187,7 +187,13 @@ object PersianUtils {
             }
 
             // 2. Numeric match if token can be parsed as a number
-            val sanitized = toEnglishDigits(cleanToken).replace("/", ".").replace(",", "")
+            // Accept the Persian/Arabic decimal separator (U+066B) and drop the
+            // Persian/Arabic thousands separator (U+066C), e.g. "۰٫۵" -> 0.5
+            val sanitized = toEnglishDigits(cleanToken)
+                .replace("\u066B", ".")
+                .replace("\u066C", "")
+                .replace("/", ".")
+                .replace(",", "")
             val numericVal = sanitized.toDoubleOrNull()
             if (numericVal != null) {
                 val numRuleMatch = enabledRules.firstOrNull { rule ->
@@ -302,8 +308,12 @@ object PersianUtils {
     fun getDaysInJalaliMonth(year: Int, month: Int): Int {
         if (month in 1..6) return 31
         if (month in 7..11) return 30
-        val r = (year + 38) * 31 % 128
-        val isLeap = r <= 31
+        // Esfand: derive leap status from the same algorithm used for date
+        // conversion so validation and conversion never disagree.
+        // In a leap year 12/30 round-trips to itself; otherwise it rolls to 1/1.
+        val g = jalaliToGregorian(year, 12, 30)
+        val back = gregorianToJalali(g.year, g.month, g.day)
+        val isLeap = back.year == year && back.month == 12 && back.day == 30
         return if (isLeap) 30 else 29
     }
 
