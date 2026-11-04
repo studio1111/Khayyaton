@@ -94,19 +94,19 @@ class DataIntegrityTest {
     }
 
     @Test
-    fun `cloud merge keeps separate workshops when local numeric IDs collide`() = runBlocking {
+    fun `cloud merge preserves same-named workshops with distinct sync identities`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val (db, repo) = repository(context)
         try {
             repo.replaceAllData(
-                workshops = listOf(Workshop(id = 1L, name = "دستگاه A", syncId = "workshop-A")),
+                workshops = listOf(Workshop(id = 1L, name = "کارگاه مشترک", syncId = "workshop-A")),
                 orders = emptyList(),
                 payments = emptyList(),
                 presets = emptyList(),
                 unitRules = emptyList()
             )
             repo.mergeCloudData(
-                cloudWorkshops = listOf(Workshop(id = 1L, name = "دستگاه B", syncId = "workshop-B")),
+                cloudWorkshops = listOf(Workshop(id = 1L, name = "کارگاه مشترک", syncId = "workshop-B")),
                 cloudOrders = listOf(
                     FurnitureOrder(
                         id = 1L,
@@ -133,7 +133,7 @@ class DataIntegrityTest {
             val orders = repo.getAllOrdersSync()
             assertEquals(2, workshops.size)
             assertEquals(1, orders.size)
-            assertEquals("workshop-B", workshops.first { it.name == "دستگاه B" }.syncId)
+            assertEquals(setOf("workshop-A", "workshop-B"), workshops.map { it.syncId }.toSet())
             assertEquals(workshops.first { it.syncId == "workshop-B" }.id, orders.single().workshopId)
         } finally {
             db.close()
