@@ -141,6 +141,35 @@ class DataIntegrityTest {
     }
 
     @Test
+    fun `workshop cleanup preserves same-named records with distinct sync identities`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val (db, repo) = repository(context)
+        try {
+            repo.replaceAllData(
+                workshops = listOf(
+                    Workshop(id = 1L, name = "کارگاه مشترک", syncId = "workshop-cleanup-A"),
+                    Workshop(id = 2L, name = "کارگاه مشترک", syncId = "workshop-cleanup-B")
+                ),
+                orders = emptyList(),
+                payments = emptyList(),
+                presets = emptyList(),
+                unitRules = emptyList()
+            )
+
+            repo.deduplicateWorkshops()
+
+            val workshops = repo.getAllWorkshopsSync()
+            assertEquals(2, workshops.size)
+            assertEquals(
+                setOf("workshop-cleanup-A", "workshop-cleanup-B"),
+                workshops.map { it.syncId }.toSet()
+            )
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
     fun `local deletion creates a cloud tombstone`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val (db, repo) = repository(context)
