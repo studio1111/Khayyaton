@@ -575,7 +575,9 @@ class WorkshopRepository(
      */
     suspend fun deduplicateWorkshops() {
         val all = workshopDao.getAllWorkshopsSync()
-        val grouped = all.groupBy { it.name.trim().lowercase() }
+        // Display names are not identity. Only rows with the same stable syncId
+        // may be reconciled; distinct IDs must remain separate even if names match.
+        val grouped = all.filter { it.syncId.isNotBlank() }.groupBy { it.syncId }
         for ((_, list) in grouped) {
             if (list.size > 1) {
                 val primary = list.first()
@@ -755,10 +757,9 @@ class WorkshopRepository(
                     updatedAt = normalizedRemoteUpdatedAt(remoteRaw.updatedAt, remoteRaw.createdAt),
                     syncStatus = com.example.data.sync.RecordSyncStatus.SYNCED
                 )
+                // Stable syncId is the only cross-device identity. Matching by
+                // display name can overwrite or hide a legitimate workshop.
                 val existing = workshopDao.getWorkshopBySyncId(remote.syncId)
-                    ?: workshopDao.getAllWorkshopsSync().firstOrNull {
-                        it.name.trim().equals(remote.name.trim(), ignoreCase = true)
-                    }
 
                 val localId = if (existing == null) {
                     workshopDao.insertWorkshop(remote.copy(id = 0L))
