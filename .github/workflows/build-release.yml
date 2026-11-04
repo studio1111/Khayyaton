@@ -4,24 +4,29 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
 
 concurrency:
   group: khayyaton-production-release
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -35,7 +40,7 @@ jobs:
           test -s khayyaton.jks
 
       - name: Setup Gradle 9.3.1
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           gradle-version: '9.3.1'
 
@@ -90,7 +95,7 @@ jobs:
           test -s "Khayyaton-SHA256-${GITHUB_SHA}.txt"
 
       - name: Upload AAB artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: khayyaton-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
@@ -130,36 +135,6 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "release-1"             --target "${GITHUB_SHA}"             --title "Khayyaton Release 1"             --notes "نسخه نهایی خیاطان، شماره ۱. ساخته‌شده از commit ${GITHUB_SHA}. شامل AAB امضاشده، APK امضاشده، سورس کامل و SHA-256."             "app/build/outputs/bundle/release/app-release.aab#Khayyaton AAB"             "app/build/outputs/apk/release/app-release.apk#Khayyaton APK"             "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"             "Khayyaton-SHA256-${GITHUB_SHA}.txt#Khayyaton SHA-256"
-
-      - name: Remove previous GitHub releases except Release 1
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release list --limit 1000 --json tagName --jq '.[].tagName' |
-            while IFS= read -r tag; do
-              [ -z "$tag" ] && continue
-              [ "$tag" = "release-1" ] && continue
-              gh release delete "$tag" --yes --cleanup-tag || true
-            done
-
-      - name: Keep only this final workflow run
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh run list --repo "${GITHUB_REPOSITORY}" --limit 1000 --json databaseId --jq '.[].databaseId' |
-            while IFS= read -r run_id; do
-              [ -z "$run_id" ] && continue
-              # Never delete a newer run. A previous run can finish after a
-              # newer push has already started, so deleting every run except
-              # the current one can accidentally delete the newest build.
-              if [ "$run_id" -ge "${GITHUB_RUN_ID}" ]; then
-                continue
-              fi
-              gh run delete "$run_id" --repo "${GITHUB_REPOSITORY}" || true
-            done
 
       - name: Remove keystore
         if: always()
