@@ -66,6 +66,7 @@ fun AuthAndCloudSyncDialog(
     presets: List<ModelPreset>,
     unitRules: List<UnitConversionRule>,
     repository: WorkshopRepository,
+    syncStatusMessage: String? = null,
     onUserChanged: (FirebaseUserDto?) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -186,6 +187,32 @@ fun AuthAndCloudSyncDialog(
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Rose600,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    if (!syncStatusMessage.isNullOrBlank()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudSync,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = syncStatusMessage,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -410,9 +437,10 @@ fun AuthAndCloudSyncDialog(
                         // Sign Out Button
                         Button(
                             onClick = {
-                                FirebaseService.signOut()
+                                // The ViewModel owns logout: it must sync pending data
+                                // before it signs out and clears account-local records.
+                                successMessage = null
                                 onUserChanged(null)
-                                successMessage = "با موفقیت از حساب خارج شدید."
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Rose600.copy(alpha = 0.15f),

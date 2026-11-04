@@ -852,6 +852,7 @@ class KhayyatonViewModel(val repository: WorkshopRepository) : ViewModel() {
             activeWorkshopId.value = 0L
             customUsername.value = ""
             clearFilters()
+            isAuthDialogOpen.value = false
         }
     }
 

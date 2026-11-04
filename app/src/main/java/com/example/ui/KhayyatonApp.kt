@@ -429,8 +429,9 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                         // Do not leave the Firebase cloud-account page open at entry.
                         viewModel.isAuthDialogOpen.value = false
                     } else {
+                        // Keep the dialog open until sync succeeds. The ViewModel
+                        // closes it only after Firebase sign-out and local cleanup.
                         viewModel.onUserLoggedOut()
-                        viewModel.isAuthDialogOpen.value = false
                     }
                 },
                 onDismiss = { viewModel.isAuthDialogOpen.value = false }
