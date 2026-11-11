@@ -6,7 +6,8 @@ enum class SubscriptionStatus(val titleFa: String) {
     SUBSCRIBED("اشتراک ویژه فعال"),
     ADMIN_GRANTED("دسترسی مالک"),
     EXPIRED("اشتراک منقضی شده"),
-    UNKNOWN("در حال بررسی")
+    UNKNOWN("در حال بررسی"),
+    FREE_ACCESS("نسخه رایگان دائمی")
 }
 
 data class SubscriptionPlan(
@@ -43,7 +44,8 @@ data class UserSubscription(
             val now = System.currentTimeMillis()
             return when (status) {
                 SubscriptionStatus.SUBSCRIBED -> expiresAt != null && expiresAt > now
-                SubscriptionStatus.ADMIN_GRANTED -> true
+                SubscriptionStatus.ADMIN_GRANTED,
+                SubscriptionStatus.FREE_ACCESS -> true
                 SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt > now
                 SubscriptionStatus.TRIAL_EXPIRED,
                 SubscriptionStatus.EXPIRED,
@@ -55,7 +57,8 @@ data class UserSubscription(
         get() {
             val target = when (status) {
                 SubscriptionStatus.SUBSCRIBED -> expiresAt ?: 0L
-                SubscriptionStatus.ADMIN_GRANTED -> Long.MAX_VALUE
+                SubscriptionStatus.ADMIN_GRANTED,
+                SubscriptionStatus.FREE_ACCESS -> Long.MAX_VALUE
                 SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt
                 SubscriptionStatus.TRIAL_EXPIRED -> 0L
                 else -> 0L

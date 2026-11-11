@@ -230,6 +230,15 @@ internal fun trialStatusTitle(subscription: com.example.model.UserSubscription):
 @Composable
 private fun SubscriptionStatusBanner(subscription: com.example.model.UserSubscription) {
     val (bgColor, borderColor, icon, title, subtitle) = when (subscription.status) {
+        SubscriptionStatus.FREE_ACCESS -> {
+            Tuple5(
+                Emerald600.copy(alpha = 0.12f),
+                Emerald600.copy(alpha = 0.45f),
+                Icons.Default.CheckCircle,
+                "نسخه رایگان دائمی فعال است",
+                "تمام امکانات برنامه بدون اشتراک و محدودیت زمانی در دسترس است"
+            )
+        }
         SubscriptionStatus.ADMIN_GRANTED -> {
             Tuple5(
                 Emerald600.copy(alpha = 0.12f),

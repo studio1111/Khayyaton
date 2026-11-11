@@ -13,12 +13,26 @@ android {
   namespace = "com.example"
   compileSdk = 37
 
+  flavorDimensions += "edition"
+
+  productFlavors {
+    create("paid") {
+      dimension = "edition"
+      buildConfigField("boolean", "FREE_VERSION", "false")
+    }
+    create("free") {
+      dimension = "edition"
+      versionNameSuffix = "-free"
+      buildConfigField("boolean", "FREE_VERSION", "true")
+    }
+  }
+
   defaultConfig {
     applicationId = "com.farsinnov.khayyaton"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 2
+    versionName = "2.0"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 

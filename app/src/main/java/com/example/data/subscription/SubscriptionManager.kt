@@ -77,6 +77,12 @@ object SubscriptionManager {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid != null) loadCachedSubscription(uid) else clearCachedUserState()
 
+        // Free edition never initializes or contacts Cafe Bazaar billing.
+        if (BuildConfig.FREE_VERSION) {
+            grantFreeAccess()
+            return
+        }
+
         // راه‌اندازی پل پرداخت پولکی کافه‌بازار
         try {
             val securityCheck = if (BAZAAR_RSA_PUBLIC_KEY.isNotBlank() && BAZAAR_RSA_PUBLIC_KEY != "YOUR_BAZAAR_RSA_PUBLIC_KEY") {
@@ -136,7 +142,18 @@ object SubscriptionManager {
      * بررسی دسترسی پرمیوم کاربر (اشتراک فعال یا نسخه آزمایشی فعال)
      */
     fun hasPremiumAccess(): Boolean {
-        return _subscriptionState.value.hasAccess
+        return EditionAccessPolicy.hasAccess(BuildConfig.FREE_VERSION, _subscriptionState.value)
+    }
+
+    private fun grantFreeAccess() {
+        _subscriptionState.value = UserSubscription(
+            status = SubscriptionStatus.FREE_ACCESS,
+            updatedAt = System.currentTimeMillis()
+        )
+        _ownerAccess.value = false
+        _trialAvailable.value = false
+        _trialPeriodDays.value = 0
+        _isLoading.value = false
     }
 
     /**
@@ -190,6 +207,10 @@ object SubscriptionManager {
     }
 
     fun clearCachedUserState() {
+        if (BuildConfig.FREE_VERSION) {
+            grantFreeAccess()
+            return
+        }
         prefs?.edit()?.apply {
             remove(KEY_CACHED_UID)
             remove(KEY_SUB_STATUS)
@@ -243,6 +264,10 @@ object SubscriptionManager {
      * /admin/owners/members/{uid} فعال می‌شود.
      */
     suspend fun refreshOwnerAccess(): Boolean {
+        if (BuildConfig.FREE_VERSION) {
+            grantFreeAccess()
+            return true
+        }
         val user = FirebaseAuth.getInstance().currentUser ?: run {
             _ownerAccess.value = false
             return false
@@ -270,6 +295,11 @@ object SubscriptionManager {
      * همگام‌سازی اشتراک و دوره آزمایشی داخلی
      */
     fun syncSubscriptionWithFirebase(onComplete: ((Result<UserSubscription>) -> Unit)? = null) {
+        if (BuildConfig.FREE_VERSION) {
+            grantFreeAccess()
+            onComplete?.invoke(Result.success(_subscriptionState.value))
+            return
+        }
         scope.launch {
             val user = FirebaseAuth.getInstance().currentUser
             if (user == null) {
@@ -312,6 +342,11 @@ object SubscriptionManager {
         plan: SubscriptionPlan,
         onResult: (Result<Unit>) -> Unit
     ) {
+        if (BuildConfig.FREE_VERSION) {
+            val error = IllegalStateException("خرید اشتراک در نسخه رایگان غیرفعال است.")
+            onResult(Result.failure(error))
+            return
+        }
         val user = FirebaseAuth.getInstance().currentUser
         if (user == null) {
             val msg = "لطفاً ابتدا وارد حساب کاربری خود شوید."
@@ -500,7 +535,7 @@ object SubscriptionManager {
      * وضعیت اشتراک از خود کافه‌بازار دوباره خوانده می‌شود.
      */
     fun refreshSubscriptionFromBazaar() {
-        if (_ownerAccess.value) return
+        if (BuildConfig.FREE_VERSION || _ownerAccess.value) return
         val p = payment ?: return
         try {
             p.getSubscribedProducts {
@@ -549,6 +584,10 @@ object SubscriptionManager {
      * بازیابی خریدهای فعال از کافه‌بازار (Restore Purchases)
      */
     fun restorePurchases(onResult: (Result<Int>) -> Unit) {
+        if (BuildConfig.FREE_VERSION) {
+            onResult(Result.success(0))
+            return
+        }
         val p = payment
         if (p == null) {
             val msg = "سرویس کافه‌بازار در دسترس نیست."
