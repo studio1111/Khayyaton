@@ -264,6 +264,10 @@ object SubscriptionManager {
      * /admin/owners/members/{uid} فعال می‌شود.
      */
     suspend fun refreshOwnerAccess(): Boolean {
+        if (BuildConfig.FREE_VERSION) {
+            grantFreeAccess()
+            return true
+        }
         val user = FirebaseAuth.getInstance().currentUser ?: run {
             _ownerAccess.value = false
             return false
