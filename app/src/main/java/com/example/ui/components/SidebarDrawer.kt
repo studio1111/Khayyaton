@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.model.AppThemeMode
 import com.example.model.CardDisplayMode
 import com.example.model.CardSortOrder
@@ -255,6 +256,7 @@ fun SidebarDrawer(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Section 1: Primary Action Items
+                if (!BuildConfig.FREE_VERSION) {
                 val subBadge = when (subscriptionState?.status) {
                     com.example.model.SubscriptionStatus.ADMIN_GRANTED -> "مالک"
                     com.example.model.SubscriptionStatus.SUBSCRIBED -> "ویژه"
@@ -269,6 +271,7 @@ fun SidebarDrawer(
                     badge = subBadge,
                     onClick = { onOpenSubscription(); onClose() }
                 )
+                }
                 DrawerItem(
                     icon = Icons.Outlined.Storefront,
                     title = "مدیریت کارگاه‌ها",
