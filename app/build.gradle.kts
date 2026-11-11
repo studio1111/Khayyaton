@@ -13,6 +13,19 @@ android {
   namespace = "com.example"
   compileSdk = 37
 
+  flavorDimensions += "edition"
+
+  productFlavors {
+    create("paid") {
+      dimension = "edition"
+      buildConfigField("boolean", "FREE_VERSION", "false")
+    }
+    create("free") {
+      dimension = "edition"
+      buildConfigField("boolean", "FREE_VERSION", "true")
+    }
+  }
+
   defaultConfig {
     applicationId = "com.farsinnov.khayyaton"
     minSdk = 24
