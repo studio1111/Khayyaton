@@ -60,7 +60,6 @@ data class UserSubscription(
                 SubscriptionStatus.ADMIN_GRANTED,
                 SubscriptionStatus.FREE_ACCESS -> Long.MAX_VALUE
                 SubscriptionStatus.TRIAL_ACTIVE -> trialEndsAt
-                SubscriptionStatus.FREE_ACCESS,
                 SubscriptionStatus.TRIAL_EXPIRED -> 0L
                 else -> 0L
             }
