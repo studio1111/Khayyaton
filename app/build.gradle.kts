@@ -22,6 +22,7 @@ android {
     }
     create("free") {
       dimension = "edition"
+      versionNameSuffix = "-free"
       buildConfigField("boolean", "FREE_VERSION", "true")
     }
   }
