@@ -8,6 +8,7 @@ on:
       - "app/**"
       - "gradle/**"
       - ".github/workflows/android-build.yml"
+      - ".github/workflows/build-release.yml"
 
 # Release validation workflow.
 jobs:
