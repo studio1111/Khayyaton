@@ -338,6 +338,11 @@ object SubscriptionManager {
         plan: SubscriptionPlan,
         onResult: (Result<Unit>) -> Unit
     ) {
+        if (BuildConfig.FREE_VERSION) {
+            val error = IllegalStateException("خرید اشتراک در نسخه رایگان غیرفعال است.")
+            onResult(Result.failure(error))
+            return
+        }
         val user = FirebaseAuth.getInstance().currentUser
         if (user == null) {
             val msg = "لطفاً ابتدا وارد حساب کاربری خود شوید."
@@ -526,7 +531,7 @@ object SubscriptionManager {
      * وضعیت اشتراک از خود کافه‌بازار دوباره خوانده می‌شود.
      */
     fun refreshSubscriptionFromBazaar() {
-        if (_ownerAccess.value) return
+        if (BuildConfig.FREE_VERSION || _ownerAccess.value) return
         val p = payment ?: return
         try {
             p.getSubscribedProducts {
@@ -575,6 +580,10 @@ object SubscriptionManager {
      * بازیابی خریدهای فعال از کافه‌بازار (Restore Purchases)
      */
     fun restorePurchases(onResult: (Result<Int>) -> Unit) {
+        if (BuildConfig.FREE_VERSION) {
+            onResult(Result.success(0))
+            return
+        }
         val p = payment
         if (p == null) {
             val msg = "سرویس کافه‌بازار در دسترس نیست."
