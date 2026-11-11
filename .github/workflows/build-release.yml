@@ -149,7 +149,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "release-1"             --target "${GITHUB_SHA}"             --title "Khayyaton Release 1"             --notes "نسخه نهایی خیاطان، شماره ۱. ساخته‌شده از commit ${GITHUB_SHA}. شامل AAB امضاشده، APK امضاشده، سورس کامل و SHA-256."             "app/build/outputs/bundle/paidRelease/app-paid-release.aab#Khayyaton AAB"             "app/build/outputs/apk/paid/release/app-paid-release.apk#Khayyaton Paid APK             app/build/outputs/apk/free/release/app-free-release.apk#Khayyaton Free APK"             "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"             "Khayyaton-SHA256-${GITHUB_SHA}.txt#Khayyaton SHA-256"
+          gh release create "release-1"             --target "${GITHUB_SHA}"             --title "Khayyaton Release 1"             --notes "نسخه نهایی خیاطان، شماره ۱. ساخته‌شده از commit ${GITHUB_SHA}. شامل AAB امضاشده، APK امضاشده، سورس کامل و SHA-256."             "app/build/outputs/bundle/paidRelease/app-paid-release.aab#Khayyaton AAB"             "app/build/outputs/apk/paid/release/app-paid-release.apk#Khayyaton Paid APK"             "app/build/outputs/apk/free/release/app-free-release.apk#Khayyaton Free APK"             "Khayyaton-Source-${GITHUB_SHA}.zip#Khayyaton Source ZIP"             "Khayyaton-SHA256-${GITHUB_SHA}.txt#Khayyaton SHA-256"
 
       - name: Remove keystore
         if: always()
