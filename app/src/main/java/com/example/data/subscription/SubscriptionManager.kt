@@ -142,7 +142,7 @@ object SubscriptionManager {
      * بررسی دسترسی پرمیوم کاربر (اشتراک فعال یا نسخه آزمایشی فعال)
      */
     fun hasPremiumAccess(): Boolean {
-        return BuildConfig.FREE_VERSION || _subscriptionState.value.hasAccess
+        return EditionAccessPolicy.hasAccess(BuildConfig.FREE_VERSION, _subscriptionState.value)
     }
 
     private fun grantFreeAccess() {
