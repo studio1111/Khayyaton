@@ -150,7 +150,7 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                 }
             ) {
                 fun checkAccessAndExecute(action: () -> Unit) {
-                    if (viewModel.hasPremiumAccess()) {
+                    if (BuildConfig.FREE_VERSION || viewModel.hasPremiumAccess()) {
                         action()
                     } else {
                         val accessMessage = when (subscriptionState.status) {
@@ -477,10 +477,12 @@ fun KhayyatonApp(viewModel: KhayyatonViewModel) {
                 onDeleteWorkshop = { ws -> viewModel.deleteWorkshop(ws) }
             )
 
-            SubscriptionDialog(
-                isOpen = isSubscriptionDialogOpen,
-                onDismiss = { viewModel.isSubscriptionDialogOpen.value = false }
-            )
+            if (!BuildConfig.FREE_VERSION) {
+                SubscriptionDialog(
+                    isOpen = isSubscriptionDialogOpen,
+                    onDismiss = { viewModel.isSubscriptionDialogOpen.value = false }
+                )
+            }
 
             CloudSyncNoticeDialog(
                 isOpen = isCloudVpnNoticeOpen,
